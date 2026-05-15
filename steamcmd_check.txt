@@ -1,0 +1,14 @@
+Steam Console Client (c) Valve Corporation - version 1778284286
+-- type 'quit' to exit --
+Loading Steam API...OK
+
+Connecting anonymously to Steam Public...OK
+Waiting for client config...OK
+Waiting for user info...OK
+App info request sent.
+Unloading Steam API...OK
+Redirecting stderr to 'D:\scumServerManager\logs\stderr.txt'
+Logging directory: 'D:\scumServerManager/logs'
+Looks like steam didn't shutdown cleanly, scheduling immediate update check
+[  0%] Проверка на наличие обновлений...
+[----] Проверка установки...

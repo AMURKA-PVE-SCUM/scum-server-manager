@@ -1,0 +1,360 @@
+import { exec, execSync } from 'child_process';
+import path from 'path';
+import fs from 'fs-extra';
+import { app } from 'electron';
+import psList from 'ps-list';
+import type { ServerConfig, ServerStatus } from './types';
+
+const APP_ROOT = app?.isPackaged
+  ? process.resourcesPath
+  : path.resolve(__dirname, '..', '..');
+const TOOL_DIR = path.join(APP_ROOT, 'tools');
+const SEND_CTRL_C = path.join(TOOL_DIR, 'SendCtrlC.exe');
+const CLOSE_WINDOW = path.join(TOOL_DIR, 'CloseSCUMWindow.exe');
+const SYSTEM32 = process.env.SystemRoot
+  ? path.join(process.env.SystemRoot, 'system32')
+  : 'C:\\Windows\\system32';
+const TASKKILL = path.join(SYSTEM32, 'taskkill.exe');
+const WMIC = path.join(SYSTEM32, 'wbem', 'wmic.exe');
+
+const LOG_PREFIX = '[ServerManager]';
+
+function log(...args: unknown[]): void {
+  console.log(LOG_PREFIX, ...args);
+}
+
+async function findScumPids(): Promise<number[]> {
+  try {
+    const processes = await psList();
+    return processes
+      .filter((p) => p.name && p.name.toLowerCase().includes('scumserver'))
+      .map((p) => p.pid);
+  } catch {
+    return [];
+  }
+}
+
+/** Get process memory (WorkingSetSize in MB) via WMI */
+function getMemoryMb(pid: number): number {
+  try {
+    const buf = execSync(`"${WMIC}" process where "ProcessId=${pid}" get WorkingSetSize /format:csv`, { stdio: 'pipe', timeout: 5000 });
+    const out = buf?.toString()?.trim();
+    const lines = out?.split('\n').filter((l) => l.trim()) || [];
+    // Format: Node,ProcessId,WorkingSetSize
+    for (const line of lines) {
+      if (line.includes(',') && !line.startsWith('Node')) {
+        const parts = line.split(',');
+        const ws = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(ws)) return Math.round(ws / 1024 / 1024);
+      }
+    }
+  } catch {}
+  return 0;
+}
+
+function sendCtrlC(pid: number): boolean {
+  try {
+    execSync(`"${SEND_CTRL_C}" ${pid}`, { stdio: 'pipe', timeout: 15000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function closeWindow(): boolean {
+  const titles = ['SCUMServer', 'SCUMServer.exe', 'SCUM Server', 'SCUM'];
+  for (const t of titles) {
+    try {
+      execSync(`"${CLOSE_WINDOW}" "${t}"`, { stdio: 'pipe', timeout: 5000 });
+    } catch {}
+  }
+  return true;
+}
+
+function killPid(pid: number): boolean {
+  try {
+    execSync(`"${TASKKILL}" /F /T /PID ${pid}`, { stdio: 'pipe', timeout: 10000 });
+    return true;
+  } catch (err: any) {
+    const msg = err.stderr?.toString()?.trim() || err.message;
+    if (msg.toLowerCase().includes('not found') || msg.includes('не найден')) return true;
+    return false;
+  }
+}
+
+function killByName(): boolean {
+  try {
+    execSync(`"${TASKKILL}" /F /T /IM SCUMServer.exe`, { stdio: 'pipe', timeout: 10000 });
+    return true;
+  } catch (err: any) {
+    const msg = err.stderr?.toString()?.trim() || err.message;
+    if (msg.toLowerCase().includes('not found') || msg.includes('не найден')) return true;
+    return false;
+  }
+}
+
+async function waitPidsGone(pids: number[], timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const current = await findScumPids();
+    const stillAlive = pids.filter((pid) => current.includes(pid));
+    if (stillAlive.length === 0) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
+export class ServerManager {
+  private config: ServerConfig;
+  private startTime: number = 0;
+  private monInterval: NodeJS.Timeout | null = null;
+  private serverPid: number | null = null;
+  private status: ServerStatus = {
+    running: false, pid: null, uptime: 0,
+    cpuUsage: 0, memoryUsage: 0,
+    players: 0, maxPlayers: 50, fps: 0,
+    playersList: [],
+  };
+
+  /** Parse SCUM.log for player info (Global Stats count + BattlEye online list) */
+  private parseLogPlayers(): { count: number; list: import('./types').PlayerInfo[] } {
+    const result = { count: 0, list: [] as import('./types').PlayerInfo[] };
+    try {
+      const logPath = path.join(this.config.serverPath, 'SCUM', 'Saved', 'Logs', 'SCUM.log');
+      if (!fs.existsSync(logPath)) return result;
+
+      const stat = fs.statSync(logPath);
+      if (stat.size === 0) return result;
+
+      const readSize = Math.min(stat.size, 131072);
+      const buf = Buffer.alloc(readSize);
+      const fd = fs.openSync(logPath, 'r');
+      fs.readSync(fd, buf, 0, readSize, stat.size - readSize);
+      fs.closeSync(fd);
+
+      const content = buf[1] === 0 ? buf.toString('utf16le') : buf.toString('utf-8');
+      const lines = content.split('\n').filter(Boolean);
+
+      // Track player sessions by player number
+      const playerSessions = new Map<string, { name: string; steamId: string; ip: string; playerNum: string }>();
+      let lastGlobalP = 0;
+
+      for (const line of lines) {
+        // Global Stats player count
+        const gm = line.match(/Global Stats:.*?P:\s*(\d+)/);
+        if (gm) lastGlobalP = parseInt(gm[1], 10);
+
+        // BattlEye: Player #N Name (IP) connected
+        const cm = line.match(/Player #(\d+) (.+?) \((\d+\.\d+\.\d+\.\d+:\d+)\) connected/);
+        if (cm) {
+          const [, num, name, ip] = cm;
+          const existing = playerSessions.get(num);
+          playerSessions.set(num, { name: name.trim(), steamId: existing?.steamId || '', ip, playerNum: num });
+        }
+
+        // BattlEye: Player N SteamID: 7656119...
+        const sm = line.match(/Player (\d+) SteamID \(assumed\):\s*(\d+)/);
+        if (sm) {
+          const [, num, sid] = sm;
+          const existing = playerSessions.get(num);
+          if (existing) existing.steamId = sid;
+          else playerSessions.set(num, { name: '', steamId: sid, ip: '', playerNum: num });
+        }
+
+        // BattlEye: disconnected
+        const dm = line.match(/Player #(\d+) (.+?) disconnected/);
+        if (dm) {
+          playerSessions.delete(dm[1]);
+        }
+      }
+
+      result.count = lastGlobalP;
+      result.list = [...playerSessions.values()]
+        .filter((p) => p.name && p.steamId)
+        .map((p) => ({
+          steamId: p.steamId,
+          name: p.name,
+          ip: p.ip,
+          ping: 0,
+          timeConnected: Date.now(),
+        }));
+    } catch {}
+    return result;
+  }
+
+  constructor(config: ServerConfig) {
+    this.config = config;
+  }
+
+  private get maxPlayers(): number {
+    return this.config.maxPlayers || 50;
+  }
+
+  async start(): Promise<void> {
+    if (this.status.running) return;
+
+    // Kill leftovers
+    await this.killAll();
+
+    const serverExe = path.join(this.config.serverPath, 'SCUM', 'Binaries', 'Win64', 'SCUMServer.exe');
+    if (!(await fs.pathExists(serverExe))) {
+      throw new Error(`SCUMServer.exe не найден: ${serverExe}. Укажите путь в Настройки → Путь к серверу.`);
+    }
+
+    const serverDir = path.dirname(serverExe);
+    const port = this.config.serverPort || 2302;
+    const queryPort = this.config.queryPort || 2502;
+    const args = [
+      `Port=${port}`,
+      `QueryPort=${queryPort}`,
+      '-log',
+      '-NoSteamClient',
+    ];
+    if (this.config.fileOpenLog) args.push('-fileopenlog');
+    if (this.config.noBattlEye) args.push('-NoBattlEye');
+    args.push(`-MaxPlayers=${this.maxPlayers}`);
+
+    // Start via exec + start (proven to work, no UAC)
+    const cmd = `cd /d "${serverDir}" && start "" "${serverExe}" ${args.join(' ')}`;
+    log(`Starting server...`);
+    exec(cmd);
+
+    this.startTime = Date.now();
+    this.status.running = true;
+
+    // Wait up to 15s for PID to appear
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      const pids = await findScumPids();
+      if (pids.length > 0) {
+        this.serverPid = pids[0];
+        this.status.pid = pids[0];
+        log(`Server started, PID: ${pids[0]}`);
+        // Hide the server console window (UE4 creates a visible console)
+        try {
+          execSync(
+            `powershell -NoProfile -NonInteractive -Command "` +
+            `Add-Type -Name W -Namespace W -MemberDefinition '[DllImport(\\\"user32.dll\\\")]public static extern bool ShowWindowAsync(IntPtr h,int n);'; ` +
+            `do { \$w = (Get-Process -Id ${pids[0]} -ErrorAction SilentlyContinue).MainWindowHandle; Start-Sleep -Milliseconds 200 } ` +
+            `until (\$w -ne 0 -or (Get-Date).Second -gt ([datetime]::Now.AddSeconds(5)).Second); ` +
+            `if (\$w -ne 0) { [W]::ShowWindowAsync(\$w, 0) }"`,
+            { stdio: 'ignore', timeout: 10000 }
+          );
+          log('Server console window hidden');
+        } catch {}
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    if (!this.serverPid) {
+      log('WARNING: Could not detect server PID');
+    }
+
+    this.startMonitoring();
+  }
+
+  async stop(): Promise<void> {
+    log('=== STOP ===');
+    await this.killAll();
+    this.clearStatus();
+    log('Server stopped');
+  }
+
+  async restart(): Promise<void> {
+    log('=== RESTART ===');
+    this.clearStatus();
+    await this.killAll();
+    // Wait for port to be released
+    await new Promise((r) => setTimeout(r, 3000));
+    await this.start();
+    log('=== RESTART DONE ===');
+  }
+
+  private async killAll(): Promise<void> {
+    // Collect PIDs
+    const pids = new Set<number>();
+    if (this.serverPid) pids.add(this.serverPid);
+    (await findScumPids()).forEach((p) => pids.add(p));
+    const pidArr = [...pids];
+
+    if (pidArr.length === 0) {
+      killByName();
+      return;
+    }
+
+    // Phase 1: Close console window (CTRL_CLOSE_EVENT → graceful)
+    log('Closing server console window...');
+    closeWindow();
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Phase 2: Ctrl+C
+    for (const pid of pidArr) sendCtrlC(pid);
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Phase 3: Force-kill by PID
+    let alive = (await findScumPids()).filter((p) => pidArr.includes(p));
+    if (alive.length > 0) {
+      for (const pid of alive) killPid(pid);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    // Phase 4: Name-based
+    alive = (await findScumPids()).filter((p) => pidArr.includes(p));
+    if (alive.length > 0) killByName();
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // Phase 5: wmic
+    alive = (await findScumPids()).filter((p) => pidArr.includes(p));
+    for (const pid of alive) {
+      try { execSync(`"${WMIC}" process where "ProcessId=${pid}" delete`, { stdio: 'pipe', timeout: 10000 }); } catch {}
+    }
+
+    // Wait for death
+    const allDead = await waitPidsGone(pidArr, 10000);
+    if (!allDead) log('WARNING: Some processes could not be killed');
+  }
+
+  private clearStatus(): void {
+    if (this.monInterval) {
+      clearInterval(this.monInterval);
+      this.monInterval = null;
+    }
+    this.serverPid = null;
+    this.status.running = false;
+    this.status.pid = null;
+  }
+
+  getStatus(): ServerStatus {
+    return { ...this.status, uptime: this.startTime ? Date.now() - this.startTime : 0 };
+  }
+
+  private startMonitoring(): void {
+    if (this.monInterval) clearInterval(this.monInterval);
+    this.monInterval = setInterval(async () => {
+      try {
+        const allProcs = await psList();
+        const serverProcs = allProcs.filter(
+          (p) => p.name && p.name.toLowerCase().includes('scumserver')
+        );
+        if (serverProcs.length === 0) {
+          if (this.status.running) {
+            log('Server process died unexpectedly');
+            this.clearStatus();
+          }
+          return;
+        }
+        const p = serverProcs[0];
+        this.status.running = true;
+        this.status.pid = p.pid;
+        this.serverPid = p.pid;
+        this.status.memoryUsage = getMemoryMb(p.pid);
+
+        // Parse players from SCUM.log
+        const logPlayers = this.parseLogPlayers();
+        this.status.players = logPlayers.count;
+        this.status.playersList = logPlayers.list;
+      } catch {}
+    }, 5000);
+  }
+}

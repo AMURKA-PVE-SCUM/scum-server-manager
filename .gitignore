@@ -1,0 +1,20 @@
+node_modules/
+dist/
+release/
+*.log
+crash.log
+*.zip
+temp_*/
+portable_git/
+Server/
+steamcmd.exe
+steamcmd/
+steamapps/
+appcache/
+depotcache/
+logs/
+userdata/
+
+# OS
+.DS_Store
+Thumbs.db

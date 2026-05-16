@@ -76,7 +76,8 @@
       }
     ],
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,

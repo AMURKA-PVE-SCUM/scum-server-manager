@@ -96,26 +96,6 @@ export function AppSettings() {
 
       <Card sx={{ mb: 2 }}>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>{t('settings', 'backupSettings')}</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={4}>
-              <TextField fullWidth label={t('settings', 'backupPath')} value={config.backup.path}
-                onChange={(e) => update('backup', 'path', e.target.value)} size="small" />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField fullWidth label={t('settings', 'backupInterval')} type="number" value={config.backup.interval}
-                onChange={(e) => update('backup', 'interval', parseInt(e.target.value))} size="small" />
-            </Grid>
-            <Grid item xs={4}>
-              <TextField fullWidth label={t('settings', 'backupRetention')} type="number" value={config.backup.retention}
-                onChange={(e) => update('backup', 'retention', parseInt(e.target.value))} size="small" />
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>{t('settings', 'language')}</Typography>
           <FormControl size="small" sx={{ minWidth: 200 }}>
             <Select value={lang} onChange={(e) => setLang(e.target.value as 'ru' | 'en')}>

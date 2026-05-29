@@ -97,10 +97,7 @@ export function UserManager() {
         <DialogContent>
           <TextField fullWidth label={t('users', 'steamId')} value={dialog.steamId}
             onChange={(e) => setDialog({ ...dialog, steamId: e.target.value })} sx={{ mt: 1 }} />
-          <Typography variant="caption" sx={{ color: '#8b949e', display: 'block', mt: 1 }}>
-            Для флагов админа добавьте после SteamID: <code>[SetGodMode]</code>, <code>[RestartServer]</code><br />
-            Пример: <code>76561199637135087[SetGodMode,RestartServer]</code>
-          </Typography>
+          <Typography variant="caption" sx={{ color: '#8b949e', display: 'block', mt: 1 }} dangerouslySetInnerHTML={{ __html: t('users', 'flagInfo') }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialog({ ...dialog, open: false })}>{t('common', 'cancel')}</Button>

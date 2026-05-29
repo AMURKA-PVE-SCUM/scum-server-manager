@@ -18,6 +18,7 @@ const en = {
     name: 'Name',
     type: 'Type',
     time: 'Time',
+    date: 'Date',
     message: 'Message',
     enabled: 'Enabled',
     disabled: 'Disabled',
@@ -32,6 +33,7 @@ const en = {
     hoursShort: 'h',
     minutesShort: 'm',
     secondsShort: 's',
+    error: 'Error',
   },
 
   nav: {
@@ -48,6 +50,12 @@ const en = {
     discord: 'Discord',
     settings: 'Settings',
     restartScheduler: 'Schedule',
+    files: 'Files',
+    ftp: 'FTP',
+    webPanel: 'Web Panel',
+    players: 'Players',
+    squads: 'Squads',
+    vehicles: 'Vehicles',
   },
 
   dashboard: {
@@ -99,9 +107,89 @@ const en = {
     saved: 'Game settings saved!',
   },
 
+  files: {
+    title: 'File Manager',
+    config: 'Config',
+    saves: 'Saves',
+    logs: 'Logs',
+    empty: 'Empty directory',
+    saved: 'Saved',
+    size: 'Size',
+  },
+
+  ftp: {
+    title: 'FTP Server',
+    builtin: 'Built-in FTP Server',
+    status: 'Status',
+    configuration: 'Configuration',
+    start: 'Start',
+    stop: 'Stop',
+    port: 'Port',
+    username: 'Username',
+    password: 'Password',
+    pasvHost: 'External IP (pasv)',
+    autoDetect: 'Auto-detect',
+    autoStart: 'Auto-start with app',
+    configSaved: 'FTP config saved',
+    started: 'FTP started on port {port}',
+    stopped: 'FTP stopped',
+    connectInfo: 'Connect: ftp://YOUR_SERVER_IP:{port} with user {user}{pasv}',
+    connectNote: 'Port 21 may require admin rights. Use port 1024+ if connection fails.',
+  },
+
+  error: {
+    title: 'An error occurred',
+    returnHome: 'Return Home',
+  },
+
   economy: {
     title: 'Economy Settings',
     saved: 'Economy saved!',
+    configFile: 'Config File',
+  },
+
+  players: {
+    title: 'Players',
+    steamId: 'Steam ID',
+    fame: 'Fame',
+    money: 'Money',
+    lastLogin: 'Last Login',
+    noPlayers: 'No players',
+    wallet: 'Wallet',
+    gold: 'Gold',
+    attributes: 'Attributes',
+    strength: 'STR',
+    constitution: 'CON',
+    dexterity: 'DEX',
+    intelligence: 'INT',
+    skills: 'Skills',
+    admin: 'Admin',
+    addAdmin: 'Add Admin',
+    removeAdmin: 'Remove Admin',
+    adminFlags: 'Admin Flags',
+    adminAdded: '{name} added as admin',
+    adminRemoved: '{name} removed from admins',
+    alreadyAdmin: '{name} is already an admin',
+    restore: 'Restore',
+    delete: 'Delete',
+  },
+
+  squads: {
+    title: 'Squads',
+    score: 'Score',
+    members: 'Members',
+    limit: 'Limit',
+    noSquads: 'No squads',
+  },
+
+  vehicles: {
+    title: 'Vehicles',
+    id: 'ID',
+    asset: 'Asset',
+    alias: 'Alias',
+    functional: 'Functional',
+    lastAccess: 'Last Access',
+    noVehicles: 'No vehicles',
   },
 
   raid: {
@@ -126,6 +214,7 @@ const en = {
     userRemoved: 'User removed!',
     noUsers: 'No users',
     confirmRemove: 'Remove user',
+    flagInfo: 'For admin flags, add after SteamID: <code>[SetGodMode]</code>, <code>[RestartServer]</code>\nExample: <code>76561199637135087[SetGodMode,RestartServer]</code>',
   },
 
   backups: {
@@ -140,6 +229,13 @@ const en = {
     restore: 'Restore',
     manual: 'manual',
     auto: 'auto',
+    autoSettings: 'Auto Backup Settings',
+    autoBackup: 'Auto Backup',
+    saveSettings: 'Save Settings',
+    path: 'Backup Path',
+    intervalHours: 'Interval (hours)',
+    retentionCount: 'Keep (backups)',
+    list: 'Backup List',
   },
 
   logs: {
@@ -156,11 +252,15 @@ const en = {
   discord: {
     title: 'Discord Notifications',
     enable: 'Enable Discord Notifications',
+    adminLogWebhook: 'Admin Log Webhook',
+    chatWebhook: 'Chat Webhook',
+    vehicleWebhook: 'Vehicle Webhook',
     loginWebhook: 'Player Connect/Disconnect Webhook',
     serverStatusWebhook: 'Server Status Webhook',
     saved: 'Settings saved!',
     testSuccess: 'Webhook works!',
     testFailed: 'Webhook failed',
+    testSent: 'Test sent',
   },
 
   settings: {
@@ -206,6 +306,13 @@ const en = {
     daySunday: 'Sun',
     everyDay: 'Every day',
     advanced: 'Advanced Schedule',
+    tabRestart: 'Restart',
+    tabRobots: 'Robots',
+    robotEnable: 'Robot Schedule',
+    robotOn: 'Enable',
+    robotOff: 'Disable',
+    robotTime: 'Time',
+    robotNote: 'Edits ServerSettings.ini: DisableSentrySpawning / EnableSentryRespawning',
   },
 };
 

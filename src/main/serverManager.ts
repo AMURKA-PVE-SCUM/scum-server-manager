@@ -34,13 +34,14 @@ async function findScumPids(): Promise<number[]> {
   }
 }
 
-/** Get process memory (WorkingSetSize in MB) via WMI */
 function getMemoryMb(pid: number): number {
   try {
-    const buf = execSync(`"${WMIC}" process where "ProcessId=${pid}" get WorkingSetSize /format:csv`, { stdio: 'pipe', timeout: 5000 });
+    const buf = execSync(
+      `"${WMIC}" process where "ProcessId=${pid}" get WorkingSetSize /format:csv`,
+      { stdio: 'pipe', timeout: 5000 },
+    );
     const out = buf?.toString()?.trim();
     const lines = out?.split('\n').filter((l) => l.trim()) || [];
-    // Format: Node,ProcessId,WorkingSetSize
     for (const line of lines) {
       if (line.includes(',') && !line.startsWith('Node')) {
         const parts = line.split(',');
@@ -110,77 +111,16 @@ export class ServerManager {
   private monInterval: NodeJS.Timeout | null = null;
   private serverPid: number | null = null;
   private status: ServerStatus = {
-    running: false, pid: null, uptime: 0,
-    cpuUsage: 0, memoryUsage: 0,
-    players: 0, maxPlayers: 50, fps: 0,
+    running: false,
+    pid: null,
+    uptime: 0,
+    memoryUsage: 0,
+    players: 0,
+    maxPlayers: 50,
+    cpuUsage: 0,
+    fps: 0,
     playersList: [],
   };
-
-  /** Parse SCUM.log for player info (Global Stats count + BattlEye online list) */
-  private parseLogPlayers(): { count: number; list: import('./types').PlayerInfo[] } {
-    const result = { count: 0, list: [] as import('./types').PlayerInfo[] };
-    try {
-      const logPath = path.join(this.config.serverPath, 'SCUM', 'Saved', 'Logs', 'SCUM.log');
-      if (!fs.existsSync(logPath)) return result;
-
-      const stat = fs.statSync(logPath);
-      if (stat.size === 0) return result;
-
-      const readSize = Math.min(stat.size, 131072);
-      const buf = Buffer.alloc(readSize);
-      const fd = fs.openSync(logPath, 'r');
-      fs.readSync(fd, buf, 0, readSize, stat.size - readSize);
-      fs.closeSync(fd);
-
-      const content = buf[1] === 0 ? buf.toString('utf16le') : buf.toString('utf-8');
-      const lines = content.split('\n').filter(Boolean);
-
-      // Track player sessions by player number
-      const playerSessions = new Map<string, { name: string; steamId: string; ip: string; playerNum: string }>();
-      let lastGlobalP = 0;
-
-      for (const line of lines) {
-        // Global Stats player count
-        const gm = line.match(/Global Stats:.*?P:\s*(\d+)/);
-        if (gm) lastGlobalP = parseInt(gm[1], 10);
-
-        // BattlEye: Player #N Name (IP) connected
-        const cm = line.match(/Player #(\d+) (.+?) \((\d+\.\d+\.\d+\.\d+:\d+)\) connected/);
-        if (cm) {
-          const [, num, name, ip] = cm;
-          const existing = playerSessions.get(num);
-          playerSessions.set(num, { name: name.trim(), steamId: existing?.steamId || '', ip, playerNum: num });
-        }
-
-        // BattlEye: Player N SteamID: 7656119...
-        const sm = line.match(/Player (\d+) SteamID \(assumed\):\s*(\d+)/);
-        if (sm) {
-          const [, num, sid] = sm;
-          const existing = playerSessions.get(num);
-          if (existing) existing.steamId = sid;
-          else playerSessions.set(num, { name: '', steamId: sid, ip: '', playerNum: num });
-        }
-
-        // BattlEye: disconnected
-        const dm = line.match(/Player #(\d+) (.+?) disconnected/);
-        if (dm) {
-          playerSessions.delete(dm[1]);
-        }
-      }
-
-      result.count = lastGlobalP;
-      result.list = [...playerSessions.values()]
-        .filter((p) => p.name && p.steamId)
-        .map((p) => ({
-          steamId: p.steamId,
-          name: p.name,
-          ip: p.ip,
-          ping: 0,
-          timeConnected: Date.now(),
-        }));
-    } catch {}
-    return result;
-  }
 
   constructor(config: ServerConfig) {
     this.config = config;
@@ -193,12 +133,16 @@ export class ServerManager {
   async start(): Promise<void> {
     if (this.status.running) return;
 
-    // Kill leftovers
     await this.killAll();
 
-    const serverExe = path.join(this.config.serverPath, 'SCUM', 'Binaries', 'Win64', 'SCUMServer.exe');
+    const serverExe = path.join(
+      this.config.serverPath,
+      'SCUM', 'Binaries', 'Win64', 'SCUMServer.exe',
+    );
     if (!(await fs.pathExists(serverExe))) {
-      throw new Error(`SCUMServer.exe не найден: ${serverExe}. Укажите путь в Настройки → Путь к серверу.`);
+      throw new Error(
+        `SCUMServer.exe не найден: ${serverExe}. Укажите путь в настройках.`,
+      );
     }
 
     const serverDir = path.dirname(serverExe);
@@ -208,21 +152,21 @@ export class ServerManager {
       `Port=${port}`,
       `QueryPort=${queryPort}`,
       '-log',
+      '-NoGUI',
+      '-unattended',
       '-NoSteamClient',
     ];
     if (this.config.fileOpenLog) args.push('-fileopenlog');
     if (this.config.noBattlEye) args.push('-NoBattlEye');
     args.push(`-MaxPlayers=${this.maxPlayers}`);
 
-    // Start via exec + start (proven to work, no UAC)
     const cmd = `cd /d "${serverDir}" && start "" "${serverExe}" ${args.join(' ')}`;
-    log(`Starting server...`);
+    log('Starting server...');
     exec(cmd);
 
     this.startTime = Date.now();
     this.status.running = true;
 
-    // Wait up to 15s for PID to appear
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       const pids = await findScumPids();
@@ -230,7 +174,6 @@ export class ServerManager {
         this.serverPid = pids[0];
         this.status.pid = pids[0];
         log(`Server started, PID: ${pids[0]}`);
-        // Hide the server console window (UE4 creates a visible console)
         try {
           execSync(
             `powershell -NoProfile -NonInteractive -Command "` +
@@ -238,7 +181,7 @@ export class ServerManager {
             `do { \$w = (Get-Process -Id ${pids[0]} -ErrorAction SilentlyContinue).MainWindowHandle; Start-Sleep -Milliseconds 200 } ` +
             `until (\$w -ne 0 -or (Get-Date).Second -gt ([datetime]::Now.AddSeconds(5)).Second); ` +
             `if (\$w -ne 0) { [W]::ShowWindowAsync(\$w, 0) }"`,
-            { stdio: 'ignore', timeout: 10000 }
+            { stdio: 'ignore', timeout: 10000 },
           );
           log('Server console window hidden');
         } catch {}
@@ -265,14 +208,12 @@ export class ServerManager {
     log('=== RESTART ===');
     this.clearStatus();
     await this.killAll();
-    // Wait for port to be released
     await new Promise((r) => setTimeout(r, 3000));
     await this.start();
     log('=== RESTART DONE ===');
   }
 
   private async killAll(): Promise<void> {
-    // Collect PIDs
     const pids = new Set<number>();
     if (this.serverPid) pids.add(this.serverPid);
     (await findScumPids()).forEach((p) => pids.add(p));
@@ -283,34 +224,32 @@ export class ServerManager {
       return;
     }
 
-    // Phase 1: Close console window (CTRL_CLOSE_EVENT → graceful)
     log('Closing server console window...');
     closeWindow();
     await new Promise((r) => setTimeout(r, 2000));
 
-    // Phase 2: Ctrl+C
     for (const pid of pidArr) sendCtrlC(pid);
     await new Promise((r) => setTimeout(r, 2000));
 
-    // Phase 3: Force-kill by PID
     let alive = (await findScumPids()).filter((p) => pidArr.includes(p));
     if (alive.length > 0) {
       for (const pid of alive) killPid(pid);
       await new Promise((r) => setTimeout(r, 1000));
     }
 
-    // Phase 4: Name-based
     alive = (await findScumPids()).filter((p) => pidArr.includes(p));
     if (alive.length > 0) killByName();
     await new Promise((r) => setTimeout(r, 1000));
 
-    // Phase 5: wmic
     alive = (await findScumPids()).filter((p) => pidArr.includes(p));
     for (const pid of alive) {
-      try { execSync(`"${WMIC}" process where "ProcessId=${pid}" delete`, { stdio: 'pipe', timeout: 10000 }); } catch {}
+      try {
+        execSync(`"${WMIC}" process where "ProcessId=${pid}" delete`, {
+          stdio: 'pipe', timeout: 10000,
+        });
+      } catch {}
     }
 
-    // Wait for death
     const allDead = await waitPidsGone(pidArr, 10000);
     if (!allDead) log('WARNING: Some processes could not be killed');
   }
@@ -326,7 +265,60 @@ export class ServerManager {
   }
 
   getStatus(): ServerStatus {
-    return { ...this.status, uptime: this.startTime ? Date.now() - this.startTime : 0 };
+    return {
+      ...this.status,
+      uptime: this.startTime ? Date.now() - this.startTime : 0,
+    };
+  }
+
+  async setSentryRobots(enabled: boolean): Promise<void> {
+    log(`Setting sentry robots: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    try {
+      const iniPath = path.join(this.config.serverPath, 'SCUM', 'Saved', 'Config', 'WindowsServer', 'ServerSettings.ini');
+      if (!(await fs.pathExists(iniPath))) { log(`ServerSettings.ini not found at ${iniPath}`); return; }
+      let content = await fs.readFile(iniPath, 'utf-8');
+      if (enabled) {
+        content = content.replace(/scum\.DisableSentrySpawning=.*/gi, 'scum.DisableSentrySpawning=False');
+        content = content.replace(/scum\.EnableSentryRespawning=.*/gi, 'scum.EnableSentryRespawning=True');
+      } else {
+        content = content.replace(/scum\.DisableSentrySpawning=.*/gi, 'scum.DisableSentrySpawning=True');
+        content = content.replace(/scum\.EnableSentryRespawning=.*/gi, 'scum.EnableSentryRespawning=False');
+      }
+      if (!content.toLowerCase().includes('scum.disablesentryspawning')) content += `\r\nscum.DisableSentrySpawning=${enabled ? 'False' : 'True'}`;
+      if (!content.toLowerCase().includes('scum.enablesentryrespawning')) content += `\r\nscum.EnableSentryRespawning=${enabled ? 'True' : 'False'}`;
+      await fs.writeFile(iniPath, content, 'utf-8');
+      log(`ServerSettings.ini updated: sentry robots ${enabled ? 'ON' : 'OFF'}`);
+    } catch (e: any) { log(`Failed to update sentry robots: ${e.message}`); }
+  }
+
+  /** Parse SCUM.log for Global Stats player count */
+  private parseLogPlayerCount(): number {
+    try {
+      const logPath = path.join(
+        this.config.serverPath, 'SCUM', 'Saved', 'Logs', 'SCUM.log',
+      );
+      if (!fs.existsSync(logPath)) return 0;
+      const stat = fs.statSync(logPath);
+      if (stat.size === 0) return 0;
+
+      const readSize = Math.min(stat.size, 65536);
+      const buf = Buffer.alloc(readSize);
+      const fd = fs.openSync(logPath, 'r');
+      fs.readSync(fd, buf, 0, readSize, Math.max(0, stat.size - readSize));
+      fs.closeSync(fd);
+
+      const content = buf[1] === 0 ? buf.toString('utf16le') : buf.toString('utf-8');
+      const lines = content.split('\n').filter(Boolean);
+
+      let lastCount = 0;
+      for (const line of lines) {
+        const m = line.match(/Global Stats:.*?P:\s*(\d+)/);
+        if (m) lastCount = parseInt(m[1], 10);
+      }
+      return lastCount;
+    } catch {
+      return 0;
+    }
   }
 
   private startMonitoring(): void {
@@ -335,12 +327,16 @@ export class ServerManager {
       try {
         const allProcs = await psList();
         const serverProcs = allProcs.filter(
-          (p) => p.name && p.name.toLowerCase().includes('scumserver')
+          (p) => p.name && p.name.toLowerCase().includes('scumserver'),
         );
         if (serverProcs.length === 0) {
           if (this.status.running) {
             log('Server process died unexpectedly');
             this.clearStatus();
+            if (this.config.autoRestart) {
+              log('Auto-restart enabled, restarting in 5s...');
+              setTimeout(() => { this.start().catch((e) => log('Auto-restart failed:', e.message)); }, 5000);
+            }
           }
           return;
         }
@@ -349,11 +345,7 @@ export class ServerManager {
         this.status.pid = p.pid;
         this.serverPid = p.pid;
         this.status.memoryUsage = getMemoryMb(p.pid);
-
-        // Parse players from SCUM.log
-        const logPlayers = this.parseLogPlayers();
-        this.status.players = logPlayers.count;
-        this.status.playersList = logPlayers.list;
+        this.status.players = this.parseLogPlayerCount();
       } catch {}
     }, 5000);
   }

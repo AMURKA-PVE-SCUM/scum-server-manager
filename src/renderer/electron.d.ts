@@ -12,9 +12,8 @@ interface ElectronAPI {
       cpuUsage: number; memoryUsage: number;
       players: number; maxPlayers: number; fps: number;
       playersList: Array<{ steamId: string; name: string; ip: string; ping: number; timeConnected: number }>;
-      updateAvailable: boolean; updateCheckError: string;
     }>;
-    checkUpdate: () => Promise<any>;
+    checkUpdate: () => Promise<{ updated: boolean; error: string }>;
     update: () => Promise<string>;
     updateStream: () => Promise<string>;
     onUpdateLine: (cb: (line: string) => void) => void;
@@ -48,6 +47,35 @@ interface ElectronAPI {
   };
   discord: {
     test: (webhookUrl: string) => Promise<boolean>;
+  };
+  ftp: {
+    start: (port: number, user: string, pass: string, pasvHost?: string) => Promise<boolean>;
+    stop: () => Promise<boolean>;
+    status: () => Promise<{ running: boolean }>;
+    saveConfig: (cfg: any) => Promise<boolean>;
+  };
+  webPanel: {
+    start: () => Promise<boolean>;
+    stop: () => Promise<boolean>;
+    status: () => Promise<{ running: boolean }>;
+    saveConfig: (cfg: any) => Promise<boolean>;
+  };
+  db: {
+    init: () => Promise<{ ok: boolean; tables?: string[]; error?: string }>;
+    status: () => Promise<{ available: boolean; open: boolean }>;
+    getPlayers: () => Promise<any[]>;
+    getPlayerBySteamId: (sid: string) => Promise<any>;
+    getPlayerByName: (name: string) => Promise<any>;
+    getWallet: (sid: string) => Promise<any>;
+    getAttributes: (sid: string) => Promise<any>;
+    getSkills: (sid: string) => Promise<any[]>;
+    getInventory: (sid: string) => Promise<any[]>;
+    getQuickSlots: (sid: string) => Promise<any[]>;
+    getSquads: () => Promise<any[]>;
+    getVehicles: () => Promise<any[]>;
+    getFlags: () => Promise<any[]>;
+    getBankAccounts: () => Promise<any[]>;
+    getEconomyLeaderboard: () => Promise<any[]>;
   };
 }
 

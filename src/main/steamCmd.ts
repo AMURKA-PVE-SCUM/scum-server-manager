@@ -56,70 +56,73 @@ export class SteamCmd {
     this.killExistingSteamCmd();
     await new Promise((r) => setTimeout(r, 1000));
 
-    return new Promise((resolve, reject) => {
-      const output: string[] = [];
-      const proc = spawn(steamCmdExe, args, {
-        cwd: this.steamCmdPath,
-        stdio: captureOutput ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'ignore', 'ignore'],
-        windowsHide: true,
+    if (!captureOutput) {
+      return new Promise((resolve, reject) => {
+        const proc = spawn(steamCmdExe, args, {
+          cwd: this.steamCmdPath, stdio: 'ignore', windowsHide: true,
+        });
+        const t = setTimeout(() => { try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch {} reject(new Error('SteamCMD timeout')); }, 600000);
+        proc.on('error', (err) => { clearTimeout(t); reject(err); });
+        proc.on('close', (code) => { clearTimeout(t); code === 0 ? resolve('') : reject(new Error(`SteamCMD exit code ${code}`)); });
       });
+    }
 
-      if (captureOutput) {
-        proc.stdout?.on('data', (data: Buffer) => {
-          const text = data.toString();
-          if (onLine) {
-            text.split('\n').filter(Boolean).forEach((l) => onLine(l.trim()));
-          } else {
-            output.push(text);
-            // Cap output buffer at 64KB to prevent OOM
-            if (output.join('').length > 65536) {
-              output.splice(0, Math.floor(output.length / 2));
-            }
-          }
-        });
-        proc.stderr?.on('data', (data: Buffer) => {
-          const text = data.toString();
-          if (onLine) {
-            text.split('\n').filter(Boolean).forEach((l) => onLine(l.trim()));
-          } else {
-            output.push(text);
-            if (output.join('').length > 65536) {
-              output.splice(0, Math.floor(output.length / 2));
-            }
-          }
-        });
-      }
+    const q = (s: string) => s.includes(' ') ? `"${s}"` : s;
 
-      const timeout = setTimeout(() => {
-        try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch {}
-        reject(new Error('SteamCMD timeout'));
+    const logPath = path.join(this.steamCmdPath, 'steamcmd_update.log');
+    try { fs.unlinkSync(logPath); } catch {}
+
+    const batchPath = path.join(this.steamCmdPath, 'steamcmd_update.bat');
+    const cmdEscaped = `${q(steamCmdExe)} ${args.map(q).join(' ')}`;
+    fs.writeFileSync(batchPath, `@echo off\r\n${cmdEscaped} >"${logPath}" 2>&1\r\nset EXITCODE=%ERRORLEVEL%\r\necho.\r\necho SteamCMD exit code: %EXITCODE%\r\npause\r\n`, 'utf8');
+
+    const batchProc = spawn(batchPath, [], {
+      cwd: this.steamCmdPath, stdio: 'ignore', windowsHide: false, detached: true,
+    });
+    batchProc.unref();
+
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => {
+        try { execSync(`taskkill /F /IM steamcmd.exe`, { stdio: 'ignore' }); } catch {}
+        try { if (batchProc.pid) execSync(`taskkill /F /PID ${batchProc.pid} /T`, { stdio: 'ignore' }); } catch {}
+        reject(new Error('SteamCMD timeout (10 min)'));
       }, 600000);
 
-      proc.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(new Error(`Ошибка запуска SteamCMD: ${err.message}`));
-      });
+      let lastSize = 0;
+      const pollLog = setInterval(() => {
+        try {
+          if (!fs.existsSync(logPath)) return;
+          const s = fs.statSync(logPath).size;
+          if (s > lastSize) {
+            const buf = Buffer.alloc(s - lastSize);
+            const fd = fs.openSync(logPath, 'r');
+            fs.readSync(fd, buf, 0, buf.length, lastSize);
+            fs.closeSync(fd);
+            lastSize = s;
+            if (onLine) buf.toString('utf8').split('\n').filter(Boolean).forEach((l) => onLine(l.trim()));
+          }
+        } catch {}
+      }, 1000);
 
-      proc.on('close', (code) => {
-        clearTimeout(timeout);
-        const out = output.join('\n');
-        if (code === 0) resolve(out);
-        else if (code === 8) reject(new Error(
-          `SteamCMD: ошибка 8. Не удалось установить приложение. Попробуйте перезапустить SteamCMD или проверить соединение.`
-        ));
-        else if (code === 7) reject(new Error(
-          `SteamCMD: ошибка соединения (код 7). Проверьте интернет и firewall. Сервера Steam могут быть недоступны.`
-        ));
-        else if (code === 6) reject(new Error(
-          `SteamCMD: ошибка входа (код 6). Неверный логин или пароль. Проверьте данные в Settings → App Settings.`
-        ));
-        else if (code === 5) reject(new Error(
-          `SteamCMD: ошибка блокировки БД (код 5). Удалите файл ${this.steamCmdPath}\\steamapps\\appcache\\appinfo.vdf и попробуйте снова.`
-        ));
-        else reject(new Error(
-          `SteamCMD: ошибка ${code}. Проверьте консоль выше для подробностей.`
-        ));
-      });
+      const checkDone = setInterval(() => {
+        const pid = batchProc.pid;
+        if (!pid) { clearInterval(pollLog); clearInterval(checkDone); clearTimeout(t); resolve(''); return; }
+        try {
+          const r = execSync(`tasklist /V /FO CSV /NH /FI "PID eq ${pid}"`, { stdio: 'pipe', encoding: 'utf8', timeout: 3000 });
+          if (!r.includes(pid.toString())) throw new Error('done');
+        } catch {
+          clearInterval(pollLog); clearInterval(checkDone); clearTimeout(t);
+          setTimeout(() => {
+            try {
+              const out = fs.readFileSync(logPath, 'utf8');
+              const lower = out.toLowerCase();
+              if (lower.includes('error') || lower.includes('failure') || lower.includes('not found')) reject(new Error(`SteamCMD error. Лог: ${logPath}`));
+              else resolve(out);
+            } catch { resolve(''); }
+          }, 2000);
+        }
+      }, 2000);
+
     });
   }
 

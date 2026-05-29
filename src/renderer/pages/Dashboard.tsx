@@ -15,7 +15,6 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateLines, setUpdateLines] = useState<string[]>([]);
-  const [backingUp, setBackingUp] = useState(false);
   const [savingLaunch, setSavingLaunch] = useState(false);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
@@ -82,6 +81,8 @@ export function Dashboard() {
                 <Typography variant="h6">{t('dashboard', 'serverControl')}</Typography>
                 <Chip label={status.running ? t('common', 'online') : t('common', 'offline')}
                   color={status.running ? 'success' : 'error'} size="small" />
+                <Box sx={{ flex: 1 }} />
+
               </Box>
               <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
                 <Button variant="contained" color="success" startIcon={<PlayArrowIcon />}
@@ -127,40 +128,27 @@ export function Dashboard() {
                   onClick={async () => {
                     setUpdating(true);
                     setUpdateLines([]);
-                    window.electronAPI.removeUpdateListeners();
-                    window.electronAPI.onUpdateLine((line) => {
-                      setUpdateLines((prev) => [...prev.slice(-50), line]);
+                    window.electronAPI.server.removeUpdateListeners();
+                    window.electronAPI.server.onUpdateLine((line) => {
+                      setUpdateLines((prev) => [...prev, line]);
                     });
-                    window.electronAPI.onUpdateDone((result) => {
-                      window.electronAPI.removeUpdateListeners();
+                    try {
+                      const result = await window.electronAPI.server.updateStream();
+                      window.electronAPI.server.removeUpdateListeners();
                       if (result === 'already_up_to_date') {
                         setSnack({ open: true, message: t('dashboard', 'alreadyUpToDate'), severity: 'success' });
                       } else {
                         setSnack({ open: true, message: t('dashboard', 'updateStarted'), severity: 'success' });
                       }
-                      setUpdating(false);
-                      setUpdateLines([]);
-                    });
-                    try {
-                      await window.electronAPI.server.updateStream();
                     } catch (e: any) {
-                      setSnack({ open: true, message: e.message, severity: 'error' });
-                      setUpdating(false);
-                      setUpdateLines([]);
+                      window.electronAPI.server.removeUpdateListeners();
+                      setSnack({ open: true, message: e.message || t('common', 'error'), severity: 'error' });
                     }
+                    setUpdating(false);
                   }}>
                   {updating ? t('common', 'loading') : t('dashboard', 'updateServer')}
                 </Button>
-                <Button variant="outlined" size="small"
-                  disabled={backingUp}
-                  onClick={async () => {
-                    setBackingUp(true);
-                    try { await window.electronAPI.backup.create(); setSnack({ open: true, message: t('backups', 'backupCreated'), severity: 'success' }); }
-                    catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
-                    setBackingUp(false);
-                  }}>
-                  {backingUp ? t('common', 'loading') : t('dashboard', 'createBackup')}
-                </Button>
+
               </Box>
               {updating && updateLines.length > 0 && (
                 <Card variant="outlined" sx={{ mt: 2, bgcolor: '#0d1117' }}>
@@ -207,7 +195,7 @@ export function Dashboard() {
         </Grid>
       </Grid>
 
-      <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack({ ...snack, open: false })}>
+      <Snackbar open={snack.open} autoHideDuration={6000} onClose={() => setSnack({ ...snack, open: false })}>
         <Alert severity={snack.severity}>{snack.message}</Alert>
       </Snackbar>
     </Box>

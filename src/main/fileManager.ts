@@ -20,7 +20,7 @@ export class FileManager {
     return true;
   }
 
-  async listFiles(dirPath: string): Promise<{ name: string; path: string; isDirectory: boolean; size: number }[]> {
+  async listFiles(dirPath: string): Promise<any[]> {
     const fullPath = path.isAbsolute(dirPath) ? dirPath : path.join(this.basePath, dirPath);
     await fs.ensureDir(fullPath);
     const entries = await fs.readdir(fullPath, { withFileTypes: true });
@@ -50,7 +50,7 @@ export class FileManager {
     return this.writeFile(filePath, content);
   }
 
-  async readJson<T = any>(filePath: string): Promise<T> {
+  async readJson(filePath: string): Promise<any> {
     const content = await this.readFile(filePath);
     return JSON.parse(content);
   }

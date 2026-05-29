@@ -1,101 +1,79 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box, Card, CardContent, Typography, Button,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
-} from '@mui/material';
-import RestoreIcon from '@mui/icons-material/Restore';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import { Box, Card, CardContent, Typography, Button, Grid, Snackbar, Alert, Table, TableHead, TableRow, TableCell, TableBody, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { useTranslation } from '../contexts/LanguageContext';
 
 export function BackupManager() {
   const { t } = useTranslation();
   const [backups, setBackups] = useState<any[]>([]);
-  const [confirm, setConfirm] = useState({ open: false, id: '', action: '' });
+  const [config, setConfig] = useState<any>(null);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
 
   useEffect(() => { load(); }, []);
-
-  const load = async () => { try { setBackups(await window.electronAPI.backup.list()); } catch {} };
-
+  const load = async () => {
+    const cfg = await window.electronAPI.config.get();
+    setConfig(cfg);
+    try { const b = await window.electronAPI.backup.list(); setBackups(b); } catch {}
+  };
   const handleCreate = async () => {
-    try {
-      await window.electronAPI.backup.create();
-      await load();
-      setSnack({ open: true, message: t('backups', 'backupCreated'), severity: 'success' });
-    } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
+    setBackingUp(true);
+    try { await window.electronAPI.backup.create(); await load(); setSnack({ open: true, message: t('backups', 'backupCreated'), severity: 'success' }); } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
+    setBackingUp(false);
   };
-
   const handleRestore = async () => {
-    try {
-      await window.electronAPI.backup.restore(confirm.id);
-      setSnack({ open: true, message: t('backups', 'backupRestored'), severity: 'success' });
-    } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
-    setConfirm({ open: false, id: '', action: '' });
+    if (!restoreId) return;
+    try { await window.electronAPI.backup.restore(restoreId); setSnack({ open: true, message: t('backups', 'backupRestored'), severity: 'success' }); } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
+    setRestoreId(null);
   };
-
   const handleDelete = async () => {
-    try {
-      await window.electronAPI.backup.delete(confirm.id);
-      await load();
-      setSnack({ open: true, message: t('backups', 'backupDeleted'), severity: 'success' });
-    } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
-    setConfirm({ open: false, id: '', action: '' });
+    if (!deleteId) return;
+    try { await window.electronAPI.backup.delete(deleteId); await load(); setSnack({ open: true, message: t('backups', 'backupDeleted'), severity: 'success' }); } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
+    setDeleteId(null);
   };
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>{t('backups', 'title')}</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>{t('backups', 'createBackup')}</Button>
+      <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>{t('backups', 'title')}</Typography>
+      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+        <Button variant="contained" onClick={handleCreate} disabled={backingUp}>{backingUp ? `${t('common', 'loading')}` : t('backups', 'createBackup')}</Button>
       </Box>
-      <Card><CardContent>
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{t('common', 'name')}</TableCell>
-                <TableCell>{t('common', 'type')}</TableCell>
-                <TableCell>{t('common', 'time')}</TableCell>
-                <TableCell align="right">{t('common', 'actions')}</TableCell>
+      <Card><CardContent sx={{ p: 0 }}>
+        <Table>
+          <TableHead><TableRow>
+            <TableCell>{t('common', 'name')}</TableCell>
+            <TableCell>{t('common', 'date')}</TableCell>
+            <TableCell>{t('common', 'type')}</TableCell>
+            <TableCell>{t('common', 'actions')}</TableCell>
+          </TableRow></TableHead>
+          <TableBody>
+            {backups.length === 0 && <TableRow><TableCell colSpan={4} align="center">{t('backups', 'noBackups')}</TableCell></TableRow>}
+            {backups.map((b) => (
+              <TableRow key={b.id}>
+                <TableCell>{b.name}</TableCell>
+                <TableCell>{new Date(b.timestamp).toLocaleString()}</TableCell>
+                <TableCell>{b.type}</TableCell>
+                <TableCell>
+                  <Button size="small" color="warning" onClick={() => setRestoreId(b.id)}>{t('backups', 'restore')}</Button>
+                  <Button size="small" color="error" onClick={() => setDeleteId(b.id)}>{t('common', 'delete')}</Button>
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {backups.map((b: any) => (
-                <TableRow key={b.id}>
-                  <TableCell>{b.name}</TableCell>
-                  <TableCell><Chip label={t('backups', b.type)} size="small" color={b.type === 'manual' ? 'primary' : 'default'} variant="outlined" /></TableCell>
-                  <TableCell>{new Date(b.timestamp).toLocaleString()}</TableCell>
-                  <TableCell align="right">
-                    <Button size="small" startIcon={<RestoreIcon />} onClick={() => setConfirm({ open: true, id: b.id, action: 'restore' })}>{t('backups', 'restore')}</Button>
-                    <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => setConfirm({ open: true, id: b.id, action: 'delete' })}>{t('common', 'delete')}</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {backups.length === 0 && <TableRow><TableCell colSpan={4} align="center">{t('backups', 'noBackups')}</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </TableContainer>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent></Card>
-
-      <Dialog open={confirm.open} onClose={() => setConfirm({ ...confirm, open: false })}>
-        <DialogTitle>{t('common', 'confirm')}</DialogTitle>
-        <DialogContent>
-          <Typography>{confirm.action === 'restore' ? t('backups', 'confirmRestore') : t('backups', 'confirmDelete')}</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirm({ ...confirm, open: false })}>{t('common', 'cancel')}</Button>
-          <Button onClick={confirm.action === 'restore' ? handleRestore : handleDelete}
-            variant="contained" color={confirm.action === 'delete' ? 'error' : 'primary'}>
-            {confirm.action === 'restore' ? t('backups', 'restore') : t('common', 'delete')}
-          </Button>
-        </DialogActions>
+      <Dialog open={!!restoreId} onClose={() => setRestoreId(null)}>
+        <DialogTitle>{t('backups', 'restore')}</DialogTitle>
+        <DialogContent><Typography>{t('backups', 'confirmRestore')}</Typography></DialogContent>
+        <DialogActions><Button onClick={() => setRestoreId(null)}>{t('common', 'cancel')}</Button><Button color="warning" onClick={handleRestore}>{t('backups', 'restore')}</Button></DialogActions>
       </Dialog>
-
-      <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack({ ...snack, open: false })}>
-        <Alert severity={snack.severity}>{snack.message}</Alert>
-      </Snackbar>
+      <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
+        <DialogTitle>{t('common', 'delete')}</DialogTitle>
+        <DialogContent><Typography>{t('backups', 'confirmDelete')}</Typography></DialogContent>
+        <DialogActions><Button onClick={() => setDeleteId(null)}>{t('common', 'cancel')}</Button><Button color="error" onClick={handleDelete}>{t('common', 'delete')}</Button></DialogActions>
+      </Dialog>
+      <Snackbar open={snack.open} autoHideDuration={6000} onClose={() => setSnack({ ...snack, open: false })}><Alert severity={snack.severity}>{snack.message}</Alert></Snackbar>
     </Box>
   );
 }

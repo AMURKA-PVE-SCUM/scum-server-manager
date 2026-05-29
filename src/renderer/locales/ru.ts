@@ -18,6 +18,7 @@ const ru = {
     name: 'Имя',
     type: 'Тип',
     time: 'Время',
+    date: 'Дата',
     message: 'Сообщение',
     enabled: 'Включено',
     disabled: 'Отключено',
@@ -32,6 +33,7 @@ const ru = {
     hoursShort: 'ч',
     minutesShort: 'м',
     secondsShort: 'с',
+    error: 'Ошибка',
   },
 
   nav: {
@@ -48,6 +50,12 @@ const ru = {
     discord: 'Discord',
     settings: 'Настройки',
     restartScheduler: 'Расписание',
+    files: 'Файлы',
+    ftp: 'FTP',
+    webPanel: 'Веб-панель',
+    players: 'Игроки',
+    squads: 'Отряды',
+    vehicles: 'Транспорт',
   },
 
   dashboard: {
@@ -99,9 +107,87 @@ const ru = {
     saved: 'Настройки игры сохранены!',
   },
 
+  files: {
+    title: 'Файловый менеджер',
+    config: 'Конфиг',
+    saves: 'Сейвы',
+    logs: 'Логи',
+    empty: 'Папка пуста',
+    saved: 'Сохранено',
+    size: 'Размер',
+  },
+
+  ftp: {
+    title: 'FTP Сервер',
+    builtin: 'Встроенный FTP сервер',
+    status: 'Статус',
+    configuration: 'Конфигурация',
+    start: 'Запустить',
+    stop: 'Остановить',
+    port: 'Порт',
+    username: 'Имя пользователя',
+    password: 'Пароль',
+    pasvHost: 'Внешний IP (pasv)',
+    autoDetect: 'Авто-определение',
+    autoStart: 'Автозапуск с приложением',
+    configSaved: 'Настройки FTP сохранены',
+    started: 'FTP запущен на порту {port}',
+    stopped: 'FTP остановлен',
+    connectInfo: 'Подключение: ftp://YOUR_SERVER_IP:{port} с пользователем {user}{pasv}',
+    connectNote: 'Порт 21 может требовать права администратора. При проблемах используйте порт 1024+.',
+  },
+
+  error: {
+    title: 'Произошла ошибка',
+    returnHome: 'Вернуться на главную',
+  },
+
   economy: {
     title: 'Настройки экономики',
     saved: 'Экономика сохранена!',
+    configFile: 'Файл конфига',
+  },
+
+  players: {
+    title: 'Игроки',
+    steamId: 'Steam ID',
+    fame: 'Фама',
+    money: 'Деньги',
+    lastLogin: 'Последний вход',
+    noPlayers: 'Нет игроков',
+    wallet: 'Кошелёк',
+    gold: 'Золото',
+    attributes: 'Атрибуты',
+    strength: 'СИЛ',
+    constitution: 'ВЫН',
+    dexterity: 'ЛОВ',
+    intelligence: 'ИНТ',
+    skills: 'Навыки',
+    admin: 'Админ',
+    addAdmin: 'Добавить админа',
+    removeAdmin: 'Убрать админа',
+    adminFlags: 'Флаги админа',
+    adminAdded: '{name} добавлен в админы',
+    adminRemoved: '{name} удалён из админов',
+    alreadyAdmin: '{name} уже в админах',
+  },
+
+  squads: {
+    title: 'Отряды',
+    score: 'Очки',
+    members: 'Участники',
+    limit: 'Лимит',
+    noSquads: 'Нет отрядов',
+  },
+
+  vehicles: {
+    title: 'Транспорт',
+    id: 'ID',
+    asset: 'Модель',
+    alias: 'Позывной',
+    functional: 'Исправен',
+    lastAccess: 'Последний доступ',
+    noVehicles: 'Нет транспорта',
   },
 
   raid: {
@@ -126,6 +212,7 @@ const ru = {
     userRemoved: 'Пользователь удалён!',
     noUsers: 'Нет пользователей',
     confirmRemove: 'Удалить пользователя',
+    flagInfo: 'Для флагов админа добавьте после SteamID: <code>[SetGodMode]</code>, <code>[RestartServer]</code>\nПример: <code>76561199637135087[SetGodMode,RestartServer]</code>',
   },
 
   backups: {
@@ -140,6 +227,13 @@ const ru = {
     restore: 'Восстановить',
     manual: 'ручной',
     auto: 'авто',
+    autoSettings: 'Настройки автоматических бэкапов',
+    autoBackup: 'Авто-бэкапы',
+    saveSettings: 'Сохранить настройки',
+    path: 'Путь для бэкапов',
+    intervalHours: 'Интервал (часы)',
+    retentionCount: 'Хранить (бэкапов)',
+    list: 'Список бэкапов',
   },
 
   logs: {
@@ -156,11 +250,15 @@ const ru = {
   discord: {
     title: 'Уведомления Discord',
     enable: 'Включить уведомления Discord',
+    adminLogWebhook: 'Вебхук логов админа',
+    chatWebhook: 'Вебхук чата',
+    vehicleWebhook: 'Вебхук транспорта',
     loginWebhook: 'Вебхук входов/выходов игроков',
     serverStatusWebhook: 'Вебхук статуса сервера',
     saved: 'Настройки сохранены!',
     testSuccess: 'Вебхук работает!',
     testFailed: 'Ошибка вебхука',
+    testSent: 'Тест отправлен',
   },
 
   settings: {
@@ -206,6 +304,13 @@ const ru = {
     daySunday: 'Вс',
     everyDay: 'Каждый день',
     advanced: 'Расширенное расписание',
+    tabRestart: 'Перезапуск',
+    tabRobots: 'Роботы',
+    robotEnable: 'Расписание роботов',
+    robotOn: 'Включение',
+    robotOff: 'Выключение',
+    robotTime: 'Время',
+    robotNote: 'Редактирует ServerSettings.ini: DisableSentrySpawning / EnableSentryRespawning',
   },
 };
 

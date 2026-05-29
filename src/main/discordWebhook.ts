@@ -7,35 +7,21 @@ export class DiscordWebhook {
     this.config = config;
   }
 
-  async send(webhookUrl: string, content: string, title?: string): Promise<boolean> {
+  private async send(webhookUrl: string, content: string, title?: string): Promise<boolean> {
     if (!webhookUrl || !this.config.enabled) return false;
-
     try {
-      const payload: Record<string, any> = {
-        content,
-        allowed_mentions: { parse: [] },
-      };
-
+      const payload: any = { content, allowed_mentions: { parse: [] } };
       if (title) {
-        payload.embeds = [{
-          title,
-          description: content,
-          color: 0x00ff00,
-          timestamp: new Date().toISOString(),
-        }];
+        payload.embeds = [{ title, description: content, color: 0x00ff00, timestamp: new Date().toISOString() }];
         delete payload.content;
       }
-
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       return response.ok;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }
 
   async sendAdminLog(message: string): Promise<boolean> {
@@ -55,7 +41,7 @@ export class DiscordWebhook {
     try {
       const payload = {
         embeds: [{
-          title: '👤 Игрок',
+          title: 'Player',
           description: `**${player}** ${steamId ? `(\`${steamId}\`)` : ''}`,
           color: 0x58a6ff,
           timestamp: new Date().toISOString(),
@@ -72,17 +58,10 @@ export class DiscordWebhook {
 
   async sendStatusUpdate(status: string): Promise<boolean> {
     if (!this.config.serverStatusWebhook || !this.config.enabled) return false;
-    const color = status.includes('🟢') ? 0x3fb950
-      : status.includes('🔄') ? 0xd29922
-      : 0xf85149;
+    const color = status.includes('🟢') ? 0x3fb950 : status.includes('🔄') ? 0xd29922 : 0xf85149;
     try {
       const payload = {
-        embeds: [{
-          title: 'Server Status',
-          description: status,
-          color,
-          timestamp: new Date().toISOString(),
-        }],
+        embeds: [{ title: 'Server Status', description: status, color, timestamp: new Date().toISOString() }],
       };
       const response = await fetch(this.config.serverStatusWebhook, {
         method: 'POST',
@@ -94,6 +73,6 @@ export class DiscordWebhook {
   }
 
   async test(webhookUrl: string): Promise<boolean> {
-    return this.send(webhookUrl, '✅ Discord webhook is working!', 'Test Message');
+    return this.send(webhookUrl, 'Discord webhook is working!', 'Test Message');
   }
 }

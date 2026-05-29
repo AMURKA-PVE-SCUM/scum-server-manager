@@ -12,6 +12,13 @@ export interface ServerConfig {
   restartMode?: 'interval' | 'specific';
   restartIntervalHours?: number;
   restartDays?: number[];
+  robotScheduleEnabled: boolean;
+  robotEnableTime: string;
+  robotDisableTime: string;
+  robotEnableDays: number[];
+  robotDisableDays: number[];
+  robotEnableCommand: string;
+  robotDisableCommand: string;
 }
 
 export interface DiscordConfig {
@@ -30,10 +37,27 @@ export interface BackupConfig {
   path: string;
 }
 
+export interface FtpConfig {
+  enabled: boolean;
+  port: number;
+  username: string;
+  password: string;
+  pasvHost?: string;
+}
+
+export interface WebPanelConfig {
+  enabled: boolean;
+  port: number;
+  username: string;
+  password: string;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   discord: DiscordConfig;
   backup: BackupConfig;
+  ftp: FtpConfig;
+  webPanel: WebPanelConfig;
   theme: 'dark' | 'light';
   language: string;
 }
@@ -47,15 +71,7 @@ export interface ServerStatus {
   players: number;
   maxPlayers: number;
   fps: number;
-  playersList: PlayerInfo[];
-}
-
-export interface PlayerInfo {
-  steamId: string;
-  name: string;
-  ip: string;
-  ping: number;
-  timeConnected: number;
+  playersList: any[];
 }
 
 export interface LogEvent {

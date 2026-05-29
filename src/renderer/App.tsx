@@ -6,52 +6,72 @@ import {
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
-import VideogameAssetIcon from '@mui/icons-material/VideogameAsset';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import PeopleIcon from '@mui/icons-material/People';
-import BackupIcon from '@mui/icons-material/Backup';
-import TerminalIcon from '@mui/icons-material/Terminal';
-import ForumIcon from '@mui/icons-material/Forum';
+import CloudIcon from '@mui/icons-material/Cloud';
 import DownloadIcon from '@mui/icons-material/Download';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import MenuIcon from '@mui/icons-material/Menu';
 import LanguageIcon from '@mui/icons-material/Language';
+import TuneIcon from '@mui/icons-material/Tune';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import ShieldIcon from '@mui/icons-material/Shield';
+import PeopleIcon from '@mui/icons-material/People';
+import GroupWorkIcon from '@mui/icons-material/GroupWork';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import DescriptionIcon from '@mui/icons-material/Description';
+import BackupIcon from '@mui/icons-material/Backup';
+import ChatIcon from '@mui/icons-material/Chat';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import FolderIcon from '@mui/icons-material/Folder';
 import { LanguageProvider, useTranslation } from './contexts/LanguageContext';
 import { Dashboard } from './pages/Dashboard';
 import { ServerSettings } from './pages/ServerSettings';
 import { GameSettings } from './pages/GameSettings';
-import { EconomySettings } from './pages/EconomySettings';
 import { RaidSettings } from './pages/RaidSettings';
-import { UserManager } from './pages/UserManager';
-import { LootEditor } from './pages/LootEditor';
-import { BackupManager } from './pages/BackupManager';
-import { LogMonitor } from './pages/LogMonitor';
-import { DiscordSettings } from './pages/DiscordSettings';
 import { ServerInstall } from './pages/ServerInstall';
 import { AppSettings } from './pages/AppSettings';
 import { RestartScheduler } from './pages/RestartScheduler';
+import { WebPanelPage } from './pages/WebPanelPage';
+import { FTPSettings } from './pages/FTPSettings';
+import { BackupManager } from './pages/BackupManager';
+import { DiscordSettings } from './pages/DiscordSettings';
+import { EconomySettings } from './pages/EconomySettings';
+import { PlayersPage } from './pages/PlayersPage';
+import { SquadsPage } from './pages/SquadsPage';
+import { LogMonitor } from './pages/LogMonitor';
+import { FileManager } from './pages/FileManager';
+import { LootEditor } from './pages/LootEditor';
+
 const DRAWER_WIDTH = 220;
+
 function AppContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, lang, setLang } = useTranslation();
+
   const navItems = [
     { path: '/', label: t('nav', 'dashboard'), icon: <DashboardIcon /> },
     { path: '/server-install', label: t('nav', 'serverInstall'), icon: <DownloadIcon /> },
     { path: '/scheduler', label: t('nav', 'restartScheduler'), icon: <ScheduleIcon /> },
-    { path: '/server-settings', label: t('nav', 'serverConfig'), icon: <SettingsIcon /> },
-    { path: '/game-settings', label: t('nav', 'gameConfig'), icon: <VideogameAssetIcon /> },
-    { path: '/economy', label: t('nav', 'economy'), icon: <AttachMoneyIcon /> },
-    { path: '/raid', label: t('nav', 'raid'), icon: <VideogameAssetIcon /> },
-    { path: '/loot', label: t('nav', 'loot'), icon: <VideogameAssetIcon /> },
-    { path: '/users', label: t('nav', 'users'), icon: <PeopleIcon /> },
-    { path: '/logs', label: t('nav', 'logs'), icon: <TerminalIcon /> },
+    { path: '/webpanel', label: t('nav', 'webPanel'), icon: <CloudIcon /> },
+    { path: '/server-settings', label: t('nav', 'serverConfig'), icon: <TuneIcon /> },
+    { path: '/game-settings', label: t('nav', 'gameConfig'), icon: <SportsEsportsIcon /> },
+    { path: '/economy', label: t('nav', 'economy'), icon: <AccountBalanceIcon /> },
+    { path: '/raid', label: t('nav', 'raid'), icon: <ShieldIcon /> },
+    { path: '/players', label: t('nav', 'players'), icon: <PeopleIcon /> },
+    { path: '/squads', label: t('nav', 'squads'), icon: <GroupWorkIcon /> },
+    { path: '/loot', label: t('nav', 'loot'), icon: <InventoryIcon /> },
+    { path: '/logs', label: t('nav', 'logs'), icon: <DescriptionIcon /> },
     { path: '/backups', label: t('nav', 'backups'), icon: <BackupIcon /> },
-    { path: '/discord', label: t('nav', 'discord'), icon: <ForumIcon /> },
+    { path: '/discord', label: t('nav', 'discord'), icon: <ChatIcon /> },
+    { path: '/ftp', label: t('nav', 'ftp'), icon: <FolderOpenIcon /> },
+    { path: '/files', label: t('nav', 'files'), icon: <FolderIcon /> },
     { path: '/settings', label: t('nav', 'settings'), icon: <SettingsIcon /> },
   ];
+
   const isActive = (path: string) => location.pathname === path;
+
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#0d1117' }}>
       <Box sx={{ px: 2.5, py: 2.5 }}>
@@ -63,7 +83,7 @@ function AppContent() {
         </Typography>
       </Box>
       <Divider sx={{ borderColor: '#21262d' }} />
-      <List sx={{ flex: 1, overflow: 'auto', px: 1, pt: 1 }}>
+      <List sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', px: 1, pt: 1, scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
         {navItems.map((item) => (
           <ListItemButton
             key={item.path}
@@ -112,7 +132,7 @@ function AppContent() {
           }}
           variant="outlined"
         >
-          <span>{lang === 'ru' ? 'Русский' : 'English'}</span>
+          <span>{t('settings', lang === 'ru' ? 'langRu' : 'langEn')}</span>
           <Box component="span" sx={{ fontSize: 11, opacity: 0.6, ml: 1 }}>
             {lang === 'ru' ? 'EN' : 'RU'}
           </Box>
@@ -120,6 +140,7 @@ function AppContent() {
       </Box>
     </Box>
   );
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#0d1117' }}>
       <IconButton
@@ -161,21 +182,26 @@ function AppContent() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/server-install" element={<ServerInstall />} />
           <Route path="/scheduler" element={<RestartScheduler />} />
+          <Route path="/webpanel" element={<WebPanelPage />} />
           <Route path="/server-settings" element={<ServerSettings />} />
           <Route path="/game-settings" element={<GameSettings />} />
           <Route path="/economy" element={<EconomySettings />} />
           <Route path="/raid" element={<RaidSettings />} />
+          <Route path="/players" element={<PlayersPage />} />
+          <Route path="/squads" element={<SquadsPage />} />
           <Route path="/loot" element={<LootEditor />} />
-          <Route path="/users" element={<UserManager />} />
           <Route path="/logs" element={<LogMonitor />} />
           <Route path="/backups" element={<BackupManager />} />
           <Route path="/discord" element={<DiscordSettings />} />
+          <Route path="/ftp" element={<FTPSettings />} />
+          <Route path="/files" element={<FileManager />} />
           <Route path="/settings" element={<AppSettings />} />
         </Routes>
       </Box>
     </Box>
   );
 }
+
 export function App() {
   return (
     <LanguageProvider>

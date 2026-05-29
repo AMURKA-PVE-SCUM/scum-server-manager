@@ -1,62 +1,46 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Box, Card, CardContent, Typography,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Paper, Chip, Tabs, Tab,
-} from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import { Box, Card, CardContent, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { useTranslation } from '../contexts/LanguageContext';
 
 export function LogMonitor() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState(0);
-  const [logs, setLogs] = useState<any[]>([]);
-
-  const tabTypes = ['', 'admin', 'chat', 'login', 'vehicle', 'system'];
-  const tabLabels = ['all', 'admin', 'chat', 'login', 'vehicle', 'system'];
-
-  const load = useCallback(async () => {
+  const [events, setEvents] = useState<any[]>([]);
+  const [filter, setFilter] = useState('all');
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i); }, []);
+  const load = async () => {
     try {
-      const l = tab === 0
-        ? await window.electronAPI.logs.get()
-        : await window.electronAPI.logs.getByType(tabTypes[tab]);
-      setLogs(l.slice(-100).reverse());
+      let e: any[];
+      if (filter === 'all') e = await window.electronAPI.logs.get();
+      else e = await window.electronAPI.logs.getByType(filter);
+      setEvents(e || []);
+      if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight;
     } catch {}
-  }, [tab]);
-
-  useEffect(() => { load(); const i = setInterval(load, 3000); return () => clearInterval(i); }, [load]);
-
-  const colors: Record<string, 'warning' | 'info' | 'success' | 'error' | 'default'> = {
-    admin: 'warning', chat: 'info', login: 'success', vehicle: 'error', system: 'default',
   };
-
+  useEffect(() => { load(); }, [filter]);
+  const colors: any = { admin: '#f85149', chat: '#58a6ff', login: '#3fb950', vehicle: '#d29922', system: '#8b949e' };
+  const filterBtns = ['all', 'admin', 'chat', 'login', 'vehicle', 'system'];
   return (
     <Box>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>{t('logs', 'title')}</Typography>
-      <Card><CardContent>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-          {tabLabels.map((l, i) => <Tab key={i} label={t('logs', l)} />)}
-        </Tabs>
-        <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: 80 }}>{t('common', 'time')}</TableCell>
-                <TableCell sx={{ width: 90 }}>{t('common', 'type')}</TableCell>
-                <TableCell>{t('common', 'message')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {logs.map((log: any) => (
-                <TableRow key={log.id}>
-                  <TableCell sx={{ whiteSpace: 'nowrap', fontSize: 12 }}>{new Date(log.timestamp).toLocaleTimeString()}</TableCell>
-                  <TableCell><Chip label={log.type} size="small" color={colors[log.type] || 'default'} variant="outlined" /></TableCell>
-                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-all' }}>{log.message}</TableCell>
-                </TableRow>
-              ))}
-              {logs.length === 0 && <TableRow><TableCell colSpan={3} align="center">{t('logs', 'noLogs')}</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </TableContainer>
+      <Box sx={{ mb: 2 }}>
+        <ToggleButtonGroup value={filter} exclusive onChange={(_, v) => v && setFilter(v)} size="small">
+          {filterBtns.map((f) => (
+            <ToggleButton key={f} value={f}>{t('logs', f)}</ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
+      <Card><CardContent sx={{ p: 0 }}>
+        <Box ref={boxRef} sx={{ height: 500, overflow: 'auto', p: 2, fontFamily: 'Consolas, monospace', fontSize: 12, bgcolor: '#0d1117' }}>
+          {events.length === 0 && <Typography sx={{ color: '#484f58' }}>{t('logs', 'noLogs')}</Typography>}
+          {events.map((e: any) => (
+            <Box key={e.id} sx={{ color: colors[e.type] || '#8b949e', py: 0.5, borderBottom: '1px solid #21262d' }}>
+              <Typography component="span" sx={{ color: '#484f58', mr: 1 }}>[{new Date(e.timestamp).toLocaleTimeString()}]</Typography>
+              <Typography component="span" sx={{ color: colors[e.type] }}>[{e.type.toUpperCase()}]</Typography>
+              <Typography component="span" sx={{ ml: 1 }}>{e.message}</Typography>
+            </Box>
+          ))}
+        </Box>
       </CardContent></Card>
     </Box>
   );

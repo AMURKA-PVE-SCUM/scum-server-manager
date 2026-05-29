@@ -13,24 +13,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     checkUpdate: () => ipcRenderer.invoke('server:check-update'),
     update: () => ipcRenderer.invoke('server:update'),
     updateStream: () => ipcRenderer.invoke('server:update-stream'),
-    onUpdateLine: (cb: (line: string) => void) => {
-      ipcRenderer.on('server:update-line', (_e, line) => cb(line));
-    },
-    onUpdateDone: (cb: (result: string) => void) => {
-      ipcRenderer.on('server:update-done', (_e, result) => cb(result));
-    },
-    removeUpdateListeners: () => {
-      ipcRenderer.removeAllListeners('server:update-line');
-      ipcRenderer.removeAllListeners('server:update-done');
-    },
+    onUpdateLine: (cb: (line: string) => void) => { ipcRenderer.on('server:update-line', (_e, line) => cb(line)); },
+    onUpdateDone: (cb: (result: string) => void) => { ipcRenderer.on('server:update-done', (_e, result) => cb(result)); },
+    removeUpdateListeners: () => { ipcRenderer.removeAllListeners('server:update-line'); ipcRenderer.removeAllListeners('server:update-done'); },
     consoleStart: () => ipcRenderer.invoke('server:console-start'),
     consoleStop: () => ipcRenderer.invoke('server:console-stop'),
-    onConsoleLines: (cb: (lines: string[]) => void) => {
-      ipcRenderer.on('server:console-lines', (_e, lines) => cb(lines));
-    },
-    removeConsoleListeners: () => {
-      ipcRenderer.removeAllListeners('server:console-lines');
-    },
+    onConsoleLines: (cb: (lines: string[]) => void) => { ipcRenderer.on('server:console-lines', (_e, lines) => cb(lines)); },
+    removeConsoleListeners: () => { ipcRenderer.removeAllListeners('server:console-lines'); },
   },
   steamcmd: {
     install: () => ipcRenderer.invoke('steamcmd:install'),
@@ -55,5 +44,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   discord: {
     test: (webhookUrl: string) => ipcRenderer.invoke('discord:test', webhookUrl),
+  },
+  ftp: {
+    start: (port: number, user: string, pass: string, pasvHost?: string) => ipcRenderer.invoke('ftp:start', port, user, pass, pasvHost),
+    stop: () => ipcRenderer.invoke('ftp:stop'),
+    status: () => ipcRenderer.invoke('ftp:status'),
+    saveConfig: (cfg: any) => ipcRenderer.invoke('ftp:save-config', cfg),
+  },
+  webPanel: {
+    start: () => ipcRenderer.invoke('webpanel:start'),
+    stop: () => ipcRenderer.invoke('webpanel:stop'),
+    status: () => ipcRenderer.invoke('webpanel:status'),
+    saveConfig: (cfg: any) => ipcRenderer.invoke('webpanel:save-config', cfg),
+  },
+  db: {
+    init: () => ipcRenderer.invoke('db:init'),
+    status: () => ipcRenderer.invoke('db:status'),
+    getPlayers: () => ipcRenderer.invoke('db:getPlayers'),
+    getPlayerBySteamId: (sid: string) => ipcRenderer.invoke('db:getPlayerBySteamId', sid),
+    getPlayerByName: (name: string) => ipcRenderer.invoke('db:getPlayerByName', name),
+    getWallet: (sid: string) => ipcRenderer.invoke('db:getWallet', sid),
+    getAttributes: (sid: string) => ipcRenderer.invoke('db:getAttributes', sid),
+    getSkills: (sid: string) => ipcRenderer.invoke('db:getSkills', sid),
+    getInventory: (sid: string) => ipcRenderer.invoke('db:getInventory', sid),
+    getQuickSlots: (sid: string) => ipcRenderer.invoke('db:getQuickSlots', sid),
+    getSquads: () => ipcRenderer.invoke('db:getSquads'),
+    getVehicles: () => ipcRenderer.invoke('db:getVehicles'),
+    getFlags: () => ipcRenderer.invoke('db:getFlags'),
+    getBankAccounts: () => ipcRenderer.invoke('db:getBankAccounts'),
+    getEconomyLeaderboard: () => ipcRenderer.invoke('db:getEconomyLeaderboard'),
   },
 });

@@ -110,6 +110,7 @@ export class ServerManager {
   private startTime: number = 0;
   private monInterval: NodeJS.Timeout | null = null;
   private serverPid: number | null = null;
+  private restartCount: number = 0;
   private status: ServerStatus = {
     running: false,
     pid: null,
@@ -140,6 +141,7 @@ export class ServerManager {
       'SCUM', 'Binaries', 'Win64', 'SCUMServer.exe',
     );
     if (!(await fs.pathExists(serverExe))) {
+      this.restartCount = 0;
       throw new Error(
         `SCUMServer.exe не найден: ${serverExe}. Укажите путь в настройках.`,
       );
@@ -165,7 +167,6 @@ export class ServerManager {
     exec(cmd);
 
     this.startTime = Date.now();
-    this.status.running = true;
 
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
@@ -173,6 +174,8 @@ export class ServerManager {
       if (pids.length > 0) {
         this.serverPid = pids[0];
         this.status.pid = pids[0];
+        this.status.running = true;
+        this.restartCount = 0;
         log(`Server started, PID: ${pids[0]}`);
         try {
           execSync(
@@ -191,6 +194,7 @@ export class ServerManager {
     }
 
     if (!this.serverPid) {
+      this.status.running = false;
       log('WARNING: Could not detect server PID');
     }
 
@@ -199,6 +203,7 @@ export class ServerManager {
 
   async stop(): Promise<void> {
     log('=== STOP ===');
+    this.restartCount = 0;
     await this.killAll();
     this.clearStatus();
     log('Server stopped');
@@ -334,8 +339,14 @@ export class ServerManager {
             log('Server process died unexpectedly');
             this.clearStatus();
             if (this.config.autoRestart) {
-              log('Auto-restart enabled, restarting in 5s...');
-              setTimeout(() => { this.start().catch((e) => log('Auto-restart failed:', e.message)); }, 5000);
+              this.restartCount++;
+              const delay = Math.min(5 * this.restartCount, 60);
+              log(`Auto-restart attempt #${this.restartCount}, waiting ${delay}s...`);
+              if (this.restartCount > 10) {
+                log('Auto-restart limit reached (10 attempts). Stopping.');
+              } else {
+                setTimeout(() => { this.start().catch((e) => log('Auto-restart failed:', e.message)); }, delay * 1000);
+              }
             }
           }
           return;

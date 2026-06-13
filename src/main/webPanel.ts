@@ -1161,25 +1161,7 @@ export class WebPanel {
   }
 
   private async pollPlayers(): Promise<void> {
-    if (!this.rconClient) return;
-
-    if (!this.rconClient.isConnected()) {
-      if (this.rconCredentials) {
-        console.log('[WebPanel] RCON disconnected, attempting reconnect...');
-        const result = await this.rconClient.connect(
-          this.rconCredentials.host,
-          this.rconCredentials.port,
-          this.rconCredentials.password,
-        );
-        if (!result.success) {
-          console.error('[WebPanel] Reconnect failed:', result.error);
-          return;
-        }
-        console.log('[WebPanel] Reconnected successfully');
-      } else {
-        return;
-      }
-    }
+    if (!this.rconClient || !this.rconClient.isConnected()) return;
 
     try {
       const result = await this.rconClient.sendCommand('ListPlayers');

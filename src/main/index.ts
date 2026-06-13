@@ -268,9 +268,9 @@ function registerIpcHandlers(): void {
     store.store = config; initServices(); startRestartScheduler(); startBackupScheduler(); return true;
   });
 
-  ipcMain.handle('server:start', async () => { await serverManager.start(); const s = serverManager.getStatus(); if (s.running) discordWebhook.sendStatusUpdate('started').catch(() => {}); return s; });
+  ipcMain.handle('server:start', async () => { rconClient.setAutoReconnect(false); await serverManager.start(); const s = serverManager.getStatus(); if (s.running) { setTimeout(() => { rconClient.connect(store.store.rcon.host || 'localhost', store.store.rcon.port || 28015, store.store.rcon.password).catch(() => {});     }, 60000); discordWebhook.sendStatusUpdate('started').catch(() => {}); } return s; });
   ipcMain.handle('server:stop', async () => { await serverManager.stop(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('stopped').catch(() => {}); return s; });
-  ipcMain.handle('server:restart', async () => { await serverManager.restart(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('restarted').catch(() => {}); return s; });
+  ipcMain.handle('server:restart', async () => { rconClient.setAutoReconnect(false); await serverManager.restart(); const s = serverManager.getStatus(); if (s.running) { setTimeout(() => { rconClient.connect(store.store.rcon.host || 'localhost', store.store.rcon.port || 28015, store.store.rcon.password).catch(() => {});     }, 60000); discordWebhook.sendStatusUpdate('restarted').catch(() => {}); } return s; });
   ipcMain.handle('server:status', () => serverManager.getStatus());
   ipcMain.handle('server:check-update', async () => {
     try {

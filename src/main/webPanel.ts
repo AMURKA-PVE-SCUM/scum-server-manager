@@ -739,9 +739,12 @@ export class WebPanel {
         case 'notify':
           command = `#SendNotification ${params.type} 0 "${params.message}" ${steamId}`;
           break;
-        case 'chat':
-          command = `Say ${params.message}`;
+        case 'chat': {
+          const colorMap: Record<string, string> = { White: '0', Red: '7', Green: '3', Blue: '2', Yellow: '4', Orange: '6' };
+          const type = colorMap[params.color] || '4';
+          command = `SendChat ${type} "${params.message}" ${steamId}`;
           break;
+        }
         case 'scheduleCargoDrop': {
           const notSet = (v: any) => v === undefined || v === null || v === '' || v === false;
           let x = params.x, y = params.y, z = params.z;

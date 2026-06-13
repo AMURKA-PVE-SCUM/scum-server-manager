@@ -51,8 +51,7 @@ export class LogWatcher {
     { trigger: '!wargm', rconCommand: '', description: '', helpTrigger: '!варгм' },
     { trigger: '!teleport', rconCommand: '', description: '', helpTrigger: '!телепорт' },
     { trigger: '!vip', rconCommand: '', description: '', helpTrigger: '!вип' },
-    { trigger: '!nameplates', rconCommand: '', description: '', helpTrigger: '!ники' },
-    { trigger: '!players', rconCommand: '', description: '', helpTrigger: '!игроки' },
+
     { trigger: '!savedom', rconCommand: '', description: '', helpTrigger: '!сохранитьдом' },
     { trigger: '!home', rconCommand: '', description: '', helpTrigger: '!дом' },
     { trigger: '!homes', rconCommand: '', description: '', helpTrigger: '!дома' },
@@ -69,8 +68,7 @@ export class LogWatcher {
     '!телепорт': '!teleport',
     '!вип': '!vip',
     '!варгм': '!wargm',
-    '!ники': '!nameplates',
-    '!игроки': '!players',
+
     '!сохранитьдом': '!savedom',
     '!дом': '!home',
     '!дома': '!homes',
@@ -268,22 +266,6 @@ export class LogWatcher {
       this.saveCooldowns();
       const reply = succeeded.length > 0 ? `Получено: ${succeeded.join(', ')}` : 'Не удалось выдать предметы';
       await this.rconClient.sendCommand(`SendChat 4 "${reply}" ${steamId}`);
-      return;
-    }
-
-    // Nameplates command
-    if (cmdKey === '!nameplates') {
-      const r = await this.rconClient.sendCommand(`#ShowNamePlates true ${steamId}`);
-      const msg = r.success ? 'Ники игроков включены' : `Ошибка: ${r.response || r.error || 'неизвестно'}`;
-      await this.rconClient.sendCommand(`SendChat 4 "${msg}" ${steamId}`);
-      return;
-    }
-
-    // ShowOtherPlayerInfo command
-    if (cmdKey === '!players') {
-      const r = await this.rconClient.sendCommand(`#ShowOtherPlayerInfo true ${steamId}`);
-      const msg = r.success ? 'Игроки на карте включены' : `Ошибка: ${r.response || r.error || 'неизвестно'}`;
-      await this.rconClient.sendCommand(`SendChat 4 "${msg}" ${steamId}`);
       return;
     }
 
@@ -699,12 +681,9 @@ export class LogWatcher {
   private async announceJoinLeave(name: string, type: 'join' | 'leave'): Promise<void> {
     if (!this.rconClient || !this.rconClient.isConnected()) return;
     try {
-      const res = await this.rconClient.sendCommand('ListPlayers');
-      if (!res.success) return;
-      const online = (res.response.match(/Name:/g) || []).length;
       const emoji = type === 'join' ? '🟢' : '🔴';
       const action = type === 'join' ? 'подключился' : 'вышел';
-      await this.rconClient.sendCommand(`SendChat 2 "${emoji} ${name} ${action} | Online: ${online}"`);
+      await this.rconClient.sendCommand(`SendChat 2 "${emoji} ${name} ${action}"`);
     } catch {}
   }
 

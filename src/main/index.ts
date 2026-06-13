@@ -121,7 +121,7 @@ function startRestartScheduler(): void {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const day = now.getDay();
-    const doRestart = () => { serverManager.restart().then(() => discordWebhook?.sendStatusUpdate('Server restarted').catch(() => {})).catch(() => {}); };
+    const doRestart = () => { serverManager.restart().then(() => discordWebhook?.sendStatusUpdate('restarted').catch(() => {})).catch(() => {}); };
     if (cfg.restartMode === 'interval') {
       const hours = cfg.restartIntervalHours || 4;
       if (now.getMinutes() === 0 && now.getHours() % hours === 0) doRestart();
@@ -268,9 +268,9 @@ function registerIpcHandlers(): void {
     store.store = config; initServices(); startRestartScheduler(); startBackupScheduler(); return true;
   });
 
-  ipcMain.handle('server:start', async () => { await serverManager.start(); const s = serverManager.getStatus(); if (s.running) discordWebhook.sendStatusUpdate('Server started').catch(() => {}); return s; });
-  ipcMain.handle('server:stop', async () => { await serverManager.stop(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('Server stopped').catch(() => {}); return s; });
-  ipcMain.handle('server:restart', async () => { await serverManager.restart(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('Server restarted').catch(() => {}); return s; });
+  ipcMain.handle('server:start', async () => { await serverManager.start(); const s = serverManager.getStatus(); if (s.running) discordWebhook.sendStatusUpdate('started').catch(() => {}); return s; });
+  ipcMain.handle('server:stop', async () => { await serverManager.stop(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('stopped').catch(() => {}); return s; });
+  ipcMain.handle('server:restart', async () => { await serverManager.restart(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('restarted').catch(() => {}); return s; });
   ipcMain.handle('server:status', () => serverManager.getStatus());
   ipcMain.handle('server:check-update', async () => {
     try {

@@ -1,5 +1,12 @@
 import type { DiscordConfig } from './types';
 
+const STATUS_RU: Record<string, { label: string; emoji: string; color: number }> = {
+  started:   { label: 'Запущен',           emoji: '🟢', color: 0x3fb950 },
+  stopped:   { label: 'Остановлен',        emoji: '🔴', color: 0xf85149 },
+  restarted: { label: 'Перезапущен',       emoji: '🔄', color: 0xd29922 },
+  unknown:   { label: 'Неизвестно',        emoji: '❓', color: 0x8b949e },
+};
+
 export class DiscordWebhook {
   private config: DiscordConfig;
 
@@ -25,7 +32,7 @@ export class DiscordWebhook {
   }
 
   async sendAdminLog(message: string): Promise<boolean> {
-    return this.send(this.config.adminLogWebhook, message, 'Admin Log');
+    return this.send(this.config.adminLogWebhook, message, 'Журнал администратора');
   }
 
   async sendChatMessage(player: string, message: string): Promise<boolean> {
@@ -33,7 +40,7 @@ export class DiscordWebhook {
   }
 
   async sendVehicleEvent(event: string): Promise<boolean> {
-    return this.send(this.config.vehicleWebhook, event, 'Vehicle Event');
+    return this.send(this.config.vehicleWebhook, event, 'Транспорт');
   }
 
   async sendLoginEvent(player: string, steamId: string): Promise<boolean> {
@@ -41,9 +48,14 @@ export class DiscordWebhook {
     try {
       const payload = {
         embeds: [{
-          title: 'Player',
-          description: `**${player}** ${steamId ? `(\`${steamId}\`)` : ''}`,
+          title: 'Игрок зашёл на сервер',
+          description: [
+            `**Игрок:** ${player}`,
+            steamId ? `**Steam ID:** \`${steamId}\`` : '',
+            `**Время:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+          ].filter(Boolean).join('\n'),
           color: 0x58a6ff,
+          footer: { text: 'SCUM Server Manager' },
           timestamp: new Date().toISOString(),
         }],
       };
@@ -58,10 +70,22 @@ export class DiscordWebhook {
 
   async sendStatusUpdate(status: string): Promise<boolean> {
     if (!this.config.serverStatusWebhook || !this.config.enabled) return false;
-    const color = status.includes('🟢') ? 0x3fb950 : status.includes('🔄') ? 0xd29922 : 0xf85149;
+    const key = status.toLowerCase();
+    const s = STATUS_RU[key] || STATUS_RU.unknown;
     try {
+      const now = Math.floor(Date.now() / 1000);
       const payload = {
-        embeds: [{ title: 'Server Status', description: status, color, timestamp: new Date().toISOString() }],
+        embeds: [{
+          title: `${s.emoji} Статус сервера`,
+          description: [
+            `**Состояние:** ${s.emoji} ${s.label}`,
+            `**Время:** <t:${now}:F>`,
+            `**Относительно:** <t:${now}:R>`,
+          ].join('\n'),
+          color: s.color,
+          footer: { text: 'SCUM Server Manager' },
+          timestamp: new Date().toISOString(),
+        }],
       };
       const response = await fetch(this.config.serverStatusWebhook, {
         method: 'POST',
@@ -73,6 +97,6 @@ export class DiscordWebhook {
   }
 
   async test(webhookUrl: string): Promise<boolean> {
-    return this.send(webhookUrl, 'Discord webhook is working!', 'Test Message');
+    return this.send(webhookUrl, 'Вебхук работает!', 'Проверка');
   }
 }

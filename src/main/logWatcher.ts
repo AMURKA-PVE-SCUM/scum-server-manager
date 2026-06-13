@@ -672,13 +672,13 @@ export class LogWatcher {
       this.scumLogOffset = stat.size;
       for (const line of text.split('\n').filter(Boolean)) {
         const pm = line.match(/HandlePossessedBy:\s*(\d+),\s*(\d+),\s*(\S+)/);
-        if (pm) { this.discord.sendLoginEvent(pm[3], '').catch(() => {}); this.addEvent('login', `${pm[3]} connected`); continue; }
+        if (pm) { this.discord.sendLoginEvent(pm[3], '', 'join').catch(() => {}); this.addEvent('login', `${pm[3]} connected`); continue; }
         const lm = line.match(/LogSCUM:.+'(\d+):([^(]+)\((\d+)\)'.+logged in/);
-        if (lm) { this.discord.sendLoginEvent(lm[2].trim(), '').catch(() => {}); this.addEvent('login', `${lm[2].trim()} connected`); continue; }
+        if (lm) { this.discord.sendLoginEvent(lm[2].trim(), '', 'join').catch(() => {}); this.addEvent('login', `${lm[2].trim()} connected`); continue; }
         const llout = line.match(/LogSCUM:.+'(\d+):([^(]+)\(\d+\)'.+logged out/);
-        if (llout) { this.discord.sendLoginEvent(llout[2].trim(), '').catch(() => {}); this.addEvent('login', `${llout[2].trim()} disconnected`); continue; }
+        if (llout) { this.discord.sendLoginEvent(llout[2].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${llout[2].trim()} disconnected`); continue; }
         const plout = line.match(/Prisoner logging out:\s*([^(]+)\s*\(\d+\)/);
-        if (plout) { this.discord.sendLoginEvent(plout[1].trim(), '').catch(() => {}); this.addEvent('login', `${plout[1].trim()} disconnected`); continue; }
+        if (plout) { this.discord.sendLoginEvent(plout[1].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${plout[1].trim()} disconnected`); continue; }
         const gm = line.match(/Global Stats:.*?P:\s*(\d+)/);
         if (gm) this.lastPlayerCount = parseInt(gm[1], 10);
       }
@@ -711,7 +711,7 @@ export class LogWatcher {
         console.log('[LogWatcher] Chat regex did not match for line:', line);
       }
     }
-    else if (fileName.startsWith('login')) { event.type = 'login'; const m = line.match(/LoginComm: Login: (.+?)\((\d+)\)/); if (m) this.discord.sendLoginEvent(m[1].trim(), m[2]); }
+    else if (fileName.startsWith('login')) { event.type = 'login'; const m = line.match(/LoginComm: Login: (.+?)\((\d+)\)/); if (m) this.discord.sendLoginEvent(m[1].trim(), m[2], 'join'); }
     else if (fileName.includes('vehicle')) { event.type = 'vehicle'; this.discord.sendVehicleEvent(line); }
     this.events.push(event);
     if (this.events.length > 2000) this.events = this.events.slice(-1000);

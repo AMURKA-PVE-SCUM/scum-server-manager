@@ -43,18 +43,21 @@ export class DiscordWebhook {
     return this.send(this.config.vehicleWebhook, event, 'Транспорт');
   }
 
-  async sendLoginEvent(player: string, steamId: string): Promise<boolean> {
+  async sendLoginEvent(player: string, steamId: string, type: 'join' | 'leave' = 'join'): Promise<boolean> {
     if (!this.config.loginWebhook || !this.config.enabled) return false;
+    const loginEmoji = type === 'join' ? '🟢' : '🔴';
+    const loginTitle = type === 'join' ? 'Игрок зашёл на сервер' : 'Игрок покинул сервер';
+    const loginColor = type === 'join' ? 0x3fb950 : 0xf85149;
     try {
       const payload = {
         embeds: [{
-          title: 'Игрок зашёл на сервер',
+          title: `${loginEmoji} ${loginTitle}`,
           description: [
             `**Игрок:** ${player}`,
             steamId ? `**Steam ID:** \`${steamId}\`` : '',
             `**Время:** <t:${Math.floor(Date.now() / 1000)}:F>`,
           ].filter(Boolean).join('\n'),
-          color: 0x58a6ff,
+          color: loginColor,
           footer: { text: 'SCUM Server Manager' },
           timestamp: new Date().toISOString(),
         }],

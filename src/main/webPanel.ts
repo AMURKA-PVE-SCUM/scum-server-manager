@@ -3,13 +3,9 @@ import path from 'path';
 import fs from 'fs-extra';
 import crypto from 'crypto';
 import { watch, FSWatcher } from 'chokidar';
-
-export interface WebPanelConfig {
-  enabled: boolean;
-  port: number;
-  username: string;
-  password: string;
-}
+import { RconClient } from './rconClient';
+import { WargmManager } from './wargmManager';
+import type { PackConfig, PluginsConfig, TeleportLocation, VipConfig, WargmCard, WargmSettings, WebPanelConfig, OnlinePlayer } from './types';
 
 interface SSEClient {
   id: number;
@@ -27,15 +23,110 @@ export class WebPanel {
   private serverManager: any = null;
   private steamCmd: any = null;
   private serverPath = '';
+  private serverConfigProvider: { get: () => any; save: (cfg: any) => boolean } | null = null;
+  private rconClient: RconClient | null = null;
+  private onlinePlayers = new Map<string, OnlinePlayer>();
+  private playersPollInterval: NodeJS.Timeout | null = null;
+  private cachedPlayers: OnlinePlayer[] = [];
+  private rconCredentials: { host: string; port: number; password: string } | null = null;
+  private readonly PLAYERS_POLL_INTERVAL = 3000;
+  private packsConfig: PackConfig = {
+    starter: { enabled: true, items: [], cooldownHours: 0 },
+    daily: { enabled: true, items: [], cooldownHours: 24 },
+  };
+  private packsSaveCallback: ((cfg: PackConfig) => void) | null = null;
+  private cooldownProvider: {
+    getCooldowns: () => Record<string, number>;
+    resetCooldown: (steamId: string, packType?: 'starter' | 'daily') => void;
+  } | null = null;
+  private wargmManager: WargmManager | null = null;
+  private pluginsConfig: PluginsConfig = {
+    teleport: { enabled: true, locations: [] },
+    vip: {
+      enabled: true, players: [],
+      starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
+      dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
+    },
+    saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 },
+  };
+  private pluginsSaveCallback: ((cfg: PluginsConfig) => void) | null = null;
+  private itemsCache: string[] | null = null;
 
   constructor(config: WebPanelConfig) {
     this.config = config;
+    this.loadItemsCache();
+  }
+
+  private loadItemsCache(): void {
+    let asar: any;
+    try { asar = require('asar'); } catch {}
+    const paths = [
+      path.join(process.cwd(), 'iditem.txt'),
+      path.join(__dirname, '..', '..', 'iditem.txt'),
+      path.join(process.cwd(), 'resources', 'iditem.txt'),
+    ];
+    for (const p of paths) {
+      try {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf-8');
+          this.itemsCache = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          console.log(`[WebPanel] Loaded ${this.itemsCache.length} items from ${p}`);
+          return;
+        }
+      } catch {}
+    }
+    // Fallback: read from asar
+    try {
+      const asarPath = path.join(process.cwd(), 'resources', 'app.asar');
+      if (fs.existsSync(asarPath)) {
+        const content = fs.readFileSync(asar.getFileInfo(asarPath, '/iditem.txt') ? asar.extractFile(asarPath, '/iditem.txt') : '');
+        if (content) {
+          this.itemsCache = content.toString().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          console.log(`[WebPanel] Loaded ${this.itemsCache.length} items from asar`);
+          return;
+        }
+      }
+    } catch {}
+    console.warn('[WebPanel] iditem.txt not found');
+    this.itemsCache = [];
   }
 
   setServices(sm: any, sc: any, sp: string): void {
     this.serverManager = sm;
     this.steamCmd = sc;
     this.serverPath = sp;
+  }
+
+  setServerConfigProvider(provider: { get: () => any; save: (cfg: any) => boolean }): void {
+    this.serverConfigProvider = provider;
+  }
+
+  setRconClient(client: RconClient): void {
+    this.rconClient = client;
+  }
+
+  setPacksConfig(cfg: PackConfig): void {
+    this.packsConfig = cfg;
+  }
+
+  setPacksSaveCallback(cb: (cfg: PackConfig) => void): void {
+    this.packsSaveCallback = cb;
+  }
+
+  setPackCooldownProvider(provider: { getCooldowns: () => Record<string, number>; resetCooldown: (steamId: string, packType?: 'starter' | 'daily') => void }): void {
+    this.cooldownProvider = provider;
+  }
+
+  setPluginsConfig(cfg: PluginsConfig): void {
+    this.pluginsConfig = cfg;
+  }
+
+  setPluginsSaveCallback(cb: (cfg: PluginsConfig) => void): void {
+    this.pluginsSaveCallback = cb;
+  }
+
+  setWargmManager(mgr: WargmManager): void {
+    this.wargmManager = mgr;
   }
 
   updateConfig(cfg: WebPanelConfig): void {
@@ -62,10 +153,16 @@ export class WebPanel {
 
         if (url === '/' && method === 'GET') {
           this.serveIndex(res);
+        } else if (url === '/favicon.ico' && method === 'GET') {
+          // Return empty 204 for favicon to avoid 401 errors
+          res.writeHead(204);
+          res.end();
         } else if (url === '/api/login' && method === 'POST') {
           this.handleLogin(req, res);
         } else if (url.startsWith('/api/console') && method === 'GET') {
           this.handleConsoleSSE(req, res);
+        } else if (url === '/api/items' && method === 'GET') {
+          this.handleItems(res);
         } else if (!this.authenticated(req)) {
           this.sendJson(res, { error: 'Unauthorized' }, 401);
         } else if (url === '/api/status' && method === 'GET') {
@@ -78,6 +175,82 @@ export class WebPanel {
           this.handleRestart(res);
         } else if (url === '/api/update' && method === 'POST') {
           this.handleUpdate(res);
+        } else if (url === '/api/update-manual' && method === 'POST') {
+          this.handleUpdateManual(res);
+        } else if (url === '/api/config' && method === 'GET') {
+          this.handleGetConfig(res);
+        } else if (url === '/api/config' && method === 'POST') {
+          this.handleSetConfig(req, res);
+        } else if (url === '/api/check-path' && method === 'GET') {
+          this.handleCheckPath(req, res);
+        } else if (url === '/api/rcon/connect' && method === 'POST') {
+          this.handleRconConnect(req, res);
+        } else if (url === '/api/rcon/disconnect' && method === 'POST') {
+          this.handleRconDisconnect(res);
+        } else if (url === '/api/rcon/command' && method === 'POST') {
+          this.handleRconCommand(req, res);
+        } else if (url === '/api/rcon/status' && method === 'GET') {
+          this.handleRconStatus(res);
+        } else if (url === '/api/players' && method === 'GET') {
+          this.handleOnlinePlayers(res);
+        } else if (url.startsWith('/api/players/') && method === 'GET') {
+          // /api/players/:steamId - get player details
+          const steamId = url.split('/')[3];
+          this.handlePlayerDetails(steamId, res);
+        } else if (url === '/api/players/action' && method === 'POST') {
+          this.handlePlayerAction(req, res);
+        } else if (url === '/api/players/give-currency' && method === 'POST') {
+          this.handleGiveCurrency(req, res);
+        } else if (url === '/api/packs' && method === 'GET') {
+          this.sendJson(res, this.packsConfig);
+        } else if (url === '/api/packs' && method === 'POST') {
+          this.handleSetPacks(req, res);
+        } else if (url === '/api/packs/give' && method === 'POST') {
+          this.handleGivePack(req, res);
+        } else if (url === '/api/packs/cooldowns' && method === 'GET') {
+          this.handleGetCooldowns(res);
+        } else if (url === '/api/packs/cooldowns/reset' && method === 'POST') {
+          this.handleResetCooldown(req, res);
+        } else if (url === '/api/plugins/teleport' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.teleport);
+        } else if (url === '/api/plugins/teleport' && method === 'POST') {
+          this.handleSetTeleport(req, res);
+        } else if (url === '/api/plugins/vip' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.vip);
+        } else if (url === '/api/plugins/vip' && method === 'POST') {
+          this.handleSetVip(req, res);
+        } else if (url === '/api/plugins/savehome' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.saveHome);
+        } else if (url === '/api/plugins/savehome' && method === 'POST') {
+          this.handleSetSaveHome(req, res);
+        } else if (url === '/api/wargm/settings' && method === 'GET') {
+          this.handleWargmGetSettings(res);
+        } else if (url === '/api/wargm/settings' && method === 'POST') {
+          this.handleWargmSaveSettings(req, res);
+        } else if (url === '/api/wargm/cards' && method === 'GET') {
+          this.handleWargmGetCards(res);
+        } else if (url === '/api/wargm/cards' && method === 'POST') {
+          this.handleWargmSaveCard(req, res);
+        } else if (url.match(/^\/api\/wargm\/cards\/(\d+)$/) && method === 'DELETE') {
+          const id = parseInt(url.match(/^\/api\/wargm\/cards\/(\d+)$/)![1]);
+          this.handleWargmDeleteCard(id, res);
+        } else if (url.match(/^\/api\/wargm\/cards\/(\d+)\/duplicate$/) && method === 'POST') {
+          const id = parseInt(url.match(/^\/api\/wargm\/cards\/(\d+)\/duplicate$/)![1]);
+          this.handleWargmDuplicateCard(id, res);
+        } else if (url === '/api/wargm/test' && method === 'POST') {
+          this.handleWargmTest(req, res);
+        } else if (url.match(/^\/api\/wargm\/check\/(\d+)$/) && method === 'POST') {
+          const steamId = url.match(/^\/api\/wargm\/check\/(\d+)$/)![1];
+          this.handleWargmCheck(steamId, res);
+        } else if (url === '/api/wargm/export' && method === 'GET') {
+          this.handleWargmExport(res);
+        } else if (url === '/api/wargm/import' && method === 'POST') {
+          this.handleWargmImport(req, res);
+        } else if (url.match(/^\/api\/wargm\/deliveries\/(\d+)$/) && method === 'GET') {
+          const steamId = url.match(/^\/api\/wargm\/deliveries\/(\d+)$/)![1];
+          this.handleWargmDeliveries(steamId, res);
+        } else if (url === '/api/wargm/debug/operations' && method === 'POST') {
+          this.handleWargmDebugOperations(req, res);
         } else {
           res.writeHead(404);
           res.end('Not found');
@@ -98,10 +271,13 @@ export class WebPanel {
   }
 
   stop(): void {
+    this.stopPlayersPoll();
     this.stopConsoleWatcher();
     this.sseClients.forEach((c) => c.res.end());
     this.sseClients = [];
     this.tokens.clear();
+    this.rconCredentials = null;
+    this.cachedPlayers = [];
     if (this.server) {
       try { this.server.close(); } catch {}
       this.server = null;
@@ -113,7 +289,10 @@ export class WebPanel {
   }
 
   private authenticated(req: http.IncomingMessage): boolean {
+    // Skip auth if no credentials configured
     if (!this.config.username && !this.config.password) return true;
+    // Skip auth if RCON is already connected (used from main app)
+    if (this.rconClient && this.rconClient.isConnected()) return true;
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) return false;
     return this.tokens.has(auth.slice(7));
@@ -123,23 +302,29 @@ export class WebPanel {
     try {
       const body = await this.readBody(req);
       const { username, password } = JSON.parse(body);
+      console.log(`[WebPanel] Login attempt: username="${username}", expected="${this.config.username}"`);
+      
       if (username === this.config.username && password === this.config.password) {
         const token = crypto.randomBytes(32).toString('hex');
         this.tokens.add(token);
+        console.log(`[WebPanel] Login successful for user: ${username}`);
         this.sendJson(res, { token });
       } else {
+        console.log(`[WebPanel] Login failed - password mismatch or wrong username`);
         this.sendJson(res, { error: 'Invalid credentials' }, 401);
       }
-    } catch {
+    } catch (e: any) {
+      console.error(`[WebPanel] Login error:`, e.message);
       this.sendJson(res, { error: 'Bad request' }, 400);
     }
   }
 
   private readBody(req: http.IncomingMessage): Promise<string> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let data = '';
       req.on('data', (chunk: Buffer) => data += chunk.toString());
       req.on('end', () => resolve(data));
+      req.on('error', (err) => reject(err));
     });
   }
 
@@ -187,6 +372,23 @@ export class WebPanel {
     }
   }
 
+  private async handleUpdateManual(res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.steamCmd) { this.sendJson(res, { error: 'SteamCMD not initialized' }, 500); return; }
+      if (this.serverPath) this.steamCmd.setServerPath(this.serverPath);
+      const steamCmdPath = this.serverConfigProvider?.get().server.steamCmdPath || 'D:\\steamcmd';
+      this.steamCmd.setSteamCmdPath(steamCmdPath);
+      if (!fs.existsSync(path.join(steamCmdPath, 'steamcmd.exe'))) {
+        this.sendJson(res, { error: `SteamCMD не найден: ${path.join(steamCmdPath, 'steamcmd.exe')}` }, 500);
+        return;
+      }
+      await this.steamCmd.manualUpdate();
+      this.sendJson(res, { ok: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
   private async handleUpdate(res: http.ServerResponse): Promise<void> {
     try {
       if (!this.steamCmd) {
@@ -194,8 +396,605 @@ export class WebPanel {
         return;
       }
       if (this.serverPath) this.steamCmd.setServerPath(this.serverPath);
+
+      const steamCmdPath = this.serverConfigProvider?.get().server.steamCmdPath || 'D:\\steamcmd';
+      this.steamCmd.setSteamCmdPath(steamCmdPath);
+      if (!fs.existsSync(path.join(steamCmdPath, 'steamcmd.exe'))) {
+        this.sendJson(res, { error: `SteamCMD не найден: ${path.join(steamCmdPath, 'steamcmd.exe')}` }, 500);
+        return;
+      }
+
       const result = await this.steamCmd.updateServer();
       this.sendJson(res, { ok: true, result });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleGetConfig(res: http.ServerResponse): void {
+    try {
+      const cfg = this.serverConfigProvider?.get();
+      this.sendJson(res, cfg || { error: 'No config provider' });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetConfig(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      const ok = this.serverConfigProvider?.save(cfg);
+      if (ok) {
+        if (cfg.server?.steamCmdPath && this.steamCmd) {
+          this.steamCmd.setSteamCmdPath(cfg.server.steamCmdPath);
+        }
+        if (cfg.server?.serverPath) {
+          this.serverPath = cfg.server.serverPath;
+          if (this.steamCmd) this.steamCmd.setServerPath(cfg.server.serverPath);
+        }
+        this.sendJson(res, { ok: true });
+      } else {
+        this.sendJson(res, { error: 'Failed to save config' }, 500);
+      }
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleCheckPath(req: http.IncomingMessage, res: http.ServerResponse): void {
+    try {
+      const urlObj = new URL(req.url!, `http://${req.headers.host || 'localhost'}`);
+      const p = urlObj.searchParams.get('path') || '';
+      this.sendJson(res, { exists: fs.existsSync(path.join(p, 'steamcmd.exe')) });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  // RCON handlers
+  private async handleRconConnect(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const { host, port, password } = JSON.parse(body);
+      if (!this.rconClient) {
+        this.sendJson(res, { error: 'RCON client not initialized' }, 500);
+        return;
+      }
+      const result = await this.rconClient.connect(host, port, password);
+      if (result.success) {
+        this.rconCredentials = { host, port, password };
+        this.startPlayersPoll();
+      }
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleRconDisconnect(res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.rconClient) {
+        this.sendJson(res, { error: 'RCON client not initialized' }, 500);
+        return;
+      }
+      await this.rconClient.disconnect();
+      this.stopPlayersPoll();
+      this.rconCredentials = null;
+      this.cachedPlayers = [];
+      this.sendJson(res, { ok: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleRconCommand(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const { command } = JSON.parse(body);
+      if (!this.rconClient) {
+        this.sendJson(res, { error: 'RCON client not initialized' }, 500);
+        return;
+      }
+      const result = await this.rconClient.sendCommand(command);
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleRconStatus(res: http.ServerResponse): void {
+    try {
+      if (!this.rconClient) {
+        this.sendJson(res, { connected: false, config: null });
+        return;
+      }
+      this.sendJson(res, {
+        connected: this.rconClient.isConnected(),
+        config: this.rconClient.getConfig(),
+      });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  // Players handlers
+  private async handleOnlinePlayers(res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.rconClient || !this.rconClient.isConnected()) {
+        this.sendJson(res, { players: [] });
+        return;
+      }
+      const result = await this.rconClient.sendCommand('ListPlayers');
+      if (!result.success || !result.response) {
+        this.sendJson(res, { players: [] });
+        return;
+      }
+      const parsed = this.parseListPlayersOutput(result.response);
+      const players = parsed.map(p => ({
+        steamId: p.steamId,
+        name: p.name,
+        connectedAt: p.connectedAt.toISOString(),
+        duration: Math.floor((Date.now() - p.connectedAt.getTime()) / 1000),
+        location: p.location || null,
+        fame: p.fame ?? null,
+        balance: p.balance ?? null,
+        gold: p.gold ?? null,
+      }));
+      // Also update cache
+      this.cachedPlayers = parsed;
+      this.sendJson(res, { players });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private parseListPlayersOutput(output: string): OnlinePlayer[] {
+    console.log('[WebPanel] Parsing output:', output);
+    const players: OnlinePlayer[] = [];
+    const lines = output.split('\n');
+    
+    console.log(`[WebPanel] Total lines: ${lines.length}`);
+    
+    let currentPlayer: Partial<OnlinePlayer> | null = null;
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      console.log(`[WebPanel] Processing line: "${trimmedLine}"`);
+      
+      // Match player name line: "1. Domo" or "1. PlayerName"
+      const nameMatch = trimmedLine.match(/^\d+\.\s+(.+)$/);
+      if (nameMatch) {
+        console.log(`[WebPanel] Found player name: ${nameMatch[1]}`);
+        // Save previous player if exists
+        if (currentPlayer && currentPlayer.steamId && currentPlayer.name) {
+          console.log(`[WebPanel] Saving player: ${currentPlayer.name} (${currentPlayer.steamId})`);
+          players.push({
+            steamId: currentPlayer.steamId,
+            name: currentPlayer.name,
+            connectedAt: new Date(),
+            location: currentPlayer.location,
+            fame: currentPlayer.fame,
+            balance: currentPlayer.balance,
+            gold: currentPlayer.gold,
+          });
+        }
+        // Start new player
+        currentPlayer = { name: nameMatch[1].trim() };
+        continue;
+      }
+      
+      // Match Steam ID line: "Steam: Domo (76561198156375337)"
+      const steamMatch = trimmedLine.match(/Steam:\s*.+?\((\d{17})\)/);
+      if (steamMatch && currentPlayer) {
+        console.log(`[WebPanel] Found Steam ID: ${steamMatch[1]}`);
+        currentPlayer.steamId = steamMatch[1];
+        continue;
+      }
+
+      // Match Location line: "Location: X=416015.906 Y=398587.781 Z=14909.489"
+      const locMatch = trimmedLine.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
+      if (locMatch && currentPlayer) {
+        console.log(`[WebPanel] Found Location: X=${locMatch[1]} Y=${locMatch[2]} Z=${locMatch[3]}`);
+        currentPlayer.location = {
+          x: parseFloat(locMatch[1]),
+          y: parseFloat(locMatch[2]),
+          z: parseFloat(locMatch[3]),
+        };
+        continue;
+      }
+
+      // Match Fame line: "Fame: 1002"
+      const fameMatch = trimmedLine.match(/^Fame:\s*([\d.+-]+)/);
+      if (fameMatch && currentPlayer) {
+        currentPlayer.fame = parseFloat(fameMatch[1]);
+        continue;
+      }
+
+      // Match Account balance line: "Account balance: 10001"
+      const balanceMatch = trimmedLine.match(/^Account balance:\s*([\d.+-]+)/);
+      if (balanceMatch && currentPlayer) {
+        currentPlayer.balance = parseFloat(balanceMatch[1]);
+        continue;
+      }
+
+      // Match Gold balance line: "Gold balance: 1001"
+      const goldMatch = trimmedLine.match(/^Gold balance:\s*([\d.+-]+)/);
+      if (goldMatch && currentPlayer) {
+        currentPlayer.gold = parseFloat(goldMatch[1]);
+        continue;
+      }
+    }
+    
+    // Don't forget the last player
+    if (currentPlayer && currentPlayer.steamId && currentPlayer.name) {
+      console.log(`[WebPanel] Saving last player: ${currentPlayer.name} (${currentPlayer.steamId})`);
+      players.push({
+        steamId: currentPlayer.steamId,
+        name: currentPlayer.name,
+        connectedAt: new Date(),
+        location: currentPlayer.location,
+        fame: currentPlayer.fame,
+        balance: currentPlayer.balance,
+        gold: currentPlayer.gold,
+      });
+    }
+    
+    console.log(`[WebPanel] Total parsed players: ${players.length}`);
+    return players;
+  }
+
+  private async handlePlayerDetails(steamId: string, res: http.ServerResponse): Promise<void> {
+    try {
+      // Get player info from database
+      const scumDb = require('./scumDatabase');
+      const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
+      
+      // Get basic player info
+      const playerInfo = dbReader.getPlayerBySteamId(steamId);
+      
+      if (!playerInfo) {
+        this.sendJson(res, { success: false, error: 'Player not found' });
+        return;
+      }
+      
+      // Get wallet info (normal and gold balance)
+      const walletInfo = dbReader.getWallet(steamId);
+      console.log('[WebPanel] Wallet info from DB:', JSON.stringify(walletInfo, null, 2));
+      
+      // Get attributes
+      const attributes = dbReader.getAttributes(steamId);
+      
+      // Get skills
+      const skills = dbReader.getSkills(steamId);
+      
+      // Get quick slots
+      const quickSlots = dbReader.getQuickSlots(steamId);
+      
+      // Build comprehensive player data
+      const playerData = {
+        ...playerInfo,
+        walletBalance: walletInfo?.walletBalance || playerInfo.walletBalance || 0,
+        normalBalance: walletInfo?.normalBalance || 0,
+        goldBalance: walletInfo?.goldBalance || 0,
+        attributes: attributes || null,
+        skills: skills || [],
+        quickSlots: quickSlots || []
+      };
+      
+      console.log('[WebPanel] Player details:', JSON.stringify(playerData, null, 2));
+      
+      this.sendJson(res, { 
+        success: true,
+        player: playerData
+      });
+    } catch (e: any) {
+      console.error('[WebPanel] Error getting player details:', e);
+      this.sendJson(res, { success: false, error: e.message }, 500);
+    }
+  }
+
+  private async handlePlayerAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const { steamId, action, params } = JSON.parse(body);
+      
+      if (!this.rconClient || !this.rconClient.isConnected()) {
+        this.sendJson(res, { error: 'RCON not connected' }, 500);
+        return;
+      }
+
+      let command = '';
+      switch (action) {
+        case 'setAttributes':
+          command = `SetAttributes ${params.strength} ${params.dexterity} ${params.stamina} ${params.intellect} ${steamId}`;
+          break;
+        case 'godMode':
+          command = `SetGodMode ${params.enabled ? 'true' : 'false'} ${steamId}`;
+          break;
+        case 'setImmortality':
+          command = `SetImmortality ${params.enabled ? 'true' : 'false'} ${steamId}`;
+          break;
+        case 'showNamePlates':
+          command = `#ShowNamePlates true ${steamId}`;
+          break;
+        case 'suicide':
+          command = `Suicide ${steamId}`;
+          break;
+        case 'silence':
+          command = `Silence ${steamId}`;
+          break;
+        case 'unsilence':
+          command = `Unsilence ${steamId}`;
+          break;
+        case 'knockout':
+          command = `Knockout ${params.seconds} ${steamId}`;
+          break;
+        case 'announce':
+          command = `#Announce ${params.message}`;
+          break;
+        case 'notify':
+          command = `#SendNotification ${params.type} 0 "${params.message}" ${steamId}`;
+          break;
+        case 'chat':
+          command = `Say ${params.message}`;
+          break;
+        case 'scheduleCargoDrop': {
+          const notSet = (v: any) => v === undefined || v === null || v === '' || v === false;
+          let x = params.x, y = params.y, z = params.z;
+          if (notSet(x) && notSet(y) && notSet(z)) {
+            // Check cached players first
+            const cached = this.cachedPlayers.find(p => p.steamId === steamId);
+            if (cached?.location && !notSet(cached.location.z)) {
+              x = cached.location.x;
+              y = cached.location.y;
+              z = cached.location.z;
+            } else {
+              // Fresh ListPlayers lookup (same approach as WARGM)
+              const listRes = await this.rconClient.sendCommand('ListPlayers');
+              if (listRes.success && listRes.response) {
+                const lines = listRes.response.split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                  const trimmed = lines[i].trim();
+                  const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
+                  if (steamMatch && steamMatch[1] === steamId) {
+                    for (let j = i + 1; j < lines.length; j++) {
+                      const t = lines[j].trim();
+                      if (t.match(/^\d+\.\s+\S/)) break;
+                      const locMatch = t.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
+                      if (locMatch) {
+                        x = parseFloat(locMatch[1]);
+                        y = parseFloat(locMatch[2]);
+                        z = parseFloat(locMatch[3]);
+                      }
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          if (notSet(x) || notSet(y) || notSet(z)) {
+            this.sendJson(res, { error: 'Не удалось определить координаты игрока' }, 400);
+            return;
+          }
+          command = `ScheduleWorldEvent BP_CargoDropEvent ${x} ${y} ${z}`;
+          break;
+        }
+        case 'setAllSkills':
+          await this.executeSetAllSkills(steamId, res);
+          return;
+        default:
+          this.sendJson(res, { error: 'Unknown action' }, 400);
+          return;
+      }
+
+      console.log(`[WebPanel] Executing command: ${command}`);
+      const result = await this.rconClient.sendCommand(command);
+      console.log(`[WebPanel] Command result:`, result);
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async executeSetAllSkills(steamId: string, res: http.ServerResponse): Promise<void> {
+    if (!this.rconClient) {
+      this.sendJson(res, { error: 'RCON not connected' }, 500);
+      return;
+    }
+    const skillNames = [
+      'Archery', 'Aviation', 'Awareness', 'Brawling',
+      'Camouflage', 'Cooking', 'Demolition', 'Driving',
+      'Endurance', 'Engineering', 'Farming', 'Handgun',
+      'Medical', 'Motorcycling', 'Resistance', 'Rifles',
+      'Running', 'Sniping', 'Stealth', 'Survival',
+      'Tactics', 'Thievery', '"Melee Weapons"',
+    ];
+
+    for (const name of skillNames) {
+      const command = `SetSkillLevel ${name} 4 ${steamId}`;
+      await this.rconClient.sendCommand(command);
+    }
+    this.sendJson(res, { success: true, response: 'All skills set to max' });
+  }
+
+  private async handleGiveCurrency(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.rconClient || !this.rconClient.isConnected()) {
+      this.sendJson(res, { error: 'RCON not connected' }, 500);
+      return;
+    }
+    try {
+      const body = await this.readBody(req);
+      const { steamId, type, amount: rawAmount } = JSON.parse(body);
+      if (!steamId || !type || !rawAmount || rawAmount <= 0) {
+        this.sendJson(res, { error: 'Invalid parameters' }, 400);
+        return;
+      }
+      const amount = Math.round(rawAmount);
+
+      // Fetch current balance from fresh ListPlayers
+      const listRes = await this.rconClient.sendCommand('ListPlayers');
+      if (!listRes.success || !listRes.response) {
+        this.sendJson(res, { error: 'Failed to query player data' }, 500);
+        return;
+      }
+
+      let currentValue = 0;
+      let found = false;
+      const lines = listRes.response.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
+        if (steamMatch && steamMatch[1] === steamId) {
+          for (let j = i + 1; j < lines.length; j++) {
+            const t = lines[j].trim();
+            if (t.match(/^\d+\.\s+\S/)) break;
+            if (type === 'money') {
+              const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
+              if (bm) { currentValue = parseFloat(bm[1]); found = true; }
+            } else if (type === 'gold') {
+              const gm = t.match(/^Gold balance:\s*([\d.+-]+)/);
+              if (gm) { currentValue = parseFloat(gm[1]); found = true; }
+            } else if (type === 'fame') {
+              const fm = t.match(/^Fame:\s*([\d.+-]+)/);
+              if (fm) { currentValue = parseFloat(fm[1]); found = true; }
+            }
+          }
+          break;
+        }
+      }
+
+      if (!found) {
+        this.sendJson(res, { error: 'Player not found or offline' }, 400);
+        return;
+      }
+
+      const newValue = Math.round((currentValue || 0) + amount);
+      let command = '';
+      if (type === 'fame') {
+        command = `#SetFamePoints ${newValue} ${steamId}`;
+      } else {
+        const currencyType = type === 'gold' ? 'Gold' : 'Normal';
+        command = `#SetCurrencyBalance ${currencyType} ${newValue} ${steamId}`;
+      }
+
+      const result = await this.rconClient.sendCommand(command);
+      if (result.success) {
+        this.sendJson(res, { success: true, response: `${currentValue} → ${newValue}` });
+      } else {
+        this.sendJson(res, { error: result.response || 'Command failed' }, 500);
+      }
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetPacks(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body) as PackConfig;
+      console.log('[WebPanel] handleSetPacks:', JSON.stringify(cfg).slice(0, 200));
+      if (this.packsSaveCallback) {
+        console.log('[WebPanel] Calling packsSaveCallback');
+        this.packsSaveCallback(cfg);
+      } else {
+        console.warn('[WebPanel] packsSaveCallback is null!');
+      }
+      this.packsConfig = cfg;
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetPacks error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleGivePack(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.rconClient) {
+      this.sendJson(res, { error: 'RCON not connected' }, 500);
+      return;
+    }
+    try {
+      const body = await this.readBody(req);
+      const { steamId, packType } = JSON.parse(body);
+      const pack = packType === 'daily' ? this.packsConfig.daily : this.packsConfig.starter;
+      if (!pack || !pack.enabled || !pack.items.length) {
+        this.sendJson(res, { error: 'Pack disabled or empty' }, 400);
+        return;
+      }
+      const results: string[] = [];
+      for (const item of pack.items) {
+        const cmd = `SpawnItem ${item.itemId} ${item.amount} Location ${steamId}`;
+        const r = await this.rconClient.sendCommand(cmd);
+        results.push(`${item.itemId}x${item.amount}: ${r.success ? 'OK' : 'FAIL'}`);
+      }
+      this.sendJson(res, { success: true, results });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetTeleport(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const teleport = JSON.parse(body);
+      this.pluginsConfig.teleport = teleport;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetTeleport error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetVip(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const vip = JSON.parse(body) as VipConfig;
+      this.pluginsConfig.vip = vip;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetVip error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetSaveHome(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const saveHome = JSON.parse(body);
+      this.pluginsConfig.saveHome = saveHome;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetSaveHome error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleGetCooldowns(res: http.ServerResponse): void {
+    try {
+      if (!this.cooldownProvider) { this.sendJson(res, { cooldowns: {} }); return; }
+      this.sendJson(res, { cooldowns: this.cooldownProvider.getCooldowns() });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleResetCooldown(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.cooldownProvider) { this.sendJson(res, { error: 'No cooldown provider' }, 500); return; }
+      const body = await this.readBody(req);
+      const { steamId, packType } = JSON.parse(body);
+      this.cooldownProvider.resetCooldown(steamId, packType || undefined);
+      this.sendJson(res, { success: true });
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);
     }
@@ -276,7 +1075,10 @@ export class WebPanel {
         const enc = buf[1] === 0 ? 'utf16le' : 'utf-8';
         const text = buf.toString(enc);
         this.consoleOffset = stat.size;
-        text.split('\n').filter(Boolean).forEach((line) => this.broadcastLine(line));
+        text.split('\n').filter(Boolean).forEach((line) => {
+          this.parsePlayerEvents(line);
+          this.broadcastLine(line);
+        });
       } catch {}
     });
   }
@@ -292,214 +1094,221 @@ export class WebPanel {
     for (const client of this.sseClients) this.sendSSE(client.res, 'line', line);
   }
 
+  private parsePlayerEvents(line: string): void {
+    // Parse player login
+    const loginMatch = line.match(/HandlePossessedBy:\s*\d+,\s*\d+,\s*(.+)/);
+    if (loginMatch) {
+      const playerName = loginMatch[1].trim();
+      // Extract SteamID from other patterns
+      const steamIdMatch = line.match(/(\d{17})/);
+      if (steamIdMatch) {
+        const steamId = steamIdMatch[1];
+        this.onlinePlayers.set(steamId, {
+          steamId,
+          name: playerName,
+          connectedAt: new Date(),
+        });
+      }
+      return;
+    }
+
+    // Alternative login pattern
+    const altLogin = line.match(/LogSCUM:.+'\d+:([^(]+)\((\d{17})\)'.+logged in/);
+    if (altLogin) {
+      const name = altLogin[1].trim();
+      const steamId = altLogin[2];
+      this.onlinePlayers.set(steamId, {
+        steamId,
+        name,
+        connectedAt: new Date(),
+      });
+      return;
+    }
+
+    // Parse player logout
+    const logoutMatch = line.match(/LogSCUM:.+'\d+:([^(]+)\((\d{17})\)'.+logged out/);
+    if (logoutMatch) {
+      const steamId = logoutMatch[2];
+      this.onlinePlayers.delete(steamId);
+      return;
+    }
+
+    // Alternative logout pattern
+    const altLogout = line.match(/Prisoner logging out:\s*([^(]+)\s*\((\d{17})\)/);
+    if (altLogout) {
+      const steamId = altLogout[2];
+      this.onlinePlayers.delete(steamId);
+    }
+  }
+
+  startPlayersPoll(): void {
+    this.stopPlayersPoll();
+    this.pollPlayers();
+    this.playersPollInterval = setInterval(() => this.pollPlayers(), this.PLAYERS_POLL_INTERVAL);
+  }
+
+  stopPlayersPoll(): void {
+    if (this.playersPollInterval) {
+      clearInterval(this.playersPollInterval);
+      this.playersPollInterval = null;
+    }
+  }
+
+  private async pollPlayers(): Promise<void> {
+    if (!this.rconClient) return;
+
+    if (!this.rconClient.isConnected()) {
+      if (this.rconCredentials) {
+        console.log('[WebPanel] RCON disconnected, attempting reconnect...');
+        const result = await this.rconClient.connect(
+          this.rconCredentials.host,
+          this.rconCredentials.port,
+          this.rconCredentials.password,
+        );
+        if (!result.success) {
+          console.error('[WebPanel] Reconnect failed:', result.error);
+          return;
+        }
+        console.log('[WebPanel] Reconnected successfully');
+      } else {
+        return;
+      }
+    }
+
+    try {
+      const result = await this.rconClient.sendCommand('ListPlayers');
+      if (result.success && result.response) {
+        this.cachedPlayers = this.parseListPlayersOutput(result.response);
+        console.log(`[WebPanel] pollPlayers: parsed ${this.cachedPlayers.length} players`);
+      } else {
+        console.log('[WebPanel] pollPlayers: ListPlayers returned no response');
+      }
+    } catch (e) {
+      console.error('[WebPanel] Poll players error:', e);
+    }
+  }
+
+  // WARGM handlers
+  private handleWargmGetSettings(res: http.ServerResponse): void {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    this.sendJson(res, this.wargmManager.getSettings());
+  }
+
+  private async handleWargmSaveSettings(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    try {
+      const body = await this.readBody(req);
+      const settings = JSON.parse(body) as WargmSettings;
+      this.wargmManager.saveSettings(settings);
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleWargmGetCards(res: http.ServerResponse): void {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    this.sendJson(res, this.wargmManager.getCards());
+  }
+
+  private async handleWargmSaveCard(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    try {
+      const body = await this.readBody(req);
+      const card = JSON.parse(body) as WargmCard;
+      const id = this.wargmManager.saveCard(card);
+      this.sendJson(res, { success: true, id });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleWargmDeleteCard(id: number, res: http.ServerResponse): void {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    this.wargmManager.deleteCard(id);
+    this.sendJson(res, { success: true });
+  }
+
+  private handleWargmDuplicateCard(id: number, res: http.ServerResponse): void {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    const newId = this.wargmManager.duplicateCard(id);
+    this.sendJson(res, { success: !!newId, id: newId });
+  }
+
+  private async handleWargmTest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    try {
+      const body = await this.readBody(req);
+      const settings = JSON.parse(body) as WargmSettings;
+      const result = await this.wargmManager.testConnection(settings);
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleWargmCheck(steamId: string, res: http.ServerResponse): Promise<void> {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    try {
+      const settings = this.wargmManager.getSettings();
+      const result = await this.wargmManager.processPlayer(settings, steamId);
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleWargmExport(res: http.ServerResponse): void {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    const json = this.wargmManager.exportCards();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': 'attachment; filename="wargm_cards.json"' });
+    res.end(json);
+  }
+
+  private async handleWargmImport(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    try {
+      const body = await this.readBody(req);
+      const { json } = JSON.parse(body);
+      const result = this.wargmManager.importCards(json);
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleWargmDeliveries(steamId: string, res: http.ServerResponse): void {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    const deliveries = this.wargmManager.getDeliveriesBySteam(steamId);
+    this.sendJson(res, deliveries);
+  }
+
+  private async handleWargmDebugOperations(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!this.wargmManager) { this.sendJson(res, { error: 'WARGM not initialized' }, 500); return; }
+    try {
+      const body = await this.readBody(req);
+      const { steamId } = JSON.parse(body);
+      const settings = this.wargmManager.getSettings();
+      const result = await this.wargmManager.fetchRawOperations(settings, steamId);
+      this.sendJson(res, result);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleItems(res: http.ServerResponse): void {
+    this.sendJson(res, this.itemsCache || []);
+  }
+
   private serveIndex(res: http.ServerResponse): void {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
+    try {
+      const htmlPath = path.join(__dirname, 'webPanelUnified.html');
+      const htmlContent = fs.readFileSync(htmlPath, 'utf-8');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(htmlContent);
+    } catch (e: any) {
+      res.writeHead(500);
+      res.end('Error loading panel: ' + e.message);
+    }
   }
 }
-
-const html = `<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SCUM Server Manager</title>
-<style>
-:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh;font-size:14px}
-.login-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1000;background:var(--bg)}
-.login-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:32px;width:360px;text-align:center}
-.login-box h1{font-size:20px;font-weight:700;margin-bottom:24px}
-.login-box input{width:100%;padding:10px 12px;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none}
-.login-box input:focus{border-color:var(--accent)}
-.login-box button{width:100%;padding:10px;background:#238636;border:none;border-radius:6px;color:#fff;font-size:14px;font-weight:500;cursor:pointer}
-.login-box button:hover{background:#2ea043}
-.login-box .error{color:var(--red);font-size:13px;margin-top:10px;display:none}
-#dashboard{display:none;height:100vh;padding:24px}
-.page-title{font-size:24px;font-weight:700;margin-bottom:24px;display:flex;align-items:center;gap:12px}
-.badge{font-size:12px;padding:2px 10px;border-radius:12px;font-weight:600}
-.badge.online{background:rgba(63,185,80,.15);color:var(--green);border:1px solid var(--green)}
-.badge.offline{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red)}
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px}
-.stat-label{font-size:12px;color:var(--muted);font-weight:500}
-.stat-value{font-size:28px;font-weight:600;line-height:1.2}
-.stat-sub{font-size:12px;color:var(--muted);margin-top:2px}
-.actions{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
-.btn{padding:8px 16px;border-radius:6px;border:1px solid var(--border);font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--text);display:inline-flex;align-items:center;gap:6px;font-family:inherit}
-.btn:hover{background:rgba(255,255,255,.04)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-success{background:#238636;border-color:#238636;color:#fff}
-.btn-success:hover{background:#2ea043}
-.btn-danger{background:#da3633;border-color:#da3633;color:#fff}
-.btn-danger:hover{background:#f85149}
-.btn-warning{background:#9e6a03;border-color:#9e6a03;color:#fff}
-.console-section{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden}
-.console-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
-.console-header .title{font-size:12px;font-weight:600;text-transform:uppercase;color:var(--muted)}
-.console-header .status{font-size:11px;color:var(--green);display:flex;align-items:center;gap:4px}
-.console-header .status .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
-.console-box{height:300px;overflow:auto;padding:12px 16px;font-family:Consolas,monospace;font-size:12px;line-height:1.5}
-.console-box .line{color:#c9d1d9;white-space:pre-wrap;word-break:break-all;padding:1px 0}
-.console-box .line.connect{color:var(--green)}
-.snack{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:10px 20px;border-radius:6px;font-size:13px;display:none;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.4)}
-.snack.error{background:#da3633}
-</style>
-</head>
-<body>
-<div id="loginPage" class="login-overlay">
-  <div class="login-box">
-    <h1>SCUM Server Manager</h1>
-    <input type="text" id="loginUser" placeholder="Логин" autocomplete="username">
-    <input type="password" id="loginPass" placeholder="Пароль" autocomplete="current-password">
-    <button id="loginBtn" onclick="login()">Войти</button>
-    <div class="error" id="loginError">Неверный логин или пароль</div>
-  </div>
-</div>
-<div id="dashboard">
-  <div class="page-title">
-    <span>Дашборд</span>
-    <span id="statusBadge" class="badge offline">ОФЛАЙН</span>
-  </div>
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-label">Игроки</div>
-      <div class="stat-value" id="statPlayers">0</div>
-      <div class="stat-sub" id="statMax">макс 0</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">ОЗУ</div>
-      <div class="stat-value" id="statRam">0 <span style="font-size:14px;font-weight:400;color:var(--muted)">МБ</span></div>
-      <div class="stat-sub">Использование памяти</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Время работы</div>
-      <div class="stat-value" id="statUptime">-</div>
-      <div class="stat-sub" id="statUptimeSub">Сервер остановлен</div>
-    </div>
-  </div>
-  <div class="actions">
-    <button class="btn btn-success" id="btnStart" onclick="action('start')">&#9654; Запустить</button>
-    <button class="btn btn-danger" id="btnStop" onclick="action('stop')">&#9644; Остановить</button>
-    <button class="btn btn-warning" id="btnRestart" onclick="action('restart')">&#8635; Перезапустить</button>
-    <button class="btn" id="btnUpdate" onclick="update()">&#8681; Обновить</button>
-  </div>
-  <div class="console-section">
-    <div class="console-header">
-      <div class="title">Консоль сервера</div>
-      <div class="status"><span class="dot"></span>В эфире</div>
-    </div>
-    <div class="console-box" id="console"></div>
-  </div>
-</div>
-<div class="snack" id="snack"></div>
-<script>
-let updating=false;
-let token=localStorage.getItem('wp_token');
-
-function gid(id){return document.getElementById(id)}
-
-function showLogin(){gid('loginPage').style.display='flex';gid('dashboard').style.display='none'}
-function showDash(){gid('loginPage').style.display='none';gid('dashboard').style.display='block'}
-
-async function login(){
-  const user=gid('loginUser').value;
-  const pass=gid('loginPass').value;
-  const btn=gid('loginBtn');
-  const err=gid('loginError');
-  btn.disabled=true;btn.textContent='Вход...';err.style.display='none';
-  try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
-    const d=await r.json();
-    if(d.token){token=d.token;localStorage.setItem('wp_token',token);showDash();initDashboard()}
-    else{err.style.display='block';btn.disabled=false;btn.textContent='Войти'}
-  }catch(e){err.textContent=e.message;err.style.display='block';btn.disabled=false;btn.textContent='Войти'}
-}
-
-function logout(){localStorage.removeItem('wp_token');token=null;showLogin()}
-
-function authHeaders(){return token?{Authorization:'Bearer '+token}:{}}
-
-async function fetchWithAuth(url,opts){
-  opts=opts||{};opts.headers={...opts.headers,...authHeaders()};
-  const r=await fetch(url,opts);if(r.status===401){logout();throw new Error('Сессия истекла')}
-  return r;
-}
-
-function snack(msg,err){
-  const el=gid('snack');
-  el.textContent=msg;el.className='snack'+(err?' error':'');el.style.display='block';
-  setTimeout(()=>el.style.display='none',3000);
-}
-
-function fmtUptime(ms){
-  if(!ms)return'-';const s=Math.floor(ms/1000);const d=Math.floor(s/86400);
-  const h=Math.floor((s%86400)/3600);const m=Math.floor((s%3600)/60);
-  if(d>0)return d+'д '+h+'ч';return h+'ч '+m+'м';
-}
-
-async function action(type){
-  document.querySelectorAll('.actions .btn').forEach(b=>b.disabled=true);
-  try{
-    const r=await fetchWithAuth('/api/'+type,{method:'POST'});
-    const d=await r.json();
-    if(d.error){snack(d.error,true)}else{snack('ОК')}
-  }catch(e){snack(e.message,true)}
-  document.querySelectorAll('.actions .btn').forEach(b=>b.disabled=false);fetchStatus();
-}
-
-async function update(){
-  if(updating)return;updating=true;
-  const btn=gid('btnUpdate');btn.disabled=true;btn.innerHTML='&#8635; Обновление...';
-  try{
-    const r=await fetchWithAuth('/api/update',{method:'POST'});
-    const d=await r.json();
-    if(d.error){snack(d.error,true)}else{snack('Обновление: '+d.result)}
-  }catch(e){snack(e.message,true)}
-  btn.innerHTML='&#8681; Обновить';btn.disabled=false;updating=false;
-}
-
-async function fetchStatus(){
-  try{
-    const r=await fetchWithAuth('/api/status');
-    const s=await r.json();
-    const badge=gid('statusBadge');
-    badge.textContent=s.running?'ОНЛАЙН':'ОФЛАЙН';
-    badge.className='badge '+(s.running?'online':'offline');
-    gid('statPlayers').textContent=s.players||0;
-    gid('statMax').textContent='макс '+(s.maxPlayers||0);
-    gid('statRam').innerHTML=(s.memoryUsage||0)+' <span style="font-size:14px;font-weight:400;color:var(--muted)">МБ</span>';
-    gid('statUptime').textContent=fmtUptime(s.uptime);
-    gid('statUptimeSub').textContent=s.running?'Работает':'Сервер остановлен';
-    gid('btnStart').disabled=s.running;
-    gid('btnStop').disabled=!s.running;
-    gid('btnRestart').disabled=false;
-  }catch(e){}
-}
-
-function appendConsole(boxId, text, cls){
-  const box=gid(boxId);
-  if(!box)return;
-  const line=document.createElement('div');
-  line.className='line'+(cls?' '+cls:'');
-  line.textContent=text;
-  box.appendChild(line);
-  box.scrollTop=box.scrollHeight;
-  if(box.children.length>500)box.removeChild(box.firstChild);
-}
-
-function initDashboard(){
-  const evtSource=new EventSource('/api/console?token='+token);
-  evtSource.addEventListener('line',(e)=>{appendConsole('console',e.data)});
-  evtSource.addEventListener('connected',()=>{appendConsole('console','[Веб-панель подключена]','connect')});
-  setInterval(fetchStatus,5000);fetchStatus();
-}
-
-(function(){
-  if(!token||token.length<10){showLogin();return}
-  fetchWithAuth('/api/status').then(r=>{showDash();initDashboard()}).catch(()=>showLogin());
-})();
-</script>
-</body>
-</html>`;

@@ -23,6 +23,8 @@ import BackupIcon from '@mui/icons-material/Backup';
 import ChatIcon from '@mui/icons-material/Chat';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import FolderIcon from '@mui/icons-material/Folder';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import GroupIcon from '@mui/icons-material/Group';
 import { LanguageProvider, useTranslation } from './contexts/LanguageContext';
 import { Dashboard } from './pages/Dashboard';
 import { ServerSettings } from './pages/ServerSettings';
@@ -41,6 +43,8 @@ import { SquadsPage } from './pages/SquadsPage';
 import { LogMonitor } from './pages/LogMonitor';
 import { FileManager } from './pages/FileManager';
 import { LootEditor } from './pages/LootEditor';
+import { RconConsole } from './pages/RconConsole';
+import { OnlinePlayers } from './pages/OnlinePlayers';
 
 const DRAWER_WIDTH = 220;
 
@@ -67,6 +71,8 @@ function AppContent() {
     { path: '/discord', label: t('nav', 'discord'), icon: <ChatIcon /> },
     { path: '/ftp', label: t('nav', 'ftp'), icon: <FolderOpenIcon /> },
     { path: '/files', label: t('nav', 'files'), icon: <FolderIcon /> },
+    { path: '/rcon-console', label: 'RCON Консоль', icon: <TerminalIcon /> },
+    { path: '/online-players', label: 'Онлайн Игроки', icon: <GroupIcon /> },
     { path: '/settings', label: t('nav', 'settings'), icon: <SettingsIcon /> },
   ];
 
@@ -195,6 +201,8 @@ function AppContent() {
           <Route path="/discord" element={<DiscordSettings />} />
           <Route path="/ftp" element={<FTPSettings />} />
           <Route path="/files" element={<FileManager />} />
+          <Route path="/rcon-console" element={<RconConsole />} />
+          <Route path="/online-players" element={<OnlinePlayers />} />
           <Route path="/settings" element={<AppSettings />} />
         </Routes>
       </Box>

@@ -86,8 +86,26 @@ export class ScumDatabaseReader {
     return this.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map((r: any) => r.name);
   }
 
-  getPlayers(limit = 200): any[] {
-    return this.query(`SELECT id AS profileId, user_id AS steamId, name, prisoner_id AS prisonerId, money_balance AS walletBalance, fame_points AS famePoints, last_login_time AS lastLogin, last_logout_time AS lastLogout FROM user_profile ORDER BY last_login_time DESC LIMIT ?`, [limit]);
+  getPlayers(limit = 500): any[] {
+    try { this.ensureOpen(); } catch { return []; }
+    if (!this.db) return [];
+    try {
+      const cols = this.query("PRAGMA table_info(user_profile)").map((c: any) => c.name);
+      const nameCol = cols.includes('name') ? 'name' : 'Name';
+      const steamCol = cols.includes('user_id') ? 'user_id' : (cols.includes('steam_id') ? 'steam_id' : (cols.includes('SteamId') ? 'SteamId' : 'user_id'));
+      const moneyCol = cols.includes('money_balance') ? 'money_balance' : 'money_balance';
+      const fameCol = cols.includes('fame_points') ? 'fame_points' : 'fame_points';
+      const loginCol = cols.includes('last_login_time') ? 'last_login_time' : 'last_login_time';
+      const logoutCol = cols.includes('last_logout_time') ? 'last_logout_time' : 'last_logout_time';
+      const prisonerCol = cols.includes('prisoner_id') ? 'prisoner_id' : 'prisoner_id';
+      const sql = `SELECT id AS profileId, ${steamCol} AS steamId, ${nameCol} AS name, ${prisonerCol} AS prisonerId, COALESCE(${moneyCol}, 0) AS walletBalance, COALESCE(${fameCol}, 0) AS famePoints, COALESCE(${loginCol}, 0) AS lastLogin, COALESCE(${logoutCol}, 0) AS lastLogout FROM user_profile ORDER BY COALESCE(${loginCol}, 0) DESC LIMIT ?`;
+      const stmt = this.db.prepare(sql);
+      stmt.bind([limit]);
+      const rows: any[] = [];
+      while (stmt.step()) rows.push(stmt.getAsObject());
+      stmt.free();
+      return rows;
+    } catch (e: any) { console.error('[SCUMdb] getPlayers error:', e.message); return []; }
   }
 
   getPlayerBySteamId(steamId: string): any {
@@ -101,7 +119,17 @@ export class ScumDatabaseReader {
   }
 
   getWallet(steamId: string): any {
-    return this.query(`SELECT up.id AS profileId, up.user_id AS steamId, up.name AS name, up.money_balance AS walletBalance, up.fame_points AS famePoints, COALESCE((SELECT MAX(c.account_balance) FROM bank_account_registry r JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id WHERE (r.user_profile_id = up.id OR r.account_owner_user_profile_id = up.id) AND c.currency_type = 1), up.money_balance, 0) AS normalBalance, COALESCE((SELECT MAX(c.account_balance) FROM bank_account_registry r JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id WHERE (r.user_profile_id = up.id OR r.account_owner_user_profile_id = up.id) AND c.currency_type = 2), 0) AS goldBalance FROM user_profile up WHERE up.user_id = ? LIMIT 1`, [steamId])[0] || null;
+    console.log('[SCUMdb] Querying wallet for SteamID:', steamId);
+    const sql = `SELECT up.id AS profileId, up.user_id AS steamId, up.name AS name, up.money_balance AS walletBalance, up.fame_points AS famePoints, COALESCE((SELECT MAX(c.account_balance) FROM bank_account_registry r JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id WHERE (r.user_profile_id = up.id OR r.account_owner_user_profile_id = up.id) AND c.currency_type = 1), up.money_balance, 0) AS normalBalance, COALESCE((SELECT MAX(c.account_balance) FROM bank_account_registry r JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id WHERE (r.user_profile_id = up.id OR r.account_owner_user_profile_id = up.id) AND c.currency_type = 2), 0) AS goldBalance FROM user_profile up WHERE up.user_id = ? LIMIT 1`;
+    console.log('[SCUMdb] Executing wallet query');
+    const result = this.query(sql, [steamId])[0] || null;
+    console.log('[SCUMdb] Wallet query result:', JSON.stringify(result, null, 2));
+    
+    // Also check bank accounts directly
+    const bankAccounts = this.query(`SELECT r.id, r.user_profile_id, c.currency_type, c.account_balance FROM bank_account_registry r LEFT JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id WHERE r.user_profile_id IN (SELECT id FROM user_profile WHERE user_id = ?)`, [steamId]);
+    console.log('[SCUMdb] Bank accounts found:', JSON.stringify(bankAccounts, null, 2));
+    
+    return result;
   }
 
   getAttributes(steamId: string): any {

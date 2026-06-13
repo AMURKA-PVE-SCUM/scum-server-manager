@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     status: () => ipcRenderer.invoke('server:status'),
     checkUpdate: () => ipcRenderer.invoke('server:check-update'),
     update: () => ipcRenderer.invoke('server:update'),
+    manualUpdate: () => ipcRenderer.invoke('server:manual-update'),
     updateStream: () => ipcRenderer.invoke('server:update-stream'),
     onUpdateLine: (cb: (line: string) => void) => { ipcRenderer.on('server:update-line', (_e, line) => cb(line)); },
     onUpdateDone: (cb: (result: string) => void) => { ipcRenderer.on('server:update-done', (_e, result) => cb(result)); },
@@ -73,5 +74,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getFlags: () => ipcRenderer.invoke('db:getFlags'),
     getBankAccounts: () => ipcRenderer.invoke('db:getBankAccounts'),
     getEconomyLeaderboard: () => ipcRenderer.invoke('db:getEconomyLeaderboard'),
+  },
+  rcon: {
+    connect: (config: any) => ipcRenderer.invoke('rcon:connect', config),
+    disconnect: () => ipcRenderer.invoke('rcon:disconnect'),
+    sendCommand: (command: string) => ipcRenderer.invoke('rcon:sendCommand', command),
+    status: () => ipcRenderer.invoke('rcon:status'),
+    saveConfig: (config: any) => ipcRenderer.invoke('rcon:saveConfig', config),
   },
 });

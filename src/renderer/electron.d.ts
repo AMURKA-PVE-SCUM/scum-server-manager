@@ -13,7 +13,7 @@ interface ElectronAPI {
       players: number; maxPlayers: number; fps: number;
       playersList: Array<{ steamId: string; name: string; ip: string; ping: number; timeConnected: number }>;
     }>;
-    checkUpdate: () => Promise<{ updated: boolean; error: string }>;
+    checkUpdate: () => Promise<{ available: boolean; currentBuild: string; latestBuild: string; error: string }>;
     update: () => Promise<string>;
     updateStream: () => Promise<string>;
     onUpdateLine: (cb: (line: string) => void) => void;
@@ -76,6 +76,13 @@ interface ElectronAPI {
     getFlags: () => Promise<any[]>;
     getBankAccounts: () => Promise<any[]>;
     getEconomyLeaderboard: () => Promise<any[]>;
+  };
+  rcon: {
+    connect: (config: any) => Promise<any>;
+    disconnect: () => Promise<void>;
+    sendCommand: (command: string) => Promise<any>;
+    status: () => Promise<any>;
+    saveConfig: (config: any) => Promise<void>;
   };
 }
 

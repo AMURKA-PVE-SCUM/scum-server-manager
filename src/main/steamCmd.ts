@@ -1,7 +1,9 @@
 import { spawn, execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
-import { EventEmitter } from 'events';
+
+const APP_ID = '3792580';
+const TIMEOUT = 600000;
 
 export class SteamCmd {
   private steamCmdPath: string;
@@ -15,165 +17,212 @@ export class SteamCmd {
     this.serverPath = p;
   }
 
+  setSteamCmdPath(p: string): void {
+    this.steamCmdPath = p;
+  }
+
+  private exePath(): string {
+    return path.join(this.steamCmdPath, 'steamcmd.exe');
+  }
+
+  private async preventSelfUpdate(): Promise<void> {
+    const dirsToClean = [
+      'appcache', 'depotcache',
+      'steamcmd_old.exe', 'steamcmd_bins_win32.zip', 'steamcmd_win32.zip',
+    ];
+    for (const item of dirsToClean) {
+      const p = path.join(this.steamCmdPath, item);
+      try { await fs.remove(p); } catch {}
+    }
+    // Удаляем package/ (папку) и создаём файл package — SteamCMD не сможет
+    // записать туда обновление и пропустит самообновление.
+    const pkg = path.join(this.steamCmdPath, 'package');
+    try { await fs.remove(pkg); } catch {}
+    try { await fs.writeFile(pkg, ''); } catch {}
+
+    // steam.cfg с пустым bootstrapper — SteamCMD не будет проверять версию
+    const cfg = path.join(this.steamCmdPath, 'steam.cfg');
+    try { await fs.writeFile(cfg, 'BootStrapperInhibitAll=1\n', 'utf8'); } catch {}
+
+    const vdf = path.join(this.steamCmdPath, 'steamcmd_update.vdf');
+    try { await fs.writeFile(vdf, `"steamcmd_update"\n{\n\t"version"\t"9999999999"\n}\n`, 'utf8'); } catch {}
+    for (const sub of ['logs', 'config']) {
+      const p = path.join(this.steamCmdPath, sub);
+      try { await fs.emptyDir(p); } catch {}
+    }
+  }
+
   async install(): Promise<void> {
-    const steamCmdExe = path.join(this.steamCmdPath, 'steamcmd.exe');
-    if (await fs.pathExists(steamCmdExe)) return;
-
+    const exe = this.exePath();
+    if (await fs.pathExists(exe)) return;
     await fs.ensureDir(this.steamCmdPath);
-
-    const downloadUrl = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
+    const url = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
     const zipPath = path.join(this.steamCmdPath, 'steamcmd.zip');
-
-    const response = await fetch(downloadUrl);
-    if (!response.ok) throw new Error(`Failed to download SteamCMD: HTTP ${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    await fs.writeFile(zipPath, buffer);
-
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn('powershell', [
-        '-Command',
-        `Expand-Archive -Path '${zipPath}' -DestinationPath '${this.steamCmdPath}' -Force`,
-      ], { stdio: 'inherit' });
-      proc.on('close', (code) => code === 0 ? resolve() : reject(new Error('Extraction failed')));
-      proc.on('error', reject);
-    });
-
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    await fs.writeFile(zipPath, buf);
+    await this.extractZip(zipPath);
     await fs.remove(zipPath);
+    if (!(await fs.pathExists(exe))) throw new Error('steamcmd.exe not found after extraction');
+    await this.preventSelfUpdate();
   }
 
-  private killExistingSteamCmd(): void {
-    try {
-      execSync('taskkill /F /IM steamcmd.exe 2>nul', { stdio: 'ignore' });
-    } catch {}
-  }
-
-  private async runSteamCmd(args: string[], captureOutput = false, onLine?: (line: string) => void): Promise<string> {
-    const steamCmdExe = path.join(this.steamCmdPath, 'steamcmd.exe');
-    if (!(await fs.pathExists(steamCmdExe))) {
-      throw new Error(`SteamCMD не найден: ${steamCmdExe}. Установите его в Settings → Server Install.`);
-    }
-
-    this.killExistingSteamCmd();
-    await new Promise((r) => setTimeout(r, 1000));
-
-    if (!captureOutput) {
-      return new Promise((resolve, reject) => {
-        const proc = spawn(steamCmdExe, args, {
-          cwd: this.steamCmdPath, stdio: 'ignore', windowsHide: true,
+  private async extractZip(zipPath: string): Promise<void> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const p = spawn('powershell', ['-Command', `Expand-Archive -Path '${zipPath}' -DestinationPath '${this.steamCmdPath}' -Force`], { stdio: 'ignore' });
+          p.on('close', (c) => c === 0 ? resolve() : reject(new Error(`PowerShell Expand-Archive exit code ${c}`)));
+          p.on('error', reject);
         });
-        const t = setTimeout(() => { try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch {} reject(new Error('SteamCMD timeout')); }, 600000);
-        proc.on('error', (err) => { clearTimeout(t); reject(err); });
-        proc.on('close', (code) => { clearTimeout(t); code === 0 ? resolve('') : reject(new Error(`SteamCMD exit code ${code}`)); });
-      });
-    }
-
-    const q = (s: string) => s.includes(' ') ? `"${s}"` : s;
-
-    const logPath = path.join(this.steamCmdPath, 'steamcmd_update.log');
-    try { fs.unlinkSync(logPath); } catch {}
-
-    const batchPath = path.join(this.steamCmdPath, 'steamcmd_update.bat');
-    const cmdEscaped = `${q(steamCmdExe)} ${args.map(q).join(' ')}`;
-    fs.writeFileSync(batchPath, `@echo off\r\n${cmdEscaped} >"${logPath}" 2>&1\r\nset EXITCODE=%ERRORLEVEL%\r\necho.\r\necho SteamCMD exit code: %EXITCODE%\r\npause\r\n`, 'utf8');
-
-    const batchProc = spawn(batchPath, [], {
-      cwd: this.steamCmdPath, stdio: 'ignore', windowsHide: false, detached: true,
-    });
-    batchProc.unref();
-
-    return new Promise((resolve, reject) => {
-      const t = setTimeout(() => {
-        try { execSync(`taskkill /F /IM steamcmd.exe`, { stdio: 'ignore' }); } catch {}
-        try { if (batchProc.pid) execSync(`taskkill /F /PID ${batchProc.pid} /T`, { stdio: 'ignore' }); } catch {}
-        reject(new Error('SteamCMD timeout (10 min)'));
-      }, 600000);
-
-      let lastSize = 0;
-      const pollLog = setInterval(() => {
-        try {
-          if (!fs.existsSync(logPath)) return;
-          const s = fs.statSync(logPath).size;
-          if (s > lastSize) {
-            const buf = Buffer.alloc(s - lastSize);
-            const fd = fs.openSync(logPath, 'r');
-            fs.readSync(fd, buf, 0, buf.length, lastSize);
-            fs.closeSync(fd);
-            lastSize = s;
-            if (onLine) buf.toString('utf8').split('\n').filter(Boolean).forEach((l) => onLine(l.trim()));
-          }
-        } catch {}
-      }, 1000);
-
-      const checkDone = setInterval(() => {
-        const pid = batchProc.pid;
-        if (!pid) { clearInterval(pollLog); clearInterval(checkDone); clearTimeout(t); resolve(''); return; }
-        try {
-          const r = execSync(`tasklist /V /FO CSV /NH /FI "PID eq ${pid}"`, { stdio: 'pipe', encoding: 'utf8', timeout: 3000 });
-          if (!r.includes(pid.toString())) throw new Error('done');
-        } catch {
-          clearInterval(pollLog); clearInterval(checkDone); clearTimeout(t);
-          setTimeout(() => {
-            try {
-              const out = fs.readFileSync(logPath, 'utf8');
-              const lower = out.toLowerCase();
-              if (lower.includes('error') || lower.includes('failure') || lower.includes('not found')) reject(new Error(`SteamCMD error. Лог: ${logPath}`));
-              else resolve(out);
-            } catch { resolve(''); }
-          }, 2000);
+        return;
+      } catch {
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
         }
-      }, 2000);
-
-    });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const p = spawn('tar', ['-xf', zipPath, '-C', this.steamCmdPath], { stdio: 'ignore' });
+            p.on('close', (c) => c === 0 ? resolve() : reject(new Error(`tar exit code ${c}`)));
+            p.on('error', reject);
+          });
+          return;
+        } catch {
+          throw new Error('Extraction failed: PowerShell и tar недоступны');
+        }
+      }
+    }
   }
 
-  /** Check if an update is available (fast, no download) */
-  async checkForUpdate(): Promise<{ available: boolean; error: string }> {
+  private readManifestBuildId(): string | null {
     try {
-      const args: string[] = [];
-      if (this.serverPath) args.push('+force_install_dir', this.serverPath);
-      args.push('+login', 'anonymous');
-      args.push('+app_info_update', '1');
-      args.push('+app_info_request', '3792580');
-      args.push('+quit');
-      await this.runSteamCmd(args, false);
-      return { available: false, error: '' };
+      const p = path.join(this.serverPath, 'steamapps', `appmanifest_${APP_ID}.acf`);
+      if (!fs.existsSync(p)) return null;
+      const m = fs.readFileSync(p, 'utf8').match(/"buildid"\s+"(\d+)"/);
+      return m ? m[1] : null;
+    } catch { return null; }
+  }
+
+  async checkForUpdate(): Promise<{ available: boolean; currentBuild: string; latestBuild: string; error: string }> {
+    try {
+      const currentBuild = this.readManifestBuildId() || '0';
+      const r = await fetch(`https://api.steamcmd.net/v1/info/${APP_ID}`, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return { available: false, currentBuild, latestBuild: 'unknown', error: `API HTTP ${r.status}` };
+      const data = await r.json();
+      const latestBuild = data?.data?.[APP_ID]?.depots?.branches?.public?.buildid;
+      if (!latestBuild) return { available: false, currentBuild, latestBuild: 'unknown', error: 'Build ID not found in API response' };
+      return { available: currentBuild !== latestBuild, currentBuild, latestBuild, error: '' };
     } catch (e: any) {
-      return { available: false, error: e.message };
+      return { available: false, currentBuild: '', latestBuild: '', error: e.message };
     }
   }
 
   updateServer(): Promise<string> {
-    return this.runUpdateCapture();
+    return this.doUpdate();
   }
 
-  /** Run update with real-time progress callback (returns lines via emitter) */
   runUpdateWithProgress(onLine: (line: string) => void): Promise<string> {
-    return this.runUpdateCapture(onLine);
+    return this.doUpdate(onLine);
   }
 
-  private async runUpdateCapture(onLine?: (line: string) => void): Promise<string> {
-    const args: string[] = [];
-    if (this.serverPath) args.push('+force_install_dir', this.serverPath);
-    args.push('+login', 'anonymous');
-    args.push('+app_update', '3792580', 'validate', '+quit');
-    const output = await this.runSteamCmd(args, true, onLine);
-    const lower = output.toLowerCase();
-    if (lower.includes('already up to date') || lower.includes('success')) {
-      return 'already_up_to_date';
+  private async doUpdate(onLine?: (line: string) => void): Promise<string> {
+    if (!this.serverPath) throw new Error('Server path not set');
+    await this.preventSelfUpdate();
+    const before = this.readManifestBuildId();
+    const args = ['+force_install_dir', this.serverPath, '+login', 'anonymous', '+app_update', APP_ID, 'validate', '+quit'];
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const output = await this.spawnSteamCmd(args, true, onLine);
+        const after = this.readManifestBuildId();
+        if (after && before && after !== before) return 'update_applied';
+        if (!after && !before) return 'done';
+        if (output.toLowerCase().includes('already up to date')) return 'already_up_to_date';
+        return 'already_up_to_date';
+      } catch (e: any) {
+        const msg = e.message || '';
+        const isCorrupted = msg.includes('Fatal Error') || msg.includes('4294967294') || msg.includes('must be online') || msg.includes('threadtools');
+        const isRecoverable = [1, 6, 8].includes(e.exitCode);
+        if (attempt < 3 && (isRecoverable || isCorrupted)) {
+          if (isCorrupted) {
+            try {
+              await this.preventSelfUpdate();
+              await fs.remove(this.exePath());
+              await this.install();
+            } catch (reinstallErr: any) {
+              const hints: string[] = [
+                `1. Добавьте папки "${this.steamCmdPath}" и "${this.serverPath}" в исключения антивируса/Defender`,
+                `2. Проверьте подключение к интернету`,
+                `3. DNS: попробуйте 8.8.8.8`,
+                `4. Запустите приложение от имени администратора`,
+                `5. Вручную скачайте steamcmd.zip с https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip и распакуйте в "${this.steamCmdPath}"`,
+              ];
+              throw new Error(
+                `SteamCMD повреждён (код 4294967294). Переустановка не удалась.\n\n` +
+                `Рекомендации:\n${hints.join('\n')}\n\n` +
+                `Ошибка: ${reinstallErr.message}`
+              );
+            }
+          }
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+        throw e;
+      }
     }
-    if (lower.includes('downloading')) {
-      return 'update_applied';
-    }
-    return 'done';
+    throw new Error('Update failed after 3 attempts');
+  }
+
+  async manualUpdate(): Promise<void> {
+    await this.install();
   }
 
   async validateServer(): Promise<void> {
-    const args: string[] = [];
-    if (this.serverPath) {
-      args.push('+force_install_dir', this.serverPath);
-    }
-    args.push('+login', 'anonymous');
-    args.push('+app_update', '3792580', 'validate', '+quit');
-    await this.runSteamCmd(args);
+    if (!this.serverPath) throw new Error('Server path not set');
+    const args = ['+force_install_dir', this.serverPath, '+login', 'anonymous', '+app_update', APP_ID, 'validate', '+quit'];
+    await this.spawnSteamCmd(args, false);
+  }
+
+  private spawnSteamCmd(args: string[], captureOutput: boolean, onLine?: (line: string) => void): Promise<string> {
+    const exe = this.exePath();
+
+    return new Promise((resolve, reject) => {
+      if (!fs.existsSync(exe)) return reject(new Error('SteamCMD not found'));
+
+      const proc = spawn(exe, args, {
+        cwd: this.steamCmdPath,
+        windowsHide: true,
+        stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore',
+      });
+
+      const t = setTimeout(() => {
+        try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch {}
+        reject(Object.assign(new Error('Timeout'), { exitCode: -1 }));
+      }, TIMEOUT);
+
+      let output = '';
+
+      if (captureOutput) {
+        const onData = (data: Buffer) => {
+          const text = data.toString('utf8');
+          output += text;
+          if (onLine) text.split('\n').filter(Boolean).forEach(l => onLine(l.trim()));
+        };
+        proc.stdout?.on('data', onData);
+        proc.stderr?.on('data', onData);
+      }
+
+      proc.on('error', (e) => { clearTimeout(t); reject(e); });
+      proc.on('close', (code) => {
+        clearTimeout(t);
+        if (code === 0 || code === 7) resolve(captureOutput ? output : '');
+        else {
+          const tail = captureOutput ? output.trim().split('\n').slice(-3).join(' ').slice(0, 500) : '';
+          reject(Object.assign(new Error(`SteamCMD exit code ${code}: ${tail}`), { exitCode: code }));
+        }
+      });
+    });
   }
 }

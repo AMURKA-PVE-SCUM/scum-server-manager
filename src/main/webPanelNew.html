@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCUM Server Manager</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh;font-size:14px;display:flex}
+.login-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1000;background:var(--bg)}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:32px;width:360px;text-align:center}
+.login-box h1{font-size:20px;font-weight:700;margin-bottom:24px}
+.login-box input{width:100%;padding:10px 12px;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none}
+.login-box input:focus{border-color:var(--accent)}
+.login-box button{width:100%;padding:10px;background:#238636;border:none;border-radius:6px;color:#fff;font-size:14px;font-weight:500;cursor:pointer}
+.login-box button:hover{background:#2ea043}
+.login-box .error{color:var(--red);font-size:13px;margin-top:10px;display:none}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-header{padding:20px;border-bottom:1px solid var(--border)}
+.sidebar-header h2{font-size:18px;font-weight:700;color:var(--accent)}
+.sidebar-header p{font-size:11px;color:var(--muted);margin-top:4px}
+.nav-menu{flex:1;padding:12px;overflow-y:auto}
+.nav-item{padding:10px 14px;margin-bottom:4px;border-radius:6px;cursor:pointer;color:var(--muted);transition:all 0.15s;display:flex;align-items:center;gap:10px;font-size:13px}
+.nav-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
+.nav-item.active{background:rgba(88,166,255,.1);color:var(--accent);font-weight:600}
+.main-content{flex:1;overflow:auto;padding:24px}
+.page-title{font-size:24px;font-weight:700;margin-bottom:24px;display:flex;align-items:center;gap:12px}
+.badge{font-size:12px;padding:2px 10px;border-radius:12px;font-weight:600}
+.badge.online{background:rgba(63,185,80,.15);color:var(--green);border:1px solid var(--green)}
+.badge.offline{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px}
+.stat-label{font-size:12px;color:var(--muted);font-weight:500}
+.stat-value{font-size:28px;font-weight:600;line-height:1.2}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.actions{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:6px;border:1px solid var(--border);font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--text);display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.btn:hover{background:rgba(255,255,255,.04)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-success{background:#238636;border-color:#238636;color:#fff}
+.btn-success:hover{background:#2ea043}
+.btn-danger{background:#da3633;border-color:#da3633;color:#fff}
+.btn-danger:hover{background:#f85149}
+.btn-warning{background:#9e6a03;border-color:#9e6a03;color:#fff}
+.btn-primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.btn-primary:hover{background:#388bfd}
+.console-section{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.console-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+.console-header .title{font-size:12px;font-weight:600;text-transform:uppercase;color:var(--muted)}
+.console-header .status{font-size:11px;color:var(--green);display:flex;align-items:center;gap:4px}
+.console-header .status .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.console-box{height:400px;overflow:auto;padding:12px 16px;font-family:Consolas,monospace;font-size:12px;line-height:1.5}
+.console-box .line{color:#c9d1d9;white-space:pre-wrap;word-break:break-all;padding:1px 0}
+.snack{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:10px 20px;border-radius:6px;font-size:13px;display:none;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.snack.error{background:#da3633}
+.tab-content{display:none}
+.tab-content.active{display:block}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase}
+tr:hover{background:rgba(255,255,255,.02)}
+.input-group{display:flex;gap:8px;margin-bottom:12px}
+.input-group input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none}
+.input-group input:focus{border-color:var(--accent)}
+.player-actions{display:flex;gap:4px;flex-wrap:wrap}
+.player-actions .btn{padding:4px 8px;font-size:11px}
+.rcon-status{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div id="loginPage" class="login-overlay">
+  <div class="login-box">
+    <h1>SCUM Server Manager</h1>
+    <input type="text" id="loginUser" placeholder="Логин" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Пароль" autocomplete="current-password">
+    <button id="loginBtn" onclick="login()">Войти</button>
+    <div class="error" id="loginError">Неверный логин или пароль</div>
+  </div>
+</div>
+<div class="sidebar" id="sidebar" style="display:none">
+  <div class="sidebar-header">
+    <h2>SCUM</h2>
+    <p>Server Manager</p>
+  </div>
+  <div class="nav-menu">
+    <div class="nav-item active" onclick="switchTab('dashboard')">📊 Дашборд</div>
+    <div class="nav-item" onclick="switchTab('rcon')">💻 RCON Консоль</div>
+    <div class="nav-item" onclick="switchTab('players')">👥 Онлайн Игроки</div>
+  </div>
+</div>
+<div class="main-content" id="mainContent" style="display:none">
+  <div id="dashboardTab" class="tab-content active">
+    <div class="page-title">
+      <span>Дашборд</span>
+      <span id="statusBadge" class="badge offline">ОФЛАЙН</span>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Игроки</div>
+        <div class="stat-value" id="statPlayers">0</div>
+        <div class="stat-sub" id="statMax">макс 0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">ОЗУ</div>
+        <div class="stat-value" id="statRam">0 <span style="font-size:14px;font-weight:400;color:var(--muted)">МБ</span></div>
+        <div class="stat-sub">Использование памяти</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Время работы</div>
+        <div class="stat-value" id="statUptime">-</div>
+        <div class="stat-sub" id="statUptimeSub">Сервер остановлен</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-success" id="btnStart" onclick="action('start')">▶ Запустить</button>
+      <button class="btn btn-danger" id="btnStop" onclick="action('stop')">⏹ Остановить</button>
+      <button class="btn btn-warning" id="btnRestart" onclick="action('restart')">↻ Перезапустить</button>
+      <button class="btn" id="btnUpdate" onclick="update()">↓ Обновить</button>
+    </div>
+    <div class="console-section">
+      <div class="console-header">
+        <div class="title">Консоль сервера</div>
+        <div class="status"><span class="dot"></span>В эфире</div>
+      </div>
+      <div class="console-box" id="console"></div>
+    </div>
+  </div>
+  <div id="rconTab" class="tab-content">
+    <div class="page-title">RCON Консоль</div>
+    <div class="rcon-status">
+      <span id="rconBadge" class="badge offline">RCON OFFLINE</span>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">Подключение к RCON</h3>
+      <div class="input-group">
+        <input type="text" id="rconHost" placeholder="Host" value="127.0.0.1">
+        <input type="number" id="rconPort" placeholder="Port" value="28015">
+        <input type="password" id="rconPassword" placeholder="Password">
+        <button class="btn btn-success" id="btnRconConnect" onclick="rconConnect()">Подключиться</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="input-group">
+        <input type="text" id="commandInput" placeholder="Введите команду..." onkeydown="if(event.key==='Enter')sendCommand()">
+        <button class="btn btn-primary" onclick="sendCommand()">Отправить</button>
+      </div>
+      <div class="console-box" id="rconConsole" style="height:300px"></div>
+    </div>
+  </div>
+  <div id="playersTab" class="tab-content">
+    <div class="page-title">
+      <span>Онлайн Игроки</span>
+      <span id="playerCount" class="badge online">0 онлайн</span>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Имя</th><th>SteamID</th><th>Время онлайн</th><th>Действия</th></tr>
+        </thead>
+        <tbody id="playersTable"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="snack" id="snack"></div>
+<script>
+let token=localStorage.getItem('wp_token');
+let players=[];
+
+function gid(id){return document.getElementById(id)}
+
+function showLogin(){gid('loginPage').style.display='flex';gid('sidebar').style.display='none';gid('mainContent').style.display='none'}
+function showDash(){gid('loginPage').style.display='none';gid('sidebar').style.display='flex';gid('mainContent').style.display='block'}
+
+async function login(){
+  const user=gid('loginUser').value;
+  const pass=gid('loginPass').value;
+  const btn=gid('loginBtn');
+  const err=gid('loginError');
+  btn.disabled=true;btn.textContent='Вход...';err.style.display='none';
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+    const d=await r.json();
+    if(d.token){token=d.token;localStorage.setItem('wp_token',token);showDash();initDashboard()}
+    else{err.style.display='block';btn.disabled=false;btn.textContent='Войти'}
+  }catch(e){err.textContent=e.message;err.style.display='block';btn.disabled=false;btn.textContent='Войти'}
+}
+
+function authHeaders(){return token?{Authorization:'Bearer '+token}:{}}
+
+async function fetchWithAuth(url,opts){
+  opts=opts||{};opts.headers={...opts.headers,...authHeaders()};
+  const r=await fetch(url,opts);if(r.status===401){logout();throw new Error('Сессия истекла')}
+  return r;
+}
+
+function logout(){localStorage.removeItem('wp_token');token=null;showLogin()}
+
+function snack(msg,err){
+  const el=gid('snack');
+  el.textContent=msg;el.className='snack'+(err?' error':'');el.style.display='block';
+  setTimeout(()=>el.style.display='none',3000);
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  event.target.classList.add('active');
+  gid(tab+'Tab').classList.add('active');
+  if(tab==='players')loadPlayers();
+}
+
+function appendConsole(boxId,text,cls){
+  const box=gid(boxId);
+  if(!box)return;
+  const line=document.createElement('div');
+  line.className='line'+(cls?' '+cls:'');
+  line.textContent=text;
+  box.appendChild(line);
+  box.scrollTop=box.scrollHeight;
+  if(box.children.length>500)box.removeChild(box.firstChild);
+}
+
+async function action(type){
+  document.querySelectorAll('.actions .btn').forEach(b=>b.disabled=true);
+  try{
+    const r=await fetchWithAuth('/api/'+type,{method:'POST'});
+    const d=await r.json();
+    if(d.error){snack(d.error,true)}else{snack('ОК')}
+  }catch(e){snack(e.message,true)}
+  document.querySelectorAll('.actions .btn').forEach(b=>b.disabled=false);fetchStatus();
+}
+
+async function update(){
+  const btn=gid('btnUpdate');btn.disabled=true;btn.innerHTML='↓ Обновление...';
+  try{
+    const r=await fetchWithAuth('/api/update',{method:'POST'});
+    const d=await r.json();
+    if(d.error){snack(d.error,true)}else{snack('Обновление: '+d.result)}
+  }catch(e){snack(e.message,true)}
+  btn.innerHTML='↓ Обновить';btn.disabled=false;
+}
+
+async function fetchStatus(){
+  try{
+    const r=await fetchWithAuth('/api/status');
+    const s=await r.json();
+    const badge=gid('statusBadge');
+    badge.textContent=s.running?'ОНЛАЙН':'ОФЛАЙН';
+    badge.className='badge '+(s.running?'online':'offline');
+    gid('statPlayers').textContent=s.players||0;
+    gid('statMax').textContent='макс '+(s.maxPlayers||0);
+    gid('statRam').innerHTML=(s.memoryUsage||0)+' <span style="font-size:14px;font-weight:400;color:var(--muted)">МБ</span>';
+    gid('statUptime').textContent=fmtUptime(s.uptime);
+    gid('statUptimeSub').textContent=s.running?'Работает':'Сервер остановлен';
+    gid('btnStart').disabled=s.running;
+    gid('btnStop').disabled=!s.running;
+    gid('btnRestart').disabled=false;
+  }catch(e){}
+}
+
+function fmtUptime(ms){
+  if(!ms)return'-';const s=Math.floor(ms/1000);const d=Math.floor(s/86400);
+  const h=Math.floor((s%86400)/3600);const m=Math.floor((s%3600)/60);
+  if(d>0)return d+'д '+h+'ч';return h+'ч '+m+'м';
+}
+
+async function rconConnect(){
+  const host=gid('rconHost').value;
+  const port=parseInt(gid('rconPort').value);
+  const password=gid('rconPassword').value;
+  const btn=gid('btnRconConnect');
+  btn.disabled=true;btn.textContent='Подключение...';
+  try{
+    const r=await fetchWithAuth('/api/rcon/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,port,password})});
+    const d=await r.json();
+    if(d.success){
+      appendConsole('rconConsole','[SYSTEM] '+d.response,'connect');
+      updateRconStatus(true);
+      snack('Подключено к RCON');
+    }else{
+      appendConsole('rconConsole','[ERROR] '+d.error,'error');
+      snack(d.error,true);
+    }
+  }catch(e){appendConsole('rconConsole','[ERROR] '+e.message,'error');snack(e.message,true)}
+  btn.disabled=false;btn.textContent='Подключиться';
+}
+
+async function sendCommand(){
+  const cmd=gid('commandInput').value.trim();
+  if(!cmd)return;
+  appendConsole('rconConsole','$ '+cmd);
+  try{
+    const r=await fetchWithAuth('/api/rcon/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
+    const d=await r.json();
+    if(d.success){appendConsole('rconConsole',d.response)}else{appendConsole('rconConsole','[ERROR] '+d.error,'error')}
+    gid('commandInput').value='';
+  }catch(e){appendConsole('rconConsole','[ERROR] '+e.message,'error')}
+}
+
+function updateRconStatus(connected){
+  const badge=gid('rconBadge');
+  badge.textContent=connected?'RCON ONLINE':'RCON OFFLINE';
+  badge.className='badge '+(connected?'online':'offline');
+}
+
+async function loadPlayers(){
+  try{
+    const r=await fetchWithAuth('/api/players/online');
+    const d=await r.json();
+    players=d.players||[];
+    renderPlayers();
+  }catch(e){console.error('Failed to load players:',e)}
+}
+
+function formatDuration(seconds){
+  const h=Math.floor(seconds/3600);
+  const m=Math.floor((seconds%3600)/60);
+  const s=seconds%60;
+  if(h>0)return h+'ч '+m+'м';
+  if(m>0)return m+'м '+s+'с';
+  return s+'с';
+}
+
+function renderPlayers(){
+  const tbody=gid('playersTable');
+  gid('playerCount').textContent=players.length+' онлайн';
+  if(players.length===0){
+    tbody.innerHTML='<tr><td colspan="4" align="center">Нет игроков онлайн</td></tr>';
+    return;
+  }
+  tbody.innerHTML=players.map(p=>`
+    <tr>
+      <td>${p.name}</td>
+      <td style="font-family:monospace;font-size:12px">${p.steamId}</td>
+      <td>${formatDuration(p.duration)}</td>
+      <td class="player-actions">
+        <button class="btn btn-warning" onclick="playerAction('${p.steamId}','setAttributes',{strength:8,dexterity:5,stamina:5,intellect:5})">⚡ Атрибуты</button>
+        <button class="btn btn-primary" onclick="playerAction('${p.steamId}','godMode',{enabled:true})">🛡 God</button>
+        <button class="btn btn-danger" onclick="playerAction('${p.steamId}','suicide',{})">💀 Kill</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function playerAction(steamId,action,params){
+  try{
+    const r=await fetchWithAuth('/api/players/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({steamId,action,params})});
+    const d=await r.json();
+    if(d.success){snack('Команда отправлена')}else{snack(d.error,true)}
+  }catch(e){snack(e.message,true)}
+}
+
+function initDashboard(){
+  const evtSource=new EventSource('/api/console?token='+token);
+  evtSource.addEventListener('line',(e)=>{appendConsole('console',e.data)});
+  evtSource.addEventListener('connected',()=>{appendConsole('console','[Веб-панель подключена]','connect')});
+  setInterval(fetchStatus,5000);
+  setInterval(loadPlayers,5000);
+  fetchStatus();
+  checkRconStatus();
+}
+
+async function checkRconStatus(){
+  try{
+    const r=await fetchWithAuth('/api/rcon/status');
+    const d=await r.json();
+    updateRconStatus(d.connected);
+  }catch(e){}
+}
+
+(function(){
+  if(!token||token.length<10){showLogin();return}
+  fetchWithAuth('/api/status').then(r=>{showDash();initDashboard()}).catch(()=>showLogin());
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "name": "scum-server-manager",
-  "version": "1.3.0",
+  "version": "2.1.0",
   "description": "SCUM Dedicated Server Manager — управление, мониторинг и настройка SCUM сервера",
   "main": "dist/main/index.js",
   "scripts": {
@@ -9,9 +9,10 @@
     "dev:main:watch": "concurrently \"tsc -p src/main/tsconfig.json --watch\" \"wait-on dist/main/index.js && electron dist/main/index.js\"",
     "dev:renderer": "vite",
     "dev:unified": "concurrently \"npm run dev:main:watch\" \"npm run dev:renderer\" --kill-others",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "npm run build:main && npm run build:renderer && npm run copy-assets",
     "build:main": "tsc -p src/main/tsconfig.json",
     "build:renderer": "vite build",
+    "copy-assets": "copyfiles -u 2 \"src/main/*.html\" dist/main/",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "lint": "eslint src/**/*.{ts,tsx}",
@@ -34,6 +35,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "asar": "^3.2.0",
     "concurrently": "^8.2.2",
+    "copyfiles": "^2.4.1",
     "electron": "^27.1.3",
     "electron-builder": "^24.6.4",
     "electron-packager": "^17.1.2",
@@ -46,6 +48,7 @@
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.15.1",
     "@mui/material": "^5.15.1",
+    "asar": "^3.2.0",
     "chokidar": "^4.0.3",
     "electron-store": "^8.1.0",
     "fs-extra": "^11.1.1",
@@ -55,7 +58,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
-    "sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "srcds-rcon": "^2.2.1"
   },
   "build": {
     "appId": "com.scumservermanager.app",
@@ -64,8 +68,9 @@
       "output": "release"
     },
     "files": [
-      "dist/main/**/*",
-      "dist/renderer/**/*"
+      "**/dist/main/**/*",
+      "**/dist/renderer/**/*",
+      "!src/**/*"
     ],
     "extraResources": [
       {
@@ -74,9 +79,12 @@
         "filter": [
           "*.exe"
         ]
+      },
+      {
+        "from": "iditem.txt",
+        "to": "iditem.txt"
       }
     ],
-
     "asar": true,
     "asarUnpack": [
       "**/*.wasm",

@@ -1,0 +1,3261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCUM Server Manager</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh;font-size:14px;display:flex}
+.login-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1000;background:var(--bg)}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:32px;width:360px;text-align:center}
+.login-box h1{font-size:20px;font-weight:700;margin-bottom:24px}
+.login-box input{width:100%;padding:10px 12px;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:14px}
+.login-box button{width:100%;padding:10px;background:var(--accent);border:none;border-radius:4px;color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+.login-box button:hover{opacity:0.9}
+.error-msg{color:var(--red);margin-top:12px;font-size:13px}
+.app-container{display:flex;width:100%;height:100vh}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 0}
+.sidebar-header{padding:0 16px 16px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.sidebar-header h2{font-size:16px;font-weight:700}
+.nav-item{padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:background 0.2s;border-left:3px solid transparent}
+.nav-item:hover{background:rgba(88,166,255,0.1)}
+.nav-item.active{background:rgba(88,166,255,0.15);border-left-color:var(--accent);color:var(--accent)}
+.nav-icon{font-size:18px;width:24px;text-align:center}
+.main-content{flex:1;overflow:auto;padding:24px}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px}
+.card h3{font-size:16px;font-weight:600;margin-bottom:16px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px}
+.stat-label{font-size:12px;color:var(--muted);margin-bottom:8px}
+.stat-value{font-size:24px;font-weight:700}
+.btn{padding:8px 16px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s}
+.btn:hover{background:var(--border)}
+.btn-success{background:#238636;border-color:#238636;color:#fff}
+.btn-success:hover{background:#2ea043}
+.btn-danger{background:#da3633;border-color:#da3633;color:#fff}
+.btn-danger:hover{background:#f85149}
+.btn-warning{background:#9e6a03;border-color:#9e6a03;color:#fff}
+.btn-warning:hover{background:#bb8009}
+.btn-primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.btn-primary:hover{background:#388bfd}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.console-container{background:#000;border:1px solid var(--border);border-radius:4px;padding:12px;font-family:'Consolas',monospace;font-size:13px;height:400px;overflow-y:auto;margin-bottom:12px}
+.console-line{margin-bottom:4px;white-space:pre-wrap;word-break:break-all}
+.console-input{display:flex;gap:8px}
+.console-input input{flex:1;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'Consolas',monospace;font-size:13px}
+.table-container{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px;text-align:left;border-bottom:1px solid var(--border)}
+th{background:var(--surface);font-weight:600;font-size:12px;text-transform:uppercase;color:var(--muted)}
+tr:hover{background:rgba(88,166,255,0.05)}
+.player-actions{display:flex;gap:6px;flex-wrap:wrap}
+.player-btn{padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:3px;background:var(--surface);color:var(--text);cursor:pointer;transition:all 0.2s}
+.player-btn:hover{background:var(--border)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal-overlay.sub-modal{z-index:1001}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:24px;width:400px;max-width:90vw}
+.modal h3{margin-bottom:16px}
+.modal input{width:100%;padding:8px 12px;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.status-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px}
+.status-online{background:var(--green)}
+.status-offline{background:var(--muted)}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;font-size:12px;color:var(--muted)}
+.form-group input,.form-group select{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)}
+.player-card{max-width:900px;width:90vw;max-height:80vh;overflow-y:auto}
+.toast-notification{padding:14px 20px;border-radius:8px;font-size:14px;max-width:350px;box-shadow:0 4px 16px rgba(0,0,0,0.3);transform:translateX(100%);opacity:0;transition:transform 0.3s ease,opacity 0.3s ease;pointer-events:auto}
+.toast-notification.show{transform:translateX(0);opacity:1}
+.toast-success{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff}
+.toast-error{background:linear-gradient(135deg,#c62828,#e53935);color:#fff}
+.toast-warning{background:linear-gradient(135deg,#f57f17,#ffb300);color:#fff}
+.toast-info{background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff}
+.player-card-header{display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.player-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff}
+.player-info h3{font-size:20px;margin-bottom:4px}
+.player-info p{color:var(--muted);font-size:13px}
+.player-stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}
+.stat-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px}
+.stat-box-label{font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.stat-box-value{font-size:18px;font-weight:700;color:var(--accent)}
+.player-actions-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.action-btn{padding:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;transition:all 0.2s;text-align:left;display:flex;align-items:center;gap:8px}
+.action-btn:hover{background:var(--border);transform:translateY(-1px)}
+.action-btn.danger{border-color:var(--red);color:var(--red)}
+.action-btn.danger:hover{background:rgba(248,81,73,0.1)}
+.action-btn.success{border-color:var(--green);color:var(--green)}
+.action-btn.success:hover{background:rgba(63,185,80,0.1)}
+.suggestion-item{padding:8px 12px;cursor:pointer;transition:background 0.15s;font-size:13px}
+.suggestion-item:hover,.suggestion-item.highlighted{background:rgba(88,166,255,0.15);color:var(--accent)}
+.suggestion-item strong{font-weight:600}
+.wargm-subtab{padding:10px 20px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all 0.2s}
+.wargm-subtab.active{background:var(--surface);color:var(--text);border-bottom-color:var(--surface)}
+.wargm-subtab:hover{color:var(--text)}
+.wargm-subtab-content{display:none}
+.wargm-subtab-content.active{display:block}
+.packs-subtab{padding:10px 20px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all 0.2s}
+.packs-subtab.active{background:var(--surface);color:var(--text);border-bottom-color:var(--surface)}
+.packs-subtab:hover{color:var(--text)}
+.packs-subtab-content{display:none}
+.packs-subtab-content.active{display:block}
+</style>
+</head>
+<body>
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h1 data-i18n="login.title">🎮 SCUM Server Manager</h1>
+    <input type="text" id="username" data-i18n-placeholder="login.username" placeholder="Имя пользователя" value="admin">
+    <input type="password" id="password" data-i18n-placeholder="login.password" placeholder="Пароль">
+    <button onclick="login()" data-i18n="login.button">Войти</button>
+    <div class="error-msg" id="loginError"></div>
+  </div>
+</div>
+
+<div class="app-container" id="appContainer" style="display:none">
+  <div class="sidebar">
+    <div class="sidebar-header" style="display:flex;align-items:center;justify-content:space-between">
+      <h2>🎮 SCUM Manager</h2>
+      <button id="langToggle" class="btn" onclick="switchLanguage()" title="English" style="padding:4px 8px;font-size:11px;min-width:36px">EN</button>
+    </div>
+    <div class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <span class="nav-icon">📊</span>
+      <span data-i18n="nav.dashboard">Дашборд</span>
+    </div>
+    <div class="nav-item" data-tab="rcon" onclick="switchTab('rcon')">
+      <span class="nav-icon">💻</span>
+      <span data-i18n="nav.rcon">RCON Консоль</span>
+    </div>
+    <div class="nav-item" data-tab="players" onclick="switchTab('players')">
+      <span class="nav-icon">👥</span>
+      <span data-i18n="nav.players">Игроки</span>
+    </div>
+    <div class="nav-item" data-tab="packs" onclick="switchTab('packs')">
+      <span>🎒</span>
+      <span data-i18n="nav.packs">Модули</span>
+    </div>
+    <div class="nav-item" data-tab="cooldowns" onclick="switchTab('cooldowns'); loadCooldowns()">
+      <span>🕒</span>
+      <span data-i18n="nav.cooldowns">Кулдауны</span>
+    </div>
+    <div class="nav-item" data-tab="wargm" onclick="switchTab('wargm')">
+      <span class="nav-icon">🛒</span>
+      <span data-i18n="nav.wargm">WARGM</span>
+    </div>
+    <div class="nav-item" data-tab="settings" onclick="switchTab('settings')">
+      <span class="nav-icon">⚙️</span>
+      <span data-i18n="nav.settings">Настройки</span>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <!-- Dashboard Tab -->
+    <div class="tab-content active" id="tab-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label" data-i18n="status.server">Статус сервера</div>
+          <div class="stat-value" id="serverStatus"><span class="status-indicator status-offline"></span><span data-i18n="status.unknown">Неизвестно</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label" data-i18n="status.players">Игроков онлайн</div>
+          <div class="stat-value" id="playerCount">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label" data-i18n="status.uptime">Время работы</div>
+          <div class="stat-value" id="serverUptime">0:00:00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label" data-i18n="status.memory">Использование RAM</div>
+          <div class="stat-value" id="serverMemory">0 MB</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label" data-i18n="status.rcon">Статус RCON</div>
+          <div class="stat-value" id="rconStatus"><span class="status-indicator status-offline"></span><span data-i18n="status.disconnected">Отключен</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 data-i18n="server.control">Управление сервером</h3>
+        <div class="actions">
+          <button class="btn btn-success" onclick="serverAction('start')"><span data-i18n="server.start">▶ Старт</span></button>
+          <button class="btn btn-danger" onclick="serverAction('stop')"><span data-i18n="server.stop">⏹ Стоп</span></button>
+          <button class="btn btn-warning" onclick="serverAction('restart')"><span data-i18n="server.restart">↻ Перезапуск</span></button>
+          <button class="btn" onclick="serverAction('update')"><span data-i18n="server.update">↓ Обновить сервер</span></button>
+          <button class="btn" onclick="refreshDashboard()"><span data-i18n="server.refresh">⟳ Обновить</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 data-i18n="console.output">Вывод консоли</h3>
+        <div class="console-container" id="dashboardConsole"></div>
+      </div>
+    </div>
+
+    <!-- RCON Tab -->
+    <div class="tab-content" id="tab-rcon">
+      <div class="card">
+        <h3 data-i18n="rcon.console">RCON Консоль</h3>
+        <div class="console-container" id="rconConsole"></div>
+        <div class="console-input">
+          <input type="text" id="rconCommand" data-i18n-placeholder="rcon.command" placeholder="Введите команду..." onkeydown="handleRconKey(event)">
+          <button class="btn btn-primary" onclick="sendRconCommand()" data-i18n="rcon.send">Отправить</button>
+        </div>
+        <div class="quick-commands" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn" onclick="fillCommand('ListPlayers')" style="font-size:12px;padding:6px 10px">ListPlayers</button>
+          <button class="btn" onclick="fillCommand('SetTime')" style="font-size:12px;padding:6px 10px">SetTime</button>
+          <button class="btn" onclick="fillCommand('SetWeather')" style="font-size:12px;padding:6px 10px">SetWeather</button>
+          <button class="btn" onclick="fillCommand('ScheduleWorldEvent BP_CargoDropEvent')" style="font-size:12px;padding:6px 10px">ScheduleCargoDrop</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Players Tab -->
+    <div class="tab-content" id="tab-players">
+      <div class="card">
+        <h3><span data-i18n="players.title">Игроки онлайн</span> (<span id="onlinePlayerCount">0</span>)</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="players.name">Имя</th>
+                <th data-i18n="players.steamId">Steam ID</th>
+                <th data-i18n="players.connected">Подключен</th>
+                <th data-i18n="players.actions">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="playersTableBody">
+              <tr><td colspan="4" style="text-align:center;color:var(--muted)" data-i18n="players.noPlayers">Нет игроков онлайн</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loot Packs Tab -->
+    <div class="tab-content" id="tab-packs">
+      <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border)">
+        <button class="btn packs-subtab active" data-subtab="starter" onclick="switchPacksSubtab('starter')" style="border-radius:4px 4px 0 0;border-bottom:none">
+          🎒 <span data-i18n="packs.subtabTitle">Наборы</span>
+        </button>
+        <button class="btn packs-subtab" data-subtab="teleport" onclick="switchPacksSubtab('teleport'); loadTeleportLocations()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          📍 <span data-i18n="teleport.subtabTitle">Телепорт</span>
+        </button>
+        <button class="btn packs-subtab" data-subtab="vip" onclick="switchPacksSubtab('vip'); loadVipConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          👑 <span data-i18n="vip.subtabTitle">VIP</span>
+        </button>
+        <button class="btn packs-subtab" data-subtab="savehome" onclick="switchPacksSubtab('savehome'); loadSaveHomeConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          🏠 <span data-i18n="savehome.subtabTitle">Дом</span>
+        </button>
+      </div>
+
+      <!-- Starter/Daily packs -->
+      <div class="packs-subtab-content active" id="subtab-starter">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div class="card" style="flex:1;min-width:350px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">🎒 <span data-i18n="packs.starter">Стартовый набор</span></h3>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="starterEnabled" onchange="onPackChanged()">
+                <span data-i18n="packs.enabled">Включен</span>
+              </label>
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="display:block;margin-bottom:4px;font-size:13px" data-i18n="packs.cooldown">Кулдаун (часы)</label>
+              <input type="number" id="starterCooldown" value="0" min="0" max="8760" style="width:80px" onchange="onPackChanged()">
+              <span style="font-size:11px;color:var(--muted);margin-left:6px" data-i18n="packs.cooldownHint">0 = один раз</span>
+            </div>
+            <div id="starterItems"></div>
+            <button class="btn" onclick="addPackItem('starter')" style="margin-top:8px;width:100%">+ <span data-i18n="packs.addItem">Добавить предмет</span></button>
+          </div>
+          <div class="card" style="flex:1;min-width:350px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">📅 <span data-i18n="packs.daily">Ежедневный набор</span></h3>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="dailyEnabled" onchange="onPackChanged()">
+                <span data-i18n="packs.enabled">Включен</span>
+              </label>
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="display:block;margin-bottom:4px;font-size:13px" data-i18n="packs.cooldown">Кулдаун (часы)</label>
+              <input type="number" id="dailyCooldown" value="24" min="1" max="168" style="width:80px" onchange="onPackChanged()">
+            </div>
+            <div id="dailyItems"></div>
+            <button class="btn" onclick="addPackItem('daily')" style="margin-top:8px;width:100%">+ <span data-i18n="packs.addItem">Добавить предмет</span></button>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:12px">
+          <button class="btn btn-primary" onclick="savePacks()" data-i18n="packs.save">💾 Сохранить</button>
+          <button class="btn" onclick="loadPacks()" data-i18n="packs.refresh">⟳ Обновить</button>
+        </div>
+      </div>
+
+      <!-- Teleport locations -->
+      <div class="packs-subtab-content" id="subtab-teleport">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0" data-i18n="teleport.title">📍 Точки телепортации</h3>
+            <button class="btn btn-primary" onclick="addTeleportLocation()" data-i18n="teleport.addLocation">+ Добавить точку</button>
+          </div>
+          <div id="teleportLocationsList"></div>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            <button class="btn btn-success" onclick="saveTeleportLocations()" data-i18n="teleport.save">💾 Сохранить точки</button>
+          </div>
+        </div>
+        <div class="card" style="background:var(--bg);font-size:13px">
+          <p style="color:var(--muted)" data-i18n="teleport.help">Игроки используют !телепорт для просмотра списка и !телепорт N для перемещения. Стоимость списывается с баланса игрока (деньги). Команда: Teleport X Y Z SteamID</p>
+        </div>
+      </div> <!-- end teleport -->
+
+      <!-- VIP -->
+      <div class="packs-subtab-content" id="subtab-vip">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0" data-i18n="vip.title">👑 VIP игроки</h3>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:12px">
+              <input type="checkbox" id="vipEnabled" onchange="onVipChanged()">
+              <span data-i18n="vip.enabled">VIP включен</span>
+            </label>
+          </div>
+          <div id="vipPlayersList"></div>
+          <button class="btn btn-primary" onclick="addVipPlayer()" style="margin-top:8px">+ <span data-i18n="vip.addPlayer">Добавить игрока</span></button>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div class="card" style="flex:1;min-width:300px">
+            <h3 style="margin-bottom:12px" data-i18n="vip.starterBonus">🎒 VIP бонус к стартовому набору</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="vip.money">Деньги</label><input type="number" id="vipStarterMoney" value="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVipChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="vip.gold">Золото</label><input type="number" id="vipStarterGold" value="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVipChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="vip.fame">Слава</label><input type="number" id="vipStarterFame" value="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVipChanged()"></div>
+            </div>
+            <div id="vipStarterItems"></div>
+            <button class="btn" onclick="addVipItem('starter')" style="margin-top:8px;width:100%">+ <span data-i18n="packs.addItem">Добавить предмет</span></button>
+          </div>
+          <div class="card" style="flex:1;min-width:300px">
+            <h3 style="margin-bottom:12px" data-i18n="vip.dailyBonus">📅 VIP бонус к ежедневному набору</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="vip.money">Деньги</label><input type="number" id="vipDailyMoney" value="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVipChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="vip.gold">Золото</label><input type="number" id="vipDailyGold" value="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVipChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="vip.fame">Слава</label><input type="number" id="vipDailyFame" value="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVipChanged()"></div>
+            </div>
+            <div id="vipDailyItems"></div>
+            <button class="btn" onclick="addVipItem('daily')" style="margin-top:8px;width:100%">+ <span data-i18n="packs.addItem">Добавить предмет</span></button>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:12px">
+          <button class="btn btn-success" onclick="saveVipConfig()" data-i18n="vip.save">💾 Сохранить VIP</button>
+        </div>
+      </div>
+      
+      <!-- Save Home -->
+      <div class="packs-subtab-content" id="subtab-savehome">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0" data-i18n="savehome.title">🏠 Сохранение дома</h3>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:12px">
+              <input type="checkbox" id="savehomeEnabled" onchange="onSaveHomeChanged()">
+              <span data-i18n="savehome.enabled">Модуль включен</span>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="savehome.maxLocations">Макс. локаций (обычный)</label>
+              <input type="number" id="savehomeMaxLocations" value="1" min="1" max="20" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onSaveHomeChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="savehome.vipMaxLocations">Макс. локаций (VIP)</label>
+              <input type="number" id="savehomeVipMaxLocations" value="3" min="1" max="20" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onSaveHomeChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="savehome.teleportPrice">Цена телепорта ($)</label>
+              <input type="number" id="savehomeTeleportPrice" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onSaveHomeChanged()">
+            </div>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            <button class="btn btn-success" onclick="saveSaveHomeConfig()" data-i18n="savehome.save">💾 Сохранить</button>
+          </div>
+        </div>
+        <div class="card" style="background:var(--bg);font-size:13px">
+          <p style="color:var(--muted)" data-i18n="savehome.help">Игроки используют !сохранитьдом для сохранения текущей позиции и !дом для телепорта к сохранённой точке. !дома — список сохранений.</p>
+        </div>
+      </div> <!-- end savehome -->
+
+    </div> <!-- end tab-packs -->
+    <div class="tab-content" id="tab-cooldowns">
+      <div class="card">
+        <h3 style="margin-bottom:12px" data-i18n="packs.cooldownsTitle">🕒 Кулдауны наборов</h3>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <input type="text" id="cooldownFilterSteamId" placeholder="76561198..." style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+          <button class="btn btn-warning" onclick="resetAllCooldowns()" data-i18n="packs.resetAllCooldowns">🔄 Сбросить все кулдауны</button>
+          <button class="btn" onclick="loadCooldowns()" data-i18n="packs.refreshCooldowns">⟳</button>
+        </div>
+        <div id="cooldownsList" style="font-size:13px">
+          <p style="color:var(--muted)" data-i18n="packs.noCooldowns">Нет активных кулдаунов</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- WARGM Tab -->
+    <div class="tab-content" id="tab-wargm">
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border)">
+        <button class="btn wargm-subtab active" data-subtab="connection" onclick="switchWargmSubtab('connection')" style="border-radius:4px 4px 0 0;border-bottom:none">
+          🔌 <span data-i18n="wargm.connection">Подключение</span>
+        </button>
+        <button class="btn wargm-subtab" data-subtab="cards" onclick="switchWargmSubtab('cards'); wargmLoadCards()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          📋 <span data-i18n="wargm.cards">Карточки</span>
+        </button>
+      </div>
+
+      <!-- Connection settings -->
+      <div class="wargm-subtab-content active" id="subtab-connection">
+        <div class="card">
+          <h3 data-i18n="wargm.apiSettings">🔌 Подключение к API</h3>
+          <div class="form-group">
+            <label data-i18n="wargm.apiUrl">API URL</label>
+            <input type="text" id="wargmApiUrl" value="https://api.wargm.ru/v1/" placeholder="https://api.wargm.ru/v1/">
+          </div>
+          <div class="form-group">
+            <label data-i18n="wargm.shopId">Shop ID</label>
+            <input type="text" id="wargmShopId" placeholder="1234">
+          </div>
+          <div class="form-group">
+            <label data-i18n="wargm.apiKey">API Key</label>
+            <input type="password" id="wargmApiKey">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label data-i18n="wargm.timeout">Таймаут (сек)</label>
+              <input type="number" id="wargmTimeout" value="10" min="1" max="60">
+            </div>
+            <div class="form-group">
+              <label data-i18n="wargm.duplicateCheck">Проверка дубликатов (мин)</label>
+              <input type="number" id="wargmDuplicateCheck" value="5" min="0" max="1440">
+            </div>
+            <div class="form-group">
+              <label data-i18n="wargm.cooldown">Кулдаун команды (сек)</label>
+              <input type="number" id="wargmCooldown" value="30" min="0" max="3600">
+            </div>
+            <div class="form-group">
+              <label data-i18n="wargm.maxItems">Макс. предметов в карточке</label>
+              <input type="number" id="wargmMaxItems" value="50" min="1" max="500">
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" onclick="wargmTestConnection()" data-i18n="wargm.test">🔍 Проверить подключение</button>
+            <button class="btn btn-success" onclick="wargmSaveSettings()" data-i18n="wargm.save">💾 Сохранить</button>
+          </div>
+          <div id="wargmTestResult" style="margin-top:8px;font-size:13px"></div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+            <h4 style="margin-bottom:8px;font-size:14px" data-i18n="wargm.debugCheck">🔍 Отладка: проверить покупки игрока</h4>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="wargmDebugSteamId" placeholder="76561198..." style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+              <button class="btn btn-warning" onclick="wargmDebugCheck()" data-i18n="wargm.check">🔎 Проверить</button>
+            </div>
+            <div id="wargmDebugResult" style="margin-top:8px;padding:8px;background:#000;border:1px solid var(--border);border-radius:4px;font-family:'Consolas',monospace;font-size:12px;max-height:400px;overflow:auto;white-space:pre-wrap;display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cards list -->
+      <div class="wargm-subtab-content" id="subtab-cards">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0" data-i18n="wargm.cardsList">📋 Карточки товаров</h3>
+            <div style="display:flex;gap:8px">
+              <button class="btn" onclick="wargmExport()" data-i18n="wargm.export">📤 Экспорт</button>
+              <button class="btn" onclick="document.getElementById('wargmImportInput').click()" data-i18n="wargm.import">📥 Импорт</button>
+              <input type="file" id="wargmImportInput" accept=".json" style="display:none" onchange="wargmImport(event)">
+              <button class="btn btn-primary" onclick="wargmShowCardEditor()" data-i18n="wargm.addCard">+ Добавить карточку</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th data-i18n="wargm.cardName">Название</th>
+                  <th data-i18n="wargm.shopItemId">ID товара в магазине</th>
+                  <th data-i18n="wargm.itemsCount">Правил</th>
+                  <th data-i18n="wargm.enabled">Активна</th>
+                  <th data-i18n="wargm.actions">Действия</th>
+                </tr>
+              </thead>
+              <tbody id="wargmCardsBody">
+                <tr><td colspan="6" style="text-align:center;color:var(--muted)" data-i18n="wargm.noCards">Нет карточек</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Settings Tab -->
+    <div class="tab-content" id="tab-settings">
+      <h3 data-i18n="settings.title">⚙️ Настройки сервера</h3>
+      <div class="card" style="max-width:600px">
+        <div class="form-group">
+          <label data-i18n="settings.steamCmdPath">Путь к SteamCMD</label>
+          <input type="text" id="settingsSteamCmdPath" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'Consolas',monospace">
+        </div>
+        <div class="form-group">
+          <label data-i18n="settings.serverPath">Путь к серверу</label>
+          <input type="text" id="settingsServerPath" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'Consolas',monospace">
+        </div>
+        <div class="actions">
+          <button class="btn btn-success" onclick="saveSettings()" data-i18n="settings.save">💾 Сохранить</button>
+          <button class="btn" onclick="loadSettings()" data-i18n="settings.refresh">⟳ Обновить</button>
+        </div>
+        <div id="settingsStatus" style="margin-top:8px;font-size:13px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modal for player actions -->
+<div class="modal-overlay" id="actionModal" style="display:none;z-index:1001">
+  <div class="modal">
+    <h3 id="modalTitle">Player Action</h3>
+    <div id="modalContent"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" id="modalConfirmBtn" onclick="confirmAction()" data-i18n="modal.confirm">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Player Details Card -->
+<div class="modal-overlay" id="playerCardModal" style="display:none">
+  <div class="modal player-card">
+    <div class="player-card-header">
+      <div class="player-avatar" id="playerAvatar">D</div>
+      <div class="player-info">
+        <h3 id="playerCardName">Player Name</h3>
+        <p id="playerCardSteamId">Steam ID: 76561198000000000</p>
+      </div>
+    </div>
+    
+    <div class="player-stats-grid" id="playerStatsGrid">
+      <!-- Stats will be inserted here -->
+    </div>
+    
+    <h3 style="margin-bottom:12px;font-size:16px" data-i18n="playerCard.rconActions">Действия RCON</h3>
+    <div class="player-actions-grid" id="playerActionsGrid">
+      <!-- Action buttons will be inserted here -->
+    </div>
+    
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn" onclick="closePlayerCard()" data-i18n="modal.close">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- Give Items Modal -->
+<div class="modal-overlay sub-modal" id="giveItemModal" style="display:none">
+  <div class="modal">
+    <h3 id="giveItemPlayerName">Give Items</h3>
+    <div class="form-group" style="position:relative">
+      <label data-i18n="items.search">Поиск предметов</label>
+      <input type="text" id="giveItemId" data-i18n-placeholder="items.search" placeholder="Поиск предметов..." oninput="showItemSuggestions()" onkeydown="handleItemKeydown(event)" autocomplete="off">
+      <div id="itemSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:4px"></div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="items.amount">Количество</label>
+      <input type="number" id="giveItemAmount" value="1" min="1" max="100">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeGiveItemModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeGiveItem()" data-i18n="items.give">Выдать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Spawn Vehicle Modal -->
+<div class="modal-overlay sub-modal" id="spawnVehicleModal" style="display:none">
+  <div class="modal">
+    <h3 id="spawnVehiclePlayerName">Spawn Vehicle</h3>
+    <div class="form-group" style="position:relative">
+      <label data-i18n="vehicles.search">Поиск ТС</label>
+      <input type="text" id="spawnVehicleId" data-i18n-placeholder="vehicles.search" placeholder="Поиск ТС..." oninput="showVehicleSuggestions()" onkeydown="handleVehicleKeydown(event)" autocomplete="off">
+      <div id="vehicleSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:4px"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSpawnVehicleModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeSpawnVehicle()" data-i18n="vehicles.spawn">Заспавнить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Give Money Modal -->
+<div class="modal-overlay sub-modal" id="giveMoneyModal" style="display:none">
+  <div class="modal">
+    <h3 id="giveMoneyPlayerName">Give Money</h3>
+    <div class="form-group">
+      <label data-i18n="playerCard.normalBalance">Деньги</label>
+      <input type="number" id="giveMoneyAmount" value="1000" min="1" max="1000000">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeGiveMoneyModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeGiveMoney()" data-i18n="money.give">💰 Выдать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Give Gold Modal -->
+<div class="modal-overlay sub-modal" id="giveGoldModal" style="display:none">
+  <div class="modal">
+    <h3 id="giveGoldPlayerName">Give Gold</h3>
+    <div class="form-group">
+      <label data-i18n="playerCard.goldBalance">Золото</label>
+      <input type="number" id="giveGoldAmount" value="100" min="1" max="100000">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeGiveGoldModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeGiveGold()" data-i18n="gold.give">🏆 Выдать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Set Fame Modal -->
+<div class="modal-overlay sub-modal" id="setFameModal" style="display:none">
+  <div class="modal">
+    <h3 id="setFamePlayerName">Set Fame Points</h3>
+    <div class="form-group">
+      <label data-i18n="playerCard.fame">Очки славы</label>
+      <input type="number" id="setFameAmount" value="1000" min="0" max="1000000">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSetFameModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeSetFame()" data-i18n="fame.set">⭐ Установить</button>
+    </div>
+  </div>
+</div>
+
+<!-- WARGM Card Editor Modal -->
+<div class="modal-overlay sub-modal" id="wargmCardModal" style="display:none">
+  <div class="modal" style="width:650px;max-height:85vh;overflow-y:auto">
+    <h3 id="wargmCardModalTitle" data-i18n="wargm.editCard">📝 Редактирование карточки</h3>
+    <div class="form-group">
+      <label data-i18n="wargm.cardName">Название карточки</label>
+      <input type="text" id="wargmCardName" placeholder="Starter Pack">
+    </div>
+    <div class="form-group">
+      <label data-i18n="wargm.shopItemId">ID товара в магазине</label>
+      <input type="text" id="wargmShopItemId" placeholder="4421">
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="wargmCardEnabled" checked>
+      <label data-i18n="wargm.enabled">Активна</label>
+    </div>
+
+    <h4 style="margin:16px 0 12px;font-size:14px" data-i18n="wargm.deliveryRules">🚚 Правила выдачи</h4>
+    <div id="wargmCardItems"></div>
+    <button class="btn" onclick="wargmAddItem()" style="width:100%;margin-top:8px" data-i18n="wargm.addRule">+ Добавить правило</button>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="wargmCloseCardEditor()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="wargmSaveCard()" data-i18n="modal.save">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Teleport to Coordinates Modal -->
+<div class="modal-overlay sub-modal" id="teleportCoordModal" style="display:none">
+  <div class="modal">
+    <h3 id="teleportCoordPlayerName">📍 Teleport Player</h3>
+    <div class="form-group">
+      <label data-i18n="playerCard.teleportCoords">Координаты (X Y Z)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="teleportCoordX" placeholder="X" step="1" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        <input type="number" id="teleportCoordY" placeholder="Y" step="1" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        <input type="number" id="teleportCoordZ" placeholder="Z" step="1" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeTeleportCoordModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeTeleportCoord()" data-i18n="playerCard.teleportBtn">📍 Телепорт</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let authToken = null;
+let rconConnected = false;
+let currentTab = 'dashboard';
+let selectedPlayer = null;
+let selectedAction = null;
+let rconHistory = [];
+let rconHistoryIndex = -1;
+let selectedItemIndex = -1;
+let cachedPlayersList = [];
+
+// Item database loaded from API
+let allItems = [];
+
+async function loadItems() {
+  try {
+    const h = authToken ? {'Authorization': 'Bearer ' + authToken} : {};
+    const res = await fetch('/api/items', {headers: h});
+    if (res.ok) { allItems = await res.json(); return; }
+  } catch (e) { console.error('Failed to load items:', e); }
+  // Retry after delay if failed
+  setTimeout(loadItems, 2000);
+}
+loadItems();
+
+// SCUM Vehicles Database
+const SCUM_VEHICLES = [
+  'BPC_WolfsWagen',
+  'BPC_Laika',
+  'BPC_Barba',
+  'BPC_Dirtbike',
+  'BPC_CityBike',
+  'BPC_MountainBike',
+  'BPC_Kinglet_Duster',
+  'BPC_Kinglet_Mariner',
+  'BPC_RIS',
+  'BPC_Dinghy',
+  'BPC_Cruiser',
+  'BPC_Tractor',
+  'BPC_SidecarBike'
+];
+
+// ====== Translation System ======
+const translations = {
+  ru: {
+    'nav.dashboard': 'Дашборд',
+    'nav.rcon': 'RCON Консоль',
+    'nav.players': 'Игроки',
+    'nav.packs': 'Модули',
+    'nav.lang': 'EN',
+    'nav.langTitle': 'English',
+    'status.server': 'Статус сервера',
+    'status.players': 'Игроков онлайн',
+    'status.uptime': 'Время работы',
+    'status.memory': 'Использование RAM',
+    'status.rcon': 'Статус RCON',
+    'status.running': 'Запущен',
+    'status.stopped': 'Остановлен',
+    'status.connected': 'Подключен',
+    'status.disconnected': 'Отключен',
+    'status.unknown': 'Неизвестно',
+    'server.control': 'Управление сервером',
+    'server.start': '▶ Старт',
+    'server.stop': '⏹ Стоп',
+    'server.restart': '↻ Перезапуск',
+    'server.update': '↓ Обновить сервер',
+    'server.refresh': '⟳ Обновить',
+    'console.output': 'Вывод консоли',
+    'rcon.connection': 'Подключение RCON',
+    'rcon.host': 'Хост',
+    'rcon.port': 'Порт',
+    'rcon.password': 'Пароль',
+    'rcon.connect': 'Подключиться',
+    'rcon.disconnect': 'Отключиться',
+    'rcon.console': 'RCON Консоль',
+    'rcon.command': 'Введите команду...',
+    'rcon.send': 'Отправить',
+    'players.title': 'Игроки онлайн',
+    'players.name': 'Имя',
+    'players.steamId': 'Steam ID',
+    'players.connected': 'Подключен',
+    'players.actions': 'Действия',
+    'players.noPlayers': 'Нет игроков онлайн',
+    'modal.cancel': 'Отмена',
+    'modal.confirm': 'Подтвердить',
+    'modal.close': 'Закрыть',
+    'playerCard.steamId': 'Steam ID:',
+    'playerCard.fame': 'Очки славы',
+    'playerCard.normalBalance': 'Деньги',
+    'playerCard.goldBalance': 'Золото',
+    'playerCard.lastLogin': 'Последний вход',
+    'playerCard.noDbInfo': 'Нет данных в БД',
+    'playerCard.rconActions': 'Действия RCON',
+    'playerCard.setAttributes': '🏋 Установить атрибуты',
+    'playerCard.giveItems': '🎒 Выдать предметы',
+    'playerCard.giveMoney': '💰 Выдать деньги',
+    'playerCard.giveGold': '🏆 Выдать золото',
+    'playerCard.setFame': '⭐ Установить славу',
+    'playerCard.spawnVehicle': '🚗 Заспавнить ТС',
+    'playerCard.godModeOn': '👼 God Mode ВКЛ',
+    'playerCard.immortalOn': '🛡 Бессмертие ВКЛ',
+    'playerCard.immortalOff': '🛡 Бессмертие ВЫКЛ',
+    'playerCard.showNamePlates': '👤 Показать ники',
+    'playerCard.killPlayer': '💀 Убить игрока',
+    'playerCard.silence': '🔇 Замутить',
+    'playerCard.knockout': '😵 Нокаут',
+    'playerCard.announce': '📢 Объявление',
+    'playerCard.notify': '🔔 Уведомление',
+    'playerCard.chatMessage': '💬 Сообщение в чат',
+    'playerCard.scheduleCargoDrop': '📦 Сброс карго',
+    'playerCard.maxSkills': '🎯 Навыки макс',
+    'playerCard.giveStarterPack': '🎒 Выдать стартовый набор',
+    'playerCard.givingStarterPack': 'Выдаю стартовый набор...',
+    'playerCard.skillsMaxed': 'Все навыки прокачаны!',
+    'playerCard.location': 'Координаты',
+    'playerCard.cargoDropped': '📦 Карго сброшено!',
+    'login.title': '🎮 SCUM Server Manager',
+    'login.username': 'Имя пользователя',
+    'login.password': 'Пароль',
+    'login.button': 'Войти',
+    'login.error.invalid': 'Неверный логин или пароль',
+    'login.error.connection': 'Ошибка подключения',
+    'attr.strength': 'Сила (1-10)',
+    'attr.dexterity': 'Ловкость (1-10)',
+    'attr.stamina': 'Выносливость (1-10)',
+    'attr.intellect': 'Интеллект (1-10)',
+    'actionModal.setAttributes': 'Установить атрибуты —',
+    'actionModal.knockout': 'Нокаут игрока',
+    'actionModal.duration': 'Длительность (сек)',
+    'actionModal.announcement': 'Глобальное объявление —',
+    'actionModal.message': 'Сообщение',
+    'actionModal.notification': 'Отправить уведомление —',
+    'actionModal.type': 'Тип',
+    'actionModal.chat': 'Отправить сообщение —',
+    'actionModal.color': 'Цвет',
+    'items.title': 'Выдать предметы —',
+    'items.search': 'Поиск предметов...',
+    'items.amount': 'Количество',
+    'items.give': 'Выдать',
+    'items.enterId': 'Введите ID предмета',
+    'vehicles.title': 'Заспавнить ТС —',
+    'vehicles.search': 'Поиск ТС...',
+    'vehicles.spawn': 'Заспавнить',
+    'vehicles.enterId': 'Введите ID ТС',
+    'money.title': 'Выдать деньги —',
+    'money.give': '💰 Выдать',
+    'money.enterAmount': 'Введите сумму',
+    'gold.title': 'Выдать золото —',
+    'gold.give': '🏆 Выдать',
+    'fame.title': 'Установить славу —',
+    'fame.set': '⭐ Установить',
+    'fame.enterAmount': 'Введите количество',
+    'notify.info': 'Инфо',
+    'notify.warning': 'Предупреждение',
+    'notify.error': 'Ошибка',
+    'chat.white': 'Белый',
+    'chat.red': 'Красный',
+    'chat.green': 'Зелёный',
+    'chat.blue': 'Синий',
+    'chat.yellow': 'Жёлтый',
+    'chat.orange': 'Оранжевый',
+    'system.connected': 'Подключено успешно',
+    'system.disconnected': 'Отключено',
+    'notification.success': 'Действие выполнено успешно!',
+    'notification.failed': 'Действие не удалось',
+    'notification.giveItemSuccess': 'Предмет успешно выдан!',
+    'notification.giveMoneySuccess': 'Деньги успешно выданы!',
+    'notification.giveGoldSuccess': 'Золото успешно выдано!',
+    'notification.fameSuccess': 'Слава установлена!',
+    'notification.vehicleSpawned': 'ТС заспавнено!',
+    'notification.loadError': 'Ошибка загрузки данных',
+    'notification.enterItem': 'Введите ID предмета',
+    'notification.enterVehicle': 'Введите ID ТС',
+    'notification.enterAmount': 'Введите корректную сумму',
+    'notification.enterFame': 'Введите корректное количество',
+    'console.cmd': '> ',
+    'console.system': '[СИСТЕМА] ',
+    'console.error': '[ОШИБКА] ',
+    'console.empty': '',
+    'data.notAvailable': 'Н/Д',
+    'packs.starter': 'Стартовый набор',
+    'packs.daily': 'Ежедневный набор',
+    'packs.enabled': 'Включен',
+    'packs.cooldown': 'Кулдаун (часы)',
+    'packs.cooldownHint': '0 = один раз',
+    'packs.addItem': 'Добавить предмет',
+    'packs.cooldownsTitle': '🕒 Кулдауны наборов',
+    'packs.noCooldowns': 'Нет активных кулдаунов',
+    'packs.reset': 'Сбросить',
+    'packs.resetAllCooldowns': '🔄 Сбросить все',
+    'packs.refreshCooldowns': '⟳',
+    'packs.cooldownReset': 'Кулдаун сброшен:',
+    'packs.allCooldownsReset': 'Все кулдауны сброшены',
+    'packs.cooldownActive': 'активен',
+    'packs.pack': 'Набор',
+    'packs.actions': 'Действия',
+    'nav.cooldowns': 'Кулдауны',
+    'nav.wargm': 'WARGM',
+    'nav.settings': 'Настройки',
+    'settings.title': '⚙️ Настройки сервера',
+    'settings.steamCmdPath': 'Путь к SteamCMD',
+    'settings.serverPath': 'Путь к серверу',
+    'settings.save': '💾 Сохранить',
+    'settings.refresh': '⟳ Обновить',
+    'settings.saved': 'Настройки сохранены! Перезапустите сервер для применения.',
+    'settings.loadError': 'Ошибка загрузки настроек',
+    'wargm.connection': 'Подключение',
+    'wargm.cards': 'Карточки',
+    'wargm.apiSettings': '🔌 Подключение к API',
+    'wargm.apiUrl': 'API URL',
+    'wargm.shopId': 'Shop ID',
+    'wargm.apiKey': 'API Key',
+    'wargm.timeout': 'Таймаут (сек)',
+    'wargm.duplicateCheck': 'Проверка дубликатов (мин)',
+    'wargm.cooldown': 'Кулдаун команды (сек)',
+    'wargm.maxItems': 'Макс. предметов в карточке',
+    'wargm.test': '🔍 Проверить подключение',
+    'wargm.save': '💾 Сохранить',
+    'wargm.cardsList': '📋 Карточки товаров',
+    'wargm.cardName': 'Название карточки',
+    'wargm.shopItemId': 'ID товара в магазине',
+    'wargm.itemsCount': 'Правил',
+    'wargm.enabled': 'Активна',
+    'wargm.actions': 'Действия',
+    'wargm.noCards': 'Нет карточек',
+    'wargm.addCard': '+ Добавить карточку',
+    'wargm.editCard': '📝 Редактирование карточки',
+    'wargm.addCardNew': '➕ Новая карточка',
+    'wargm.deliveryRules': '🚚 Правила выдачи',
+    'wargm.addRule': '+ Добавить правило',
+    'wargm.fillRequired': 'Заполните название и ID товара',
+    'wargm.addAtLeastOne': 'Добавьте хотя бы одно правило',
+    'wargm.maxItemsExceeded': 'Превышен лимит предметов в карточке',
+    'wargm.cardSaved': 'Карточка сохранена',
+    'wargm.cardDeleted': 'Карточка удалена',
+    'wargm.cardDuplicated': 'Карточка скопирована',
+    'wargm.saved': 'Настройки сохранены',
+    'wargm.testing': '⏳ Проверка соединения...',
+    'wargm.export': '📤 Экспорт',
+    'wargm.import': '📥 Импорт',
+    'wargm.exported': 'Карточки экспортированы',
+    'wargm.imported': 'Карточки импортированы',
+    'wargm.confirmDelete': 'Удалить эту карточку?',
+    'wargm.debugCheck': '🔍 Отладка: проверить покупки игрока',
+    'wargm.check': '🔎 Проверить',
+    'wargm.itemName': 'Shortname предмета',
+    'wargm.vehicleName': 'Название ТС',
+    'wargm.skillName': 'Навык',
+    'wargm.level': 'Уровень',
+    'wargm.amount': 'Количество',
+    'wargm.cargoHint': 'Укажите координаты для дропа',
+    'wargm.cargoHintAuto': 'Дроп по координатам игрока (авто)',
+    'wargm.vehicleHint': 'Спавнится напрямую командой #SpawnVehicle',
+    'wargm.vipDays': 'Дней VIP',
+    'packs.save': '💾 Сохранить',
+    'packs.refresh': '⟳ Обновить',
+    'packs.subtabTitle': 'Наборы',
+    'teleport.subtabTitle': 'Телепорт',
+    'teleport.title': '📍 Точки телепортации',
+    'teleport.addLocation': '+ Добавить точку',
+    'teleport.locationName': 'Название',
+    'teleport.coordX': 'X',
+    'teleport.coordY': 'Y',
+    'teleport.coordZ': 'Z',
+    'teleport.price': 'Цена ($)',
+    'teleport.save': '💾 Сохранить точки',
+    'teleport.delete': 'Удалить',
+    'teleport.help': 'Игроки используют !телепорт для просмотра списка и !телепорт N для перемещения. Стоимость списывается с баланса игрока (деньги). Команда: Teleport X Y Z SteamID',
+    'playerCard.teleportTo': '📍 Телепортировать',
+    'playerCard.teleportCoords': 'Координаты (X Y Z)',
+    'playerCard.teleportBtn': '📍 Телепорт',
+    'vip.subtabTitle': 'VIP',
+    'vip.title': '👑 VIP игроки',
+    'vip.enabled': 'VIP включен',
+    'vip.addPlayer': 'Добавить игрока',
+    'vip.noPlayers': 'Нет VIP игроков',
+    'vip.expires': 'Действует до',
+    'vip.permanent': 'Бессрочно',
+    'vip.note': 'Примечание',
+    'vip.starterBonus': '🎒 VIP бонус к стартовому набору',
+    'vip.dailyBonus': '📅 VIP бонус к ежедневному набору',
+    'vip.money': 'Деньги',
+    'vip.gold': 'Золото',
+    'vip.fame': 'Слава',
+    'vip.save': '💾 Сохранить VIP',
+    'savehome.subtabTitle': 'Дом',
+    'savehome.title': '🏠 Сохранение дома',
+    'savehome.enabled': 'Модуль включен',
+    'savehome.maxLocations': 'Макс. локаций (обычный)',
+    'savehome.vipMaxLocations': 'Макс. локаций (VIP)',
+    'savehome.teleportPrice': 'Цена телепорта ($)',
+    'savehome.save': '💾 Сохранить',
+    'savehome.help': 'Игроки используют !сохранитьдом для сохранения текущей позиции и !дом для телепорта к сохранённой точке. !дома — список сохранений.',
+  },
+  en: {
+    'nav.dashboard': 'Dashboard',
+    'nav.rcon': 'RCON Console',
+    'nav.players': 'Online Players',
+    'nav.packs': 'Modules',
+    'nav.lang': 'RU',
+    'nav.langTitle': 'Русский',
+    'status.server': 'Server Status',
+    'status.players': 'Players Online',
+    'status.uptime': 'Uptime',
+    'status.memory': 'Memory Usage',
+    'status.rcon': 'RCON Status',
+    'status.running': 'Running',
+    'status.stopped': 'Stopped',
+    'status.connected': 'Connected',
+    'status.disconnected': 'Disconnected',
+    'status.unknown': 'Unknown',
+    'server.control': 'Server Control',
+    'server.start': '▶ Start',
+    'server.stop': '⏹ Stop',
+    'server.restart': '↻ Restart',
+    'server.update': '↓ Update Server',
+    'server.refresh': '⟳ Refresh',
+    'console.output': 'Console Output',
+    'rcon.connection': 'RCON Connection',
+    'rcon.host': 'Host',
+    'rcon.port': 'Port',
+    'rcon.password': 'Password',
+    'rcon.connect': 'Connect',
+    'rcon.disconnect': 'Disconnect',
+    'rcon.console': 'RCON Console',
+    'rcon.command': 'Enter command...',
+    'rcon.send': 'Send',
+    'players.title': 'Online Players',
+    'players.name': 'Name',
+    'players.steamId': 'Steam ID',
+    'players.connected': 'Connected',
+    'players.actions': 'Actions',
+    'players.noPlayers': 'No players online',
+    'modal.cancel': 'Cancel',
+    'modal.confirm': 'Confirm',
+    'modal.close': 'Close',
+    'playerCard.steamId': 'Steam ID:',
+    'playerCard.fame': 'Fame Points',
+    'playerCard.normalBalance': 'Normal Balance',
+    'playerCard.goldBalance': 'Gold Balance',
+    'playerCard.lastLogin': 'Last Login',
+    'playerCard.noDbInfo': 'No database information available',
+    'playerCard.rconActions': 'RCON Actions',
+    'playerCard.setAttributes': '🏋 Set Attributes',
+    'playerCard.giveItems': '🎒 Give Items',
+    'playerCard.giveMoney': '💰 Give Money',
+    'playerCard.giveGold': '🏆 Give Gold',
+    'playerCard.setFame': '⭐ Set Fame',
+    'playerCard.spawnVehicle': '🚗 Spawn Vehicle',
+    'playerCard.godModeOn': '👼 God Mode ON',
+    'playerCard.immortalOn': '🛡 Immortality ON',
+    'playerCard.immortalOff': '🛡 Immortality OFF',
+    'playerCard.showNamePlates': '👤 Show Name Plates',
+    'playerCard.killPlayer': '💀 Kill Player',
+    'playerCard.silence': '🔇 Silence',
+    'playerCard.knockout': '😵 Knockout',
+    'playerCard.announce': '📢 Announce',
+    'playerCard.notify': '🔔 Notify',
+    'playerCard.chatMessage': '💬 Chat Message',
+    'playerCard.scheduleCargoDrop': '📦 Cargo Drop',
+    'playerCard.maxSkills': '🎯 Max Skills',
+    'playerCard.giveStarterPack': '🎒 Give Starter Pack',
+    'playerCard.givingStarterPack': 'Giving starter pack...',
+    'playerCard.skillsMaxed': 'All skills maxed!',
+    'playerCard.location': 'Location',
+    'playerCard.cargoDropped': '📦 Cargo dropped!',
+    'login.title': '🎮 SCUM Server Manager',
+    'login.username': 'Username',
+    'login.password': 'Password',
+    'login.button': 'Login',
+    'login.error.invalid': 'Invalid credentials',
+    'login.error.connection': 'Connection error',
+    'attr.strength': 'Strength (1-10)',
+    'attr.dexterity': 'Dexterity (1-10)',
+    'attr.stamina': 'Stamina (1-10)',
+    'attr.intellect': 'Intellect (1-10)',
+    'actionModal.setAttributes': 'Set Attributes —',
+    'actionModal.knockout': 'Knockout Player',
+    'actionModal.duration': 'Duration (seconds)',
+    'actionModal.announcement': 'Global Announcement —',
+    'actionModal.message': 'Message',
+    'actionModal.notification': 'Send Notification —',
+    'actionModal.type': 'Type',
+    'actionModal.chat': 'Send Chat Message —',
+    'actionModal.color': 'Color',
+    'items.title': 'Give Items to',
+    'items.search': 'Type to search items...',
+    'items.amount': 'Amount',
+    'items.give': 'Give Item',
+    'items.enterId': 'Please enter item ID',
+    'vehicles.title': 'Spawn Vehicle for',
+    'vehicles.search': 'Type to search vehicles...',
+    'vehicles.spawn': 'Spawn Vehicle',
+    'vehicles.enterId': 'Please enter vehicle ID',
+    'money.title': 'Give Money to',
+    'money.give': '💰 Give',
+    'money.enterAmount': 'Please enter a valid amount',
+    'gold.title': 'Give Gold to',
+    'gold.give': '🏆 Give',
+    'fame.title': 'Set Fame for',
+    'fame.set': '⭐ Set',
+    'fame.enterAmount': 'Please enter a valid fame amount',
+    'notify.info': 'Info',
+    'notify.warning': 'Warning',
+    'notify.error': 'Error',
+    'chat.white': 'White',
+    'chat.red': 'Red',
+    'chat.green': 'Green',
+    'chat.blue': 'Blue',
+    'chat.yellow': 'Yellow',
+    'chat.orange': 'Orange',
+    'system.connected': 'Connected successfully',
+    'system.disconnected': 'Disconnected',
+    'notification.success': 'Action executed successfully!',
+    'notification.failed': 'Action failed',
+    'notification.giveItemSuccess': 'Item given successfully!',
+    'notification.giveMoneySuccess': 'Money given successfully!',
+    'notification.giveGoldSuccess': 'Gold given successfully!',
+    'notification.fameSuccess': 'Fame set successfully!',
+    'notification.vehicleSpawned': 'Vehicle spawned successfully!',
+    'notification.loadError': 'Error loading data',
+    'notification.enterItem': 'Please enter item ID',
+    'notification.enterVehicle': 'Please enter vehicle ID',
+    'notification.enterAmount': 'Please enter a valid amount',
+    'notification.enterFame': 'Please enter a valid fame amount',
+    'console.cmd': '> ',
+    'console.system': '[SYSTEM] ',
+    'console.error': '[ERROR] ',
+    'console.empty': '',
+    'data.notAvailable': 'N/A',
+    'packs.starter': 'Starter Pack',
+    'packs.daily': 'Daily Pack',
+    'packs.enabled': 'Enabled',
+    'packs.cooldown': 'Cooldown (hours)',
+    'packs.cooldownHint': '0 = one-time',
+    'packs.addItem': 'Add Item',
+    'packs.cooldownsTitle': '🕒 Pack Cooldowns',
+    'packs.noCooldowns': 'No active cooldowns',
+    'packs.reset': 'Reset',
+    'packs.resetAllCooldowns': '🔄 Reset All',
+    'packs.refreshCooldowns': '⟳',
+    'packs.cooldownReset': 'Cooldown reset:',
+    'packs.allCooldownsReset': 'All cooldowns reset',
+    'packs.cooldownActive': 'active',
+    'packs.pack': 'Pack',
+    'packs.actions': 'Actions',
+    'nav.cooldowns': 'Cooldowns',
+    'nav.wargm': 'WARGM',
+    'nav.settings': 'Settings',
+    'settings.title': '⚙️ Server Settings',
+    'settings.steamCmdPath': 'SteamCMD Path',
+    'settings.serverPath': 'Server Path',
+    'settings.save': '💾 Save',
+    'settings.refresh': '⟳ Refresh',
+    'settings.saved': 'Settings saved! Restart server to apply.',
+    'settings.loadError': 'Error loading settings',
+    'wargm.connection': 'Connection',
+    'wargm.cards': 'Cards',
+    'wargm.apiSettings': '🔌 API Connection',
+    'wargm.apiUrl': 'API URL',
+    'wargm.shopId': 'Shop ID',
+    'wargm.apiKey': 'API Key',
+    'wargm.timeout': 'Timeout (sec)',
+    'wargm.duplicateCheck': 'Duplicate check (min)',
+    'wargm.cooldown': 'Command cooldown (sec)',
+    'wargm.maxItems': 'Max items per card',
+    'wargm.test': '🔍 Test Connection',
+    'wargm.save': '💾 Save',
+    'wargm.cardsList': '📋 Product Cards',
+    'wargm.cardName': 'Card Name',
+    'wargm.shopItemId': 'Shop Item ID',
+    'wargm.itemsCount': 'Rules',
+    'wargm.enabled': 'Enabled',
+    'wargm.actions': 'Actions',
+    'wargm.noCards': 'No cards',
+    'wargm.addCard': '+ Add Card',
+    'wargm.editCard': '📝 Edit Card',
+    'wargm.addCardNew': '➕ New Card',
+    'wargm.deliveryRules': '🚚 Delivery Rules',
+    'wargm.addRule': '+ Add Rule',
+    'wargm.fillRequired': 'Fill card name and shop item ID',
+    'wargm.addAtLeastOne': 'Add at least one rule',
+    'wargm.maxItemsExceeded': 'Max items per card exceeded',
+    'wargm.cardSaved': 'Card saved',
+    'wargm.cardDeleted': 'Card deleted',
+    'wargm.cardDuplicated': 'Card duplicated',
+    'wargm.saved': 'Settings saved',
+    'wargm.testing': '⏳ Testing connection...',
+    'wargm.export': '📤 Export',
+    'wargm.import': '📥 Import',
+    'wargm.exported': 'Cards exported',
+    'wargm.imported': 'Cards imported',
+    'wargm.confirmDelete': 'Delete this card?',
+    'wargm.debugCheck': '🔍 Debug: check player purchases',
+    'wargm.check': '🔎 Check',
+    'wargm.itemName': 'Item Shortname',
+    'wargm.vehicleName': 'Vehicle Name',
+    'wargm.skillName': 'Skill',
+    'wargm.level': 'Level',
+    'wargm.amount': 'Amount',
+    'wargm.cargoHint': 'Specify coordinates for drop',
+    'wargm.cargoHintAuto': 'Drop at player location (auto)',
+    'wargm.vehicleHint': 'Spawns directly via #SpawnVehicle command',
+    'packs.save': '💾 Save',
+    'packs.refresh': '⟳ Refresh',
+    'packs.subtabTitle': 'Packs',
+    'teleport.subtabTitle': 'Teleport',
+    'teleport.title': '📍 Teleport Locations',
+    'teleport.addLocation': '+ Add Location',
+    'teleport.locationName': 'Name',
+    'teleport.coordX': 'X',
+    'teleport.coordY': 'Y',
+    'teleport.coordZ': 'Z',
+    'teleport.price': 'Price ($)',
+    'teleport.save': '💾 Save Locations',
+    'teleport.delete': 'Delete',
+    'teleport.help': 'Players use !teleport to list locations and !teleport N to teleport. Cost deducted from player balance. Command: Teleport X Y Z SteamID',
+    'playerCard.teleportTo': '📍 Teleport To',
+    'playerCard.teleportCoords': 'Coordinates (X Y Z)',
+    'playerCard.teleportBtn': '📍 Teleport',
+    'vip.subtabTitle': 'VIP',
+    'vip.title': '👑 VIP Players',
+    'vip.enabled': 'VIP Enabled',
+    'vip.addPlayer': 'Add Player',
+    'vip.noPlayers': 'No VIP players',
+    'vip.expires': 'Expires',
+    'vip.permanent': 'Permanent',
+    'vip.note': 'Note',
+    'vip.starterBonus': '🎒 VIP Starter Pack Bonus',
+    'vip.dailyBonus': '📅 VIP Daily Pack Bonus',
+    'vip.money': 'Money',
+    'vip.gold': 'Gold',
+    'vip.fame': 'Fame',
+    'vip.save': '💾 Save VIP',
+    'savehome.subtabTitle': 'Home',
+    'savehome.title': '🏠 Save Home',
+    'savehome.enabled': 'Module enabled',
+    'savehome.maxLocations': 'Max locations (normal)',
+    'savehome.vipMaxLocations': 'Max locations (VIP)',
+    'savehome.teleportPrice': 'Teleport price ($)',
+    'savehome.save': '💾 Save',
+    'savehome.help': 'Players use !сохранитьдом to save current position, !дом to teleport home, !дома to list saved locations.',
+    'wargm.vipDays': 'VIP Days',
+  }
+};
+
+let currentLang = localStorage.getItem('webPanelLang') || 'ru';
+
+function t(key) {
+  const langData = translations[currentLang] || translations.ru;
+  return langData[key] || key;
+}
+
+function setLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('webPanelLang', lang);
+  applyTranslations();
+}
+
+function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.placeholder = t(key);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    el.title = t(key);
+  });
+  refreshUITranslations();
+}
+
+function switchLanguage() {
+  const newLang = currentLang === 'ru' ? 'en' : 'ru';
+  setLanguage(newLang);
+  document.getElementById('langToggle').textContent = t('nav.lang');
+  document.getElementById('langToggle').title = t('nav.langTitle');
+  refreshUITranslations();
+}
+
+// Login
+async function login() {
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    
+    const data = await res.json();
+    if (res.ok && data.token) {
+      authToken = data.token;
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('appContainer').style.display = 'flex';
+      initApp();
+      applyTranslations();
+    } else {
+      document.getElementById('loginError').textContent = data.error || t('login.error.invalid');
+    }
+  } catch (e) {
+    document.getElementById('loginError').textContent = t('login.error.connection');
+  }
+}
+
+// Initialize app
+function initApp() {
+  refreshDashboard();
+  loadPlayers();
+  setInterval(loadPlayers, 5000);
+  setupSSE();
+  loadItems();
+}
+
+// Tab switching
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  if (tab === 'packs' && !window._packsLoaded) {
+    window._packsLoaded = true;
+    loadPacks();
+  }
+}
+
+// Server actions
+async function serverAction(action) {
+  try {
+    const res = await fetch(`/api/${action}`, {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken}
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showNotification(t('notification.success'), 'success');
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+    refreshDashboard();
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Refresh dashboard
+async function refreshDashboard() {
+  try {
+    const [serverRes, rconRes] = await Promise.all([
+      fetch('/api/status', {headers: {'Authorization': 'Bearer ' + authToken}}),
+      fetch('/api/rcon/status', {headers: {'Authorization': 'Bearer ' + authToken}})
+    ]);
+    const data = await serverRes.json();
+    const rconData = await rconRes.json();
+    
+    const statusEl = document.getElementById('serverStatus');
+    if (data.running) {
+      statusEl.innerHTML = '<span class="status-indicator status-online"></span>' + t('status.running');
+    } else {
+      statusEl.innerHTML = '<span class="status-indicator status-offline"></span>' + t('status.stopped');
+    }
+    
+    // Update RCON status
+    const rconStatusEl = document.getElementById('rconStatus');
+    if (rconData.connected) {
+      rconStatusEl.innerHTML = '<span class="status-indicator status-online"></span>' + t('status.connected');
+    } else {
+      rconStatusEl.innerHTML = '<span class="status-indicator status-offline"></span>' + t('status.disconnected');
+    }
+    
+    document.getElementById('playerCount').textContent = data.players || 0;
+    
+    // Update uptime
+    if (data.uptime) {
+      const uptimeMs = data.uptime;
+      const seconds = Math.floor(uptimeMs / 1000);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      document.getElementById('serverUptime').textContent = 
+        `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    } else {
+      document.getElementById('serverUptime').textContent = '0:00:00';
+    }
+    
+    // Update memory
+    if (data.memoryUsage) {
+      document.getElementById('serverMemory').textContent = `${Math.round(data.memoryUsage)} MB`;
+    } else {
+      document.getElementById('serverMemory').textContent = '0 MB';
+    }
+  } catch (e) {
+    console.error('Failed to refresh:', e);
+  }
+}
+
+// RCON functions
+async function sendRconCommand() {
+  const input = document.getElementById('rconCommand');
+  const command = input.value.trim();
+  if (!command) return;
+  
+  rconHistory.push(command);
+  rconHistoryIndex = -1;
+  
+  addRconMessage('CMD', command);
+  input.value = '';
+  
+  try {
+    const res = await fetch('/api/rcon/command', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({command})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      addRconMessage('RESPONSE', data.response);
+    } else {
+      addRconMessage('ERROR', data.error);
+    }
+  } catch (e) {
+    addRconMessage('ERROR', e.message);
+  }
+}
+
+function fillCommand(command) {
+  const input = document.getElementById('rconCommand');
+  input.value = command;
+  input.focus();
+}
+
+// ===== Loot Packs =====
+let packsData = null;
+
+function renderPackItems(containerId, items) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  items.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
+    row.className = 'pack-row';
+    row.innerHTML = `
+      <div style="flex:1;position:relative">
+        <input type="text" class="pack-item-id" value="${item.itemId}" placeholder="Item name" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="onPackChanged()">
+        <div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+      </div>
+      <input type="number" class="pack-item-amt" value="${item.amount}" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()">
+      <button class="btn" style="padding:4px 10px;font-size:14px" onclick="this.parentElement.remove();onPackChanged()">✕</button>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function collectPackData() {
+  const readItems = (containerId) => {
+    const rows = document.getElementById(containerId).querySelectorAll('.pack-row');
+    return Array.from(rows).map(row => ({
+      itemId: row.querySelector('.pack-item-id').value.trim(),
+      amount: parseInt(row.querySelector('.pack-item-amt').value) || 1,
+    })).filter(i => i.itemId);
+  };
+  return {
+    starter: {
+      enabled: document.getElementById('starterEnabled').checked,
+      items: readItems('starterItems'),
+      cooldownHours: parseInt(document.getElementById('starterCooldown').value) || 0,
+    },
+    daily: {
+      enabled: document.getElementById('dailyEnabled').checked,
+      items: readItems('dailyItems'),
+      cooldownHours: parseInt(document.getElementById('dailyCooldown').value) || 24,
+    },
+  };
+}
+
+function onPackChanged() {}
+
+function addPackItem(pack) {
+  const containerId = pack === 'starter' ? 'starterItems' : 'dailyItems';
+  const container = document.getElementById(containerId);
+  const row = document.createElement('div');
+  row.className = 'pack-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
+  row.innerHTML = `
+    <div style="flex:1;position:relative">
+      <input type="text" class="pack-item-id" value="" placeholder="Item name" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="onPackChanged()">
+      <div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+    </div>
+    <input type="number" class="pack-item-amt" value="" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()">
+    <button class="btn" style="padding:4px 10px;font-size:14px" onclick="this.parentElement.remove();onPackChanged()">✕</button>
+  `;
+  container.appendChild(row);
+  const inp = row.querySelector('.pack-item-id');
+  if (inp) { inp.focus(); }
+}
+
+async function loadPacks() {
+  try {
+    const res = await fetch('/api/packs', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) { showNotification('loadPacks HTTP ' + res.status, 'error'); return; }
+    packsData = await res.json();
+    document.getElementById('starterEnabled').checked = packsData.starter.enabled;
+    document.getElementById('starterCooldown').value = packsData.starter.cooldownHours || 0;
+    document.getElementById('dailyEnabled').checked = packsData.daily.enabled;
+    document.getElementById('dailyCooldown').value = packsData.daily.cooldownHours || 24;
+    renderPackItems('starterItems', packsData.starter.items);
+    renderPackItems('dailyItems', packsData.daily.items);
+  } catch (e) {
+    showNotification('Failed to load packs: ' + e.message, 'error');
+  }
+}
+
+async function savePacks() {
+  try {
+    const data = collectPackData();
+    const res = await fetch('/api/packs', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) { showNotification('savePacks HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) {
+      showNotification('Наборы сохранены', 'success');
+      await loadPacks();
+      window._packsLoaded = true;
+    } else {
+      showNotification('Save failed: ' + (result.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    showNotification('Save error: ' + e.message, 'error');
+  }
+}
+
+async function givePack(packType, steamId) {
+  try {
+    const res = await fetch('/api/packs/give', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId, packType}),
+    });
+    if (!res.ok) { showNotification('givePack HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) {
+      showNotification('Pack given: ' + (result.results || []).join(', '), 'success');
+    } else {
+      showNotification('Failed: ' + (result.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Packs subtab switching
+function switchPacksSubtab(name) {
+  document.querySelectorAll('.packs-subtab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.packs-subtab-content').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.packs-subtab[data-subtab="${name}"]`).classList.add('active');
+  document.getElementById('subtab-' + name).classList.add('active');
+}
+
+// Teleport locations
+let teleportLocations = [];
+
+async function loadTeleportLocations() {
+  try {
+    const res = await fetch('/api/plugins/teleport', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) { showNotification('loadTeleport HTTP ' + res.status, 'error'); return; }
+    const data = await res.json();
+    teleportLocations = data.locations || [];
+    renderTeleportLocations();
+  } catch (e) {
+    showNotification('Failed to load teleport locations: ' + e.message, 'error');
+  }
+}
+
+function renderTeleportLocations() {
+  const container = document.getElementById('teleportLocationsList');
+  if (teleportLocations.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">' + t('wargm.noCards') + '</p>';
+    return;
+  }
+  container.innerHTML = teleportLocations.map((loc, i) => `
+    <div class="pack-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input type="text" value="${escapeHtml(loc.name)}" placeholder="${t('teleport.locationName')}" style="flex:2;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="teleportLocations[${i}].name=this.value">
+      <input type="number" value="${loc.x}" placeholder="${t('teleport.coordX')}" step="1" style="flex:1;width:80px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="teleportLocations[${i}].x=parseFloat(this.value)">
+      <input type="number" value="${loc.y}" placeholder="${t('teleport.coordY')}" step="1" style="flex:1;width:80px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="teleportLocations[${i}].y=parseFloat(this.value)">
+      <input type="number" value="${loc.z}" placeholder="${t('teleport.coordZ')}" step="1" style="flex:1;width:80px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="teleportLocations[${i}].z=parseFloat(this.value)">
+      <input type="number" value="${loc.price}" placeholder="${t('teleport.price')}" min="0" style="flex:1;width:80px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="teleportLocations[${i}].price=parseFloat(this.value)">
+      <button class="btn btn-danger" style="padding:8px 12px;white-space:nowrap" onclick="removeTeleportLocation(${i})">${t('teleport.delete')}</button>
+    </div>
+  `).join('');
+}
+
+function addTeleportLocation() {
+  teleportLocations.push({name: '', x: 0, y: 0, z: 0, price: 0});
+  renderTeleportLocations();
+}
+
+function removeTeleportLocation(idx) {
+  teleportLocations.splice(idx, 1);
+  renderTeleportLocations();
+}
+
+async function saveTeleportLocations() {
+  try {
+    const res = await fetch('/api/plugins/teleport', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: true, locations: teleportLocations}),
+    });
+    if (!res.ok) { showNotification('saveTeleport HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) {
+      showNotification('Teleport locations saved', 'success');
+    } else {
+      showNotification('Save failed: ' + (result.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    showNotification('Save error: ' + e.message, 'error');
+  }
+}
+
+async function teleportPlayerTo(steamId, x, y, z) {
+  try {
+    const cmd = 'Teleport ' + Math.round(x) + ' ' + Math.round(y) + ' ' + Math.round(z) + ' ' + steamId;
+    const res = await fetch('/api/rcon/command', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({command: cmd}),
+    });
+    if (!res.ok) { showNotification('Teleport HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) {
+      showNotification('Player teleported', 'success');
+    } else {
+      showNotification('Teleport failed: ' + (result.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    showNotification('Teleport error: ' + e.message, 'error');
+  }
+}
+
+// VIP
+let vipConfig = {enabled: true, players: [], starterBonus: {items: [], money: 0, gold: 0, fame: 0}, dailyBonus: {items: [], money: 0, gold: 0, fame: 0}};
+
+function onVipChanged() {}
+
+async function loadVipConfig() {
+  try {
+    const res = await fetch('/api/plugins/vip', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) { showNotification('loadVip HTTP ' + res.status, 'error'); return; }
+    vipConfig = await res.json();
+    document.getElementById('vipEnabled').checked = vipConfig.enabled;
+    document.getElementById('vipStarterMoney').value = vipConfig.starterBonus.money || 0;
+    document.getElementById('vipStarterGold').value = vipConfig.starterBonus.gold || 0;
+    document.getElementById('vipStarterFame').value = vipConfig.starterBonus.fame || 0;
+    document.getElementById('vipDailyMoney').value = vipConfig.dailyBonus.money || 0;
+    document.getElementById('vipDailyGold').value = vipConfig.dailyBonus.gold || 0;
+    document.getElementById('vipDailyFame').value = vipConfig.dailyBonus.fame || 0;
+    renderVipPlayers();
+    renderVipItems('vipStarterItems', vipConfig.starterBonus.items);
+    renderVipItems('vipDailyItems', vipConfig.dailyBonus.items);
+  } catch (e) { showNotification('Failed to load VIP config: ' + e.message, 'error'); }
+}
+
+function renderVipPlayers() {
+  const container = document.getElementById('vipPlayersList');
+  if (!vipConfig.players || vipConfig.players.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:10px">' + t('vip.noPlayers') + '</p>';
+    return;
+  }
+  container.innerHTML = '<table style="width:100%"><thead><tr><th style="text-align:left;padding:6px 8px">SteamID</th><th style="text-align:left;padding:6px 8px">' + t('vip.expires') + '</th><th style="text-align:left;padding:6px 8px">' + t('vip.note') + '</th><th style="text-align:left;padding:6px 8px">' + t('packs.actions') + '</th></tr></thead><tbody>'
+    + vipConfig.players.map((p, i) => {
+      const expStr = p.expiresAt > 0 ? new Date(p.expiresAt).toLocaleDateString('ru-RU') : t('vip.permanent');
+      return '<tr><td style="padding:6px 8px"><input type="text" value="' + escapeHtml(p.steamId) + '" placeholder="76561198..." onchange="vipConfig.players[' + i + '].steamId=this.value" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:Consolas,monospace;font-size:12px"></td><td style="padding:6px 8px"><input type="date" value="' + (p.expiresAt > 0 ? new Date(p.expiresAt).toISOString().slice(0, 10) : '') + '" onchange="vipConfig.players[' + i + '].expiresAt=this.value?new Date(this.value).getTime():0" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td><td style="padding:6px 8px"><input type="text" value="' + escapeHtml(p.note || '') + '" onchange="vipConfig.players[' + i + '].note=this.value" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td><td style="padding:6px 8px"><button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick="vipConfig.players.splice(' + i + ', 1); renderVipPlayers()">' + t('teleport.delete') + '</button></td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function addVipPlayer() {
+  vipConfig.players.push({steamId: '', expiresAt: 0, note: ''});
+  renderVipPlayers();
+  // Focus last input
+  const rows = document.querySelectorAll('#vipPlayersList tbody tr');
+  if (rows.length > 0) {
+    const inputs = rows[rows.length - 1].querySelectorAll('input');
+    if (inputs.length > 0) inputs[0].focus();
+  }
+}
+
+function renderVipItems(containerId, items) {
+  const container = document.getElementById(containerId);
+  if (!items || items.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px">' + t('packs.noCooldowns') + '</p>';
+    return;
+  }
+  container.innerHTML = items.map((item, i) => {
+    const packType = containerId === 'vipStarterItems' ? 'starter' : 'daily';
+    return '<div class="pack-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;position:relative"><input type="text" value="' + escapeHtml(item.itemId) + '" placeholder="ItemID" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:Consolas,monospace" oninput="showInlineSuggestions(this)" onchange="vipConfig.' + packType + 'Bonus.items[' + i + '].itemId=this.value"><div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:70px;background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:180px;overflow-y:auto;z-index:10"></div><input type="number" value="' + item.amount + '" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="vipConfig.' + packType + 'Bonus.items[' + i + '].amount=parseInt(this.value)"><button class="btn btn-danger" style="padding:8px 12px" onclick="vipConfig.' + packType + 'Bonus.items.splice(' + i + ', 1); loadVipConfig()">✕</button></div>';
+  }).join('');
+}
+
+function addVipItem(packType) {
+  const key = packType === 'starter' ? 'starterBonus' : 'dailyBonus';
+  if (!vipConfig[key].items) vipConfig[key].items = [];
+  vipConfig[key].items.push({itemId: '', amount: 1});
+  renderVipItems('vip' + packType.charAt(0).toUpperCase() + packType.slice(1) + 'Items', vipConfig[key].items);
+}
+
+async function saveVipConfig() {
+  const readVipItems = (containerId) => {
+    const rows = document.getElementById(containerId).querySelectorAll('.pack-row');
+    return Array.from(rows).map(row => ({
+      itemId: row.querySelector('input[type="text"]')?.value || '',
+      amount: parseInt(row.querySelector('input[type="number"]')?.value) || 1,
+    }));
+  };
+  const cfg = {
+    enabled: document.getElementById('vipEnabled').checked,
+    players: vipConfig.players,
+    starterBonus: {
+      items: readVipItems('vipStarterItems'),
+      money: parseInt(document.getElementById('vipStarterMoney').value) || 0,
+      gold: parseInt(document.getElementById('vipStarterGold').value) || 0,
+      fame: parseInt(document.getElementById('vipStarterFame').value) || 0,
+    },
+    dailyBonus: {
+      items: readVipItems('vipDailyItems'),
+      money: parseInt(document.getElementById('vipDailyMoney').value) || 0,
+      gold: parseInt(document.getElementById('vipDailyGold').value) || 0,
+      fame: parseInt(document.getElementById('vipDailyFame').value) || 0,
+    },
+  };
+  try {
+    const res = await fetch('/api/plugins/vip', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    if (!res.ok) { showNotification('saveVip HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) { showNotification('VIP config saved', 'success'); vipConfig = cfg; }
+    else { showNotification('Save failed: ' + (result.error || 'unknown'), 'error'); }
+  } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
+}
+
+// Save Home module
+let saveHomeConfig = { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 };
+
+async function loadSaveHomeConfig() {
+  try {
+    const res = await fetch('/api/plugins/savehome', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) return;
+    saveHomeConfig = await res.json();
+    document.getElementById('savehomeEnabled').checked = saveHomeConfig.enabled;
+    document.getElementById('savehomeMaxLocations').value = saveHomeConfig.maxLocations;
+    document.getElementById('savehomeVipMaxLocations').value = saveHomeConfig.vipMaxLocations;
+    document.getElementById('savehomeTeleportPrice').value = saveHomeConfig.teleportPrice;
+  } catch (e) { console.error('loadSaveHomeConfig error:', e); }
+}
+
+function onSaveHomeChanged() {
+  saveHomeConfig.enabled = document.getElementById('savehomeEnabled').checked;
+  saveHomeConfig.maxLocations = parseInt(document.getElementById('savehomeMaxLocations').value) || 1;
+  saveHomeConfig.vipMaxLocations = parseInt(document.getElementById('savehomeVipMaxLocations').value) || 3;
+  saveHomeConfig.teleportPrice = parseInt(document.getElementById('savehomeTeleportPrice').value) || 0;
+}
+
+async function saveSaveHomeConfig() {
+  onSaveHomeChanged();
+  try {
+    const res = await fetch('/api/plugins/savehome', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify(saveHomeConfig),
+    });
+    if (!res.ok) { showNotification('saveSaveHome HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) { showNotification('Save Home config saved', 'success'); }
+    else { showNotification('Save failed: ' + (result.error || 'unknown'), 'error'); }
+  } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
+}
+
+async function loadCooldowns() {
+  try {
+    const res = await fetch('/api/packs/cooldowns', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) { showNotification('loadCooldowns HTTP ' + res.status, 'error'); return; }
+    const data = await res.json();
+    const container = document.getElementById('cooldownsList');
+    const entries = Object.entries(data.cooldowns || {});
+    if (entries.length === 0) {
+      container.innerHTML = '<p style="color:var(--muted)">' + t('packs.noCooldowns') + '</p>';
+      return;
+    }
+    const filterVal = document.getElementById('cooldownFilterSteamId').value.trim();
+    const filtered = filterVal ? entries.filter(([k]) => k.includes(filterVal)) : entries;
+    container.innerHTML = '<table style="width:100%"><thead><tr><th style="text-align:left;padding:6px 8px">SteamID</th><th style="text-align:left;padding:6px 8px">' + t('packs.pack') + '</th><th style="text-align:left;padding:6px 8px">' + t('packs.cooldown') + '</th><th style="text-align:left;padding:6px 8px">' + t('packs.actions') + '</th></tr></thead><tbody>'
+      + filtered.map(([key, ts]) => {
+        const isStart = key.startsWith('!startpack_');
+        const sid = key.replace(/^!(?:startpack|dailypack)_/, '');
+        const packName = isStart ? t('packs.starter') : t('packs.daily');
+        const remaining = Math.max(0, Math.ceil((ts + ((isStart ? 0 : 24) * 3600000) - Date.now()) / 3600000));
+        const remainingText = remaining > 0 ? remaining + 'ч' : t('packs.cooldownActive');
+        return `<tr>
+          <td style="padding:6px 8px;font-family:Consolas,monospace;font-size:12px">${sid}</td>
+          <td style="padding:6px 8px">${packName}</td>
+          <td style="padding:6px 8px;color:${remaining > 0 ? 'var(--accent)' : 'var(--muted)'}">${remainingText}</td>
+          <td style="padding:6px 8px"><button class="btn btn-warning" style="padding:4px 10px;font-size:12px" onclick="resetPlayerCooldown('${sid}')">${t('packs.reset')}</button></td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
+  } catch (e) {
+    showNotification('Failed to load cooldowns: ' + e.message, 'error');
+  }
+}
+
+async function resetPlayerCooldown(steamId) {
+  try {
+    const res = await fetch('/api/packs/cooldowns/reset', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId}),
+    });
+    if (!res.ok) { showNotification('reset HTTP ' + res.status, 'error'); return; }
+    showNotification(t('packs.cooldownReset') + ' ' + steamId, 'success');
+    loadCooldowns();
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function resetAllCooldowns() {
+  try {
+    const res = await fetch('/api/packs/cooldowns', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) return;
+    const data = await res.json();
+    const steamIds = new Set(Object.keys(data.cooldowns || {}).map(k => k.replace(/^!(?:startpack|dailypack)_/, '')));
+    for (const sid of steamIds) {
+      await fetch('/api/packs/cooldowns/reset', {
+        method: 'POST',
+        headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+        body: JSON.stringify({steamId: sid}),
+      });
+    }
+    showNotification(t('packs.allCooldownsReset'), 'success');
+    loadCooldowns();
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+function handleRconKey(e) {
+  if (e.key === 'Enter') {
+    sendRconCommand();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (rconHistory.length > 0) {
+      rconHistoryIndex = rconHistoryIndex === -1 ? rconHistory.length - 1 : Math.max(0, rconHistoryIndex - 1);
+      document.getElementById('rconCommand').value = rconHistory[rconHistoryIndex];
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (rconHistoryIndex !== -1) {
+      rconHistoryIndex++;
+      if (rconHistoryIndex >= rconHistory.length) {
+        rconHistoryIndex = -1;
+        document.getElementById('rconCommand').value = '';
+      } else {
+        document.getElementById('rconCommand').value = rconHistory[rconHistoryIndex];
+      }
+    }
+  }
+}
+
+function addRconMessage(type, message) {
+  const console = document.getElementById('rconConsole');
+  const line = document.createElement('div');
+  line.className = 'console-line';
+  
+  const timestamp = new Date().toLocaleTimeString();
+  let prefix = '';
+  if (type === 'CMD') prefix = t('console.cmd');
+  else if (type === 'SYSTEM') prefix = t('console.system');
+  else if (type === 'ERROR') prefix = t('console.error');
+  else if (type === 'RESPONSE') prefix = t('console.empty');
+  
+  line.textContent = `[${timestamp}] ${prefix}${message}`;
+  console.appendChild(line);
+  console.scrollTop = console.scrollHeight;
+}
+
+// Player management
+async function loadPlayers() {
+  try {
+    const res = await fetch('/api/players', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) {
+      console.error('loadPlayers HTTP', res.status);
+      return;
+    }
+    const data = await res.json();
+    
+    const tbody = document.getElementById('playersTableBody');
+    const countEl = document.getElementById('onlinePlayerCount');
+    cachedPlayersList = data.players || [];
+    
+    if (!data.players || data.players.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">' + t('players.noPlayers') + '</td></tr>';
+      countEl.textContent = '0';
+      return;
+    }
+    
+    countEl.textContent = data.players.length;
+    tbody.innerHTML = data.players.map(p => `
+      <tr>
+        <td><strong style="cursor:pointer;color:var(--accent)" onclick="showPlayerCard('${p.steamId}', '${escapeHtml(p.name)}')">${escapeHtml(p.name)}</strong></td>
+        <td>${p.steamId}</td>
+        <td>${new Date(p.connectedAt).toLocaleString()}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    console.error('Failed to load players:', e);
+  }
+}
+
+async function showPlayerCard(steamId, playerName) {
+  try {
+    // Fetch player details from database
+    const res = await fetch(`/api/players/${steamId}`, {
+      headers: {'Authorization': 'Bearer ' + authToken}
+    });
+    const data = await res.json();
+    
+    // Use cached ListPlayers data (fresh every 10s) for balances
+    const cachedPlayer = (cachedPlayersList || []).find(p => p.steamId === steamId);
+    const playerLoc = cachedPlayer?.location || null;
+    
+    // Set header info
+    document.getElementById('playerAvatar').textContent = playerName.charAt(0).toUpperCase();
+    document.getElementById('playerCardName').textContent = playerName;
+    document.getElementById('playerCardSteamId').textContent = t('playerCard.steamId') + ' ' + steamId;
+    
+    // Build stats grid
+    const statsGrid = document.getElementById('playerStatsGrid');
+    if (cachedPlayer || data.player) {
+      const famePoints = cachedPlayer?.fame ?? data.player?.famePoints ?? 0;
+      const normalBalance = cachedPlayer?.balance ?? data.player?.normalBalance ?? data.player?.walletBalance ?? 0;
+      const goldBalance = cachedPlayer?.gold ?? data.player?.goldBalance ?? 0;
+      
+      const locHtml = playerLoc
+        ? `<div class="stat-box" style="grid-column:1/-1">
+            <div class="stat-box-label">${t('playerCard.location')}</div>
+            <div class="stat-box-value" style="font-size:13px">X=${Math.round(playerLoc.x)} Y=${Math.round(playerLoc.y)} Z=${Math.round(playerLoc.z)}</div>
+          </div>`
+        : '';
+
+      statsGrid.innerHTML = `
+        <div class="stat-box">
+          <div class="stat-box-label">${t('playerCard.fame')}</div>
+          <div class="stat-box-value">⭐ ${famePoints.toLocaleString()}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">${t('playerCard.normalBalance')}</div>
+          <div class="stat-box-value" style="color:#3fb950">💵 $${normalBalance.toLocaleString()}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">${t('playerCard.goldBalance')}</div>
+          <div class="stat-box-value" style="color:#ffd700">🏆 ${goldBalance.toLocaleString()}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">${t('playerCard.lastLogin')}</div>
+          <div class="stat-box-value" style="font-size:12px">${data.player.lastLogin ? new Date(data.player.lastLogin * 1000).toLocaleString() : t('data.notAvailable')}</div>
+        </div>
+        ${locHtml}
+      `;
+    } else {
+      statsGrid.innerHTML = '<p style="color:var(--muted);text-align:center;grid-column:1/-1">' + t('playerCard.noDbInfo') + '</p>';
+    }
+    
+    // Build actions grid
+    const actionsGrid = document.getElementById('playerActionsGrid');
+    actionsGrid.innerHTML = `
+      <button class="action-btn success" onclick="showAttrModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.setAttributes')}
+      </button>
+      <button class="action-btn success" onclick="showGiveItemModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.giveItems')}
+      </button>
+      <button class="action-btn success" onclick="showGiveMoneyModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.giveMoney')}
+      </button>
+      <button class="action-btn success" onclick="showGiveGoldModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.giveGold')}
+      </button>
+      <button class="action-btn success" onclick="showSetFameModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.setFame')}
+      </button>
+      <button class="action-btn success" onclick="showSpawnVehicleModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.spawnVehicle')}
+      </button>
+      <button class="action-btn danger" onclick="playerAction('${steamId}', 'godMode', {enabled: true}); closePlayerCard()">
+         ${t('playerCard.godModeOn')}
+      </button>
+      <button class="action-btn success" onclick="playerAction('${steamId}', 'setImmortality', {enabled: true}); closePlayerCard()">
+         ${t('playerCard.immortalOn')}
+      </button>
+      <button class="action-btn" onclick="playerAction('${steamId}', 'setImmortality', {enabled: false}); closePlayerCard()">
+         ${t('playerCard.immortalOff')}
+      </button>
+      <button class="action-btn success" onclick="playerAction('${steamId}', 'showNamePlates', {}); closePlayerCard()">
+         ${t('playerCard.showNamePlates')}
+      </button>
+      <button class="action-btn danger" onclick="playerAction('${steamId}', 'suicide', {}); closePlayerCard()">
+        ${t('playerCard.killPlayer')}
+      </button>
+      <button class="action-btn" onclick="playerAction('${steamId}', 'silence', {}); closePlayerCard()">
+        ${t('playerCard.silence')}
+      </button>
+      <button class="action-btn" onclick="showKnockoutModal('${steamId}')">
+        ${t('playerCard.knockout')}
+      </button>
+      <button class="action-btn" onclick="showAnnounceModal('${steamId}', '${escapeHtml(playerName)}')">
+        ${t('playerCard.announce')}
+      </button>
+      <button class="action-btn" onclick="showNotifyModal('${steamId}', '${escapeHtml(playerName)}')">
+        ${t('playerCard.notify')}
+      </button>
+      <button class="action-btn" onclick="showChatModal('${steamId}', '${escapeHtml(playerName)}')">
+        ${t('playerCard.chatMessage')}
+      </button>
+      ${playerLoc ? `<button class="action-btn success" onclick="scheduleCargoDrop('${steamId}', ${playerLoc.x}, ${playerLoc.y}, ${playerLoc.z})">
+        ${t('playerCard.scheduleCargoDrop')}
+      </button>` : `<button class="action-btn success" onclick="scheduleCargoDrop('${steamId}')" style="opacity:0.6" title="Координаты неизвестны">
+        ${t('playerCard.scheduleCargoDrop')}
+      </button>`}
+      <button class="action-btn success" onclick="maxAllSkills('${steamId}')">
+        ${t('playerCard.maxSkills')}
+      </button>
+      <button class="action-btn success" onclick="showNotification(t('playerCard.givingStarterPack'), 'info'); givePack('starter', '${steamId}')">
+        🎒 ${t('playerCard.giveStarterPack')}
+      </button>
+      <button class="action-btn" onclick="showTeleportCoordModal('${steamId}', '${escapeHtml(playerName)}')">
+        📍 ${t('playerCard.teleportTo')}
+      </button>
+    `;
+
+    // Show modal
+    document.getElementById('playerCardModal').style.display = 'flex';
+  } catch (e) {
+    console.error('Failed to load player card:', e);
+    showNotification(t('notification.loadError'), 'error');
+  }
+}
+
+function closePlayerCard() {
+  document.getElementById('playerCardModal').style.display = 'none';
+}
+
+function showGiveItemModal(steamId, playerName) {
+  selectedPlayer = steamId;
+  document.getElementById('giveItemPlayerName').textContent = t('items.title') + ' ' + playerName;
+  document.getElementById('giveItemId').value = '';
+  document.getElementById('giveItemAmount').value = '1';
+  document.getElementById('giveItemModal').style.display = 'flex';
+}
+
+function closeGiveItemModal() {
+  document.getElementById('giveItemModal').style.display = 'none';
+  hideItemSuggestions();
+}
+
+// Autocomplete functions for item search
+function showItemSuggestions() {
+  const input = document.getElementById('giveItemId');
+  const query = input.value.toLowerCase().trim();
+  const suggestionsDiv = document.getElementById('itemSuggestions');
+  
+  if (!query) {
+    hideItemSuggestions();
+    return;
+  }
+  
+  // Filter items that match the query
+  const matches = allItems.filter(item => 
+    item.toLowerCase().includes(query)
+  ).slice(0, 20); // Limit to 20 suggestions
+  
+  if (matches.length === 0) {
+    hideItemSuggestions();
+    return;
+  }
+  
+  // Build suggestions HTML
+  selectedItemIndex = -1;
+  suggestionsDiv.innerHTML = matches.map((item, index) => `
+    <div class="suggestion-item" data-index="${index}" onclick="selectItem('${item}')" onmouseenter="highlightSuggestion(${index})">
+      ${highlightMatch(item, query)}
+    </div>
+  `).join('');
+  
+  suggestionsDiv.style.display = 'block';
+}
+
+function highlightMatch(text, query) {
+  const regex = new RegExp(`(${query})`, 'gi');
+  return text.replace(regex, '<strong style="color:var(--accent)">$1</strong>');
+}
+
+function selectItem(item) {
+  document.getElementById('giveItemId').value = item;
+  hideItemSuggestions();
+}
+
+function highlightSuggestion(index) {
+  const items = document.querySelectorAll('.suggestion-item');
+  items.forEach((el, i) => {
+    if (i === index) {
+      el.classList.add('highlighted');
+    } else {
+      el.classList.remove('highlighted');
+    }
+  });
+  selectedItemIndex = index;
+}
+
+function handleItemKeydown(event) {
+  const suggestionsDiv = document.getElementById('itemSuggestions');
+  const items = document.querySelectorAll('.suggestion-item');
+  
+  if (suggestionsDiv.style.display === 'none' || items.length === 0) {
+    return;
+  }
+  
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    selectedItemIndex = Math.min(selectedItemIndex + 1, items.length - 1);
+    highlightSuggestion(selectedItemIndex);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    selectedItemIndex = Math.max(selectedItemIndex - 1, 0);
+    highlightSuggestion(selectedItemIndex);
+  } else if (event.key === 'Enter' && selectedItemIndex >= 0) {
+    event.preventDefault();
+    const selected = items[selectedItemIndex];
+    if (selected) {
+      selectItem(selected.textContent.trim());
+    }
+  } else if (event.key === 'Escape') {
+    hideItemSuggestions();
+  }
+}
+
+function hideItemSuggestions() {
+  document.getElementById('itemSuggestions').style.display = 'none';
+  selectedItemIndex = -1;
+}
+
+// Inline suggestions for pack items and WARGM
+function showInlineSuggestions(input, customSource) {
+  const box = input.parentElement.querySelector('.pack-suggestions, .wargm-suggestions');
+  if (!box) return;
+  const query = input.value.toLowerCase().trim();
+  if (!query) { box.style.display = 'none'; return; }
+  // Check if input has data-vehicles attribute (for WARGM vehicle)
+  const src = customSource || (input.dataset.vehicles ? SCUM_VEHICLES : allItems);
+  const matches = src.filter(it => it.toLowerCase().includes(query)).slice(0, 20);
+  if (!matches.length) { box.style.display = 'none'; return; }
+  const escR = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  box.innerHTML = matches.map((it, i) =>
+    `<div class="inline-ac-item" style="padding:8px 12px;cursor:pointer;color:#e6edf3;font-family:'Consolas',monospace;font-size:13px" onclick="var inp=this.parentElement.previousElementSibling;inp.value=this.textContent.trim();inp.dispatchEvent(new Event('change',{bubbles:true}));this.parentElement.style.display='none'">${it.replace(new RegExp('(' + escR(query) + ')', 'gi'), '<strong style="color:#58a6ff">$1</strong>')}</div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+async function executeGiveItem() {
+  const itemId = document.getElementById('giveItemId').value.trim();
+  const amount = parseInt(document.getElementById('giveItemAmount').value);
+  
+  if (!itemId) {
+    showNotification(t('notification.enterItem'), 'error');
+    return;
+  }
+  
+  try {
+    const command = `#SpawnItem ${itemId} ${amount}`;
+    const res = await fetch('/api/rcon/command', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({command})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('notification.giveItemSuccess'), 'success');
+      closeGiveItemModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Teleport to coordinates
+let teleportTargetSteamId = '';
+
+function showTeleportCoordModal(steamId, playerName) {
+  teleportTargetSteamId = steamId;
+  document.getElementById('teleportCoordPlayerName').textContent = t('playerCard.teleportTo') + ' — ' + playerName;
+  document.getElementById('teleportCoordX').value = '';
+  document.getElementById('teleportCoordY').value = '';
+  document.getElementById('teleportCoordZ').value = '';
+  document.getElementById('teleportCoordModal').style.display = 'flex';
+}
+
+function closeTeleportCoordModal() {
+  document.getElementById('teleportCoordModal').style.display = 'none';
+}
+
+async function executeTeleportCoord() {
+  const x = parseFloat(document.getElementById('teleportCoordX').value);
+  const y = parseFloat(document.getElementById('teleportCoordY').value);
+  const z = parseFloat(document.getElementById('teleportCoordZ').value);
+  if (isNaN(x) || isNaN(y) || isNaN(z)) {
+    showNotification('Enter valid coordinates', 'error');
+    return;
+  }
+  const cmd = 'Teleport ' + Math.round(x) + ' ' + Math.round(y) + ' ' + Math.round(z) + ' ' + teleportTargetSteamId;
+  try {
+    const res = await fetch('/api/rcon/command', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({command: cmd}),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification('Player teleported', 'success');
+      closeTeleportCoordModal();
+    } else {
+      showNotification(data.error || 'Teleport failed', 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+function showSpawnVehicleModal(steamId, playerName) {
+  selectedPlayer = steamId;
+  document.getElementById('spawnVehiclePlayerName').textContent = t('vehicles.title') + ' ' + playerName;
+  document.getElementById('spawnVehicleId').value = '';
+  document.getElementById('spawnVehicleModal').style.display = 'flex';
+}
+
+function closeSpawnVehicleModal() {
+  document.getElementById('spawnVehicleModal').style.display = 'none';
+  hideVehicleSuggestions();
+}
+
+// Autocomplete functions for vehicle search
+function showVehicleSuggestions() {
+  const input = document.getElementById('spawnVehicleId');
+  const query = input.value.toLowerCase().trim();
+  const suggestionsDiv = document.getElementById('vehicleSuggestions');
+  
+  if (!query) {
+    hideVehicleSuggestions();
+    return;
+  }
+  
+  // Filter vehicles that match the query
+  const matches = SCUM_VEHICLES.filter(vehicle => 
+    vehicle.toLowerCase().includes(query)
+  ).slice(0, 10); // Limit to 10 suggestions
+  
+  if (matches.length === 0) {
+    hideVehicleSuggestions();
+    return;
+  }
+  
+  // Build suggestions HTML
+  selectedItemIndex = -1;
+  suggestionsDiv.innerHTML = matches.map((vehicle, index) => `
+    <div class="suggestion-item" data-index="${index}" onclick="selectVehicle('${vehicle}')" onmouseenter="highlightVehicleSuggestion(${index})">
+      ${highlightMatch(vehicle, query)}
+    </div>
+  `).join('');
+  
+  suggestionsDiv.style.display = 'block';
+}
+
+function selectVehicle(vehicle) {
+  document.getElementById('spawnVehicleId').value = vehicle;
+  hideVehicleSuggestions();
+}
+
+function highlightVehicleSuggestion(index) {
+  const items = document.querySelectorAll('#vehicleSuggestions .suggestion-item');
+  items.forEach((el, i) => {
+    if (i === index) {
+      el.classList.add('highlighted');
+    } else {
+      el.classList.remove('highlighted');
+    }
+  });
+  selectedItemIndex = index;
+}
+
+function handleVehicleKeydown(event) {
+  const suggestionsDiv = document.getElementById('vehicleSuggestions');
+  const items = document.querySelectorAll('#vehicleSuggestions .suggestion-item');
+  
+  if (suggestionsDiv.style.display === 'none' || items.length === 0) {
+    return;
+  }
+  
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    selectedItemIndex = Math.min(selectedItemIndex + 1, items.length - 1);
+    highlightVehicleSuggestion(selectedItemIndex);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    selectedItemIndex = Math.max(selectedItemIndex - 1, 0);
+    highlightVehicleSuggestion(selectedItemIndex);
+  } else if (event.key === 'Enter' && selectedItemIndex >= 0) {
+    event.preventDefault();
+    const selected = items[selectedItemIndex];
+    if (selected) {
+      selectVehicle(selected.textContent.trim());
+    }
+  } else if (event.key === 'Escape') {
+    hideVehicleSuggestions();
+  }
+}
+
+function hideVehicleSuggestions() {
+  document.getElementById('vehicleSuggestions').style.display = 'none';
+  selectedItemIndex = -1;
+}
+
+async function executeSpawnVehicle() {
+  const vehicleId = document.getElementById('spawnVehicleId').value.trim();
+  
+  if (!vehicleId) {
+    showNotification(t('notification.enterVehicle'), 'error');
+    return;
+  }
+  
+  try {
+    const command = `SpawnVehicle ${vehicleId} 1 Location ${selectedPlayer}`;
+    const res = await fetch('/api/rcon/command', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({command})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('notification.vehicleSpawned'), 'success');
+      closeSpawnVehicleModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Give Money functions
+function showGiveMoneyModal(steamId, playerName) {
+  selectedPlayer = steamId;
+  document.getElementById('giveMoneyPlayerName').textContent = t('money.title') + ' ' + playerName;
+  document.getElementById('giveMoneyAmount').value = '1000';
+  document.getElementById('giveMoneyModal').style.display = 'flex';
+}
+
+function closeGiveMoneyModal() {
+  document.getElementById('giveMoneyModal').style.display = 'none';
+}
+
+async function executeGiveMoney() {
+  const amount = parseInt(document.getElementById('giveMoneyAmount').value);
+  
+  if (!amount || amount <= 0) {
+    showNotification(t('notification.enterAmount'), 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/players/give-currency', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId: selectedPlayer, type: 'money', amount})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('notification.giveMoneySuccess'), 'success');
+      closeGiveMoneyModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Give Gold functions
+function showGiveGoldModal(steamId, playerName) {
+  selectedPlayer = steamId;
+  document.getElementById('giveGoldPlayerName').textContent = t('gold.title') + ' ' + playerName;
+  document.getElementById('giveGoldAmount').value = '100';
+  document.getElementById('giveGoldModal').style.display = 'flex';
+}
+
+function closeGiveGoldModal() {
+  document.getElementById('giveGoldModal').style.display = 'none';
+}
+
+async function executeGiveGold() {
+  const amount = parseInt(document.getElementById('giveGoldAmount').value);
+  
+  if (!amount || amount <= 0) {
+    showNotification(t('notification.enterAmount'), 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/players/give-currency', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId: selectedPlayer, type: 'gold', amount})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('notification.giveGoldSuccess'), 'success');
+      closeGiveGoldModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Set Fame functions
+function showSetFameModal(steamId, playerName) {
+  selectedPlayer = steamId;
+  document.getElementById('setFamePlayerName').textContent = t('fame.title') + ' ' + playerName;
+  document.getElementById('setFameAmount').value = '1000';
+  document.getElementById('setFameModal').style.display = 'flex';
+}
+
+function closeSetFameModal() {
+  document.getElementById('setFameModal').style.display = 'none';
+}
+
+async function executeSetFame() {
+  const amount = parseInt(document.getElementById('setFameAmount').value);
+  
+  if (!amount || amount < 0) {
+    showNotification(t('notification.enterFame'), 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/players/give-currency', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId: selectedPlayer, type: 'fame', amount})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('notification.fameSuccess'), 'success');
+      closeSetFameModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function scheduleCargoDrop(steamId, x, y, z) {
+  try {
+    const notSet = (v) => v === undefined || v === null || v === '' || v === false;
+    if (notSet(x) || notSet(y) || notSet(z)) {
+      x = undefined;
+      y = undefined;
+      z = undefined;
+    }
+    const res = await fetch('/api/players/action', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId, action: 'scheduleCargoDrop', params: {x, y, z}})
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('playerCard.cargoDropped'), 'success');
+      closePlayerCard();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function maxAllSkills(steamId) {
+  try {
+    const res = await fetch('/api/players/action', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId, action: 'setAllSkills', params: {}})
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('playerCard.skillsMaxed'), 'success');
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function playerAction(steamId, action, params = {}) {
+  try {
+    const res = await fetch('/api/players/action', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId, action, params})
+    });
+    
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('notification.success'), 'success');
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Modal functions
+function showAttrModal(steamId, name) {
+  selectedPlayer = steamId;
+  selectedAction = 'setAttributes';
+  document.getElementById('modalTitle').textContent = t('actionModal.setAttributes') + ' ' + name;
+  document.getElementById('modalContent').innerHTML = `
+    <div class="form-group">
+      <label>${t('attr.strength')}</label>
+      <input type="number" id="attrStrength" min="1" max="10" value="8">
+    </div>
+    <div class="form-group">
+      <label>${t('attr.dexterity')}</label>
+      <input type="number" id="attrDexterity" min="1" max="10" value="5">
+    </div>
+    <div class="form-group">
+      <label>${t('attr.stamina')}</label>
+      <input type="number" id="attrStamina" min="1" max="10" value="5">
+    </div>
+    <div class="form-group">
+      <label>${t('attr.intellect')}</label>
+      <input type="number" id="attrIntellect" min="1" max="10" value="5">
+    </div>
+  `;
+  document.getElementById('actionModal').style.display = 'flex';
+}
+
+function showKnockoutModal(steamId) {
+  selectedPlayer = steamId;
+  selectedAction = 'knockout';
+  document.getElementById('modalTitle').textContent = t('actionModal.knockout');
+  document.getElementById('modalContent').innerHTML = `
+    <div class="form-group">
+      <label>${t('actionModal.duration')}</label>
+      <input type="number" id="knockoutSeconds" min="1" max="300" value="10">
+    </div>
+  `;
+  document.getElementById('actionModal').style.display = 'flex';
+}
+
+function showAnnounceModal(steamId, name) {
+  selectedPlayer = steamId;
+  selectedAction = 'announce';
+  document.getElementById('modalTitle').textContent = t('actionModal.announcement') + ' ' + name;
+  document.getElementById('modalContent').innerHTML = `
+    <div class="form-group">
+      <label>${t('actionModal.message')}</label>
+      <input type="text" id="announceMessage" placeholder="Enter announcement...">
+    </div>
+  `;
+  document.getElementById('actionModal').style.display = 'flex';
+}
+
+function showNotifyModal(steamId, name) {
+  selectedPlayer = steamId;
+  selectedAction = 'notify';
+  document.getElementById('modalTitle').textContent = t('actionModal.notification') + ' ' + name;
+  document.getElementById('modalContent').innerHTML = `
+    <div class="form-group">
+      <label>${t('actionModal.type')}</label>
+      <select id="notifyType">
+        <option value="info">${t('notify.info')}</option>
+        <option value="warning">${t('notify.warning')}</option>
+        <option value="error">${t('notify.error')}</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>${t('actionModal.message')}</label>
+      <input type="text" id="notifyMessage" placeholder="Enter notification...">
+    </div>
+  `;
+  document.getElementById('actionModal').style.display = 'flex';
+}
+
+function showChatModal(steamId, name) {
+  selectedPlayer = steamId;
+  selectedAction = 'chat';
+  document.getElementById('modalTitle').textContent = t('actionModal.chat') + ' ' + name;
+  document.getElementById('modalContent').innerHTML = `
+    <div class="form-group">
+      <label>${t('actionModal.color')}</label>
+      <select id="chatColor">
+        <option value="White">${t('chat.white')}</option>
+        <option value="Red">${t('chat.red')}</option>
+        <option value="Green">${t('chat.green')}</option>
+        <option value="Blue">${t('chat.blue')}</option>
+        <option value="Yellow">${t('chat.yellow')}</option>
+        <option value="Orange">${t('chat.orange')}</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>${t('actionModal.message')}</label>
+      <input type="text" id="chatMessage" placeholder="Enter message...">
+    </div>
+  `;
+  document.getElementById('actionModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('actionModal').style.display = 'none';
+  selectedPlayer = null;
+  selectedAction = null;
+}
+
+async function confirmAction() {
+  if (!selectedPlayer || !selectedAction) return;
+  
+  let params = {};
+  
+  if (selectedAction === 'setAttributes') {
+    params = {
+      strength: parseInt(document.getElementById('attrStrength').value),
+      dexterity: parseInt(document.getElementById('attrDexterity').value),
+      stamina: parseInt(document.getElementById('attrStamina').value),
+      intellect: parseInt(document.getElementById('attrIntellect').value)
+    };
+  } else if (selectedAction === 'knockout') {
+    params = {seconds: parseInt(document.getElementById('knockoutSeconds').value)};
+  } else if (selectedAction === 'announce') {
+    params = {message: document.getElementById('announceMessage').value};
+  } else if (selectedAction === 'notify') {
+    params = {
+      type: document.getElementById('notifyType').value,
+      message: document.getElementById('notifyMessage').value
+    };
+  } else if (selectedAction === 'chat') {
+    params = {
+      color: document.getElementById('chatColor').value,
+      message: document.getElementById('chatMessage').value
+    };
+  }
+  
+  await playerAction(selectedPlayer, selectedAction, params);
+  closeModal();
+}
+
+// SSE for console
+function setupSSE() {
+  const evtSource = new EventSource('/api/console/stream');
+  evtSource.onmessage = (event) => {
+    const console = document.getElementById('dashboardConsole');
+    const line = document.createElement('div');
+    line.className = 'console-line';
+    line.textContent = event.data;
+    console.appendChild(line);
+    console.scrollTop = console.scrollHeight;
+    
+    // Keep only last 100 lines
+    while (console.children.length > 100) {
+      console.removeChild(console.firstChild);
+    }
+  };
+}
+
+// Auto-refresh dashboard status every 5 seconds
+setInterval(() => {
+  if (authToken) {
+    refreshDashboard();
+  }
+}, 5000);
+
+// Utility functions
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function showNotification(message, type) {
+  console.log(`[${type.toUpperCase()}] ${message}`);
+  
+  const container = document.getElementById('notificationContainer') || createNotificationContainer();
+  const notification = document.createElement('div');
+  notification.className = `toast-notification toast-${type}`;
+  notification.textContent = message;
+  container.appendChild(notification);
+  
+  requestAnimationFrame(() => notification.classList.add('show'));
+  
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => notification.remove(), 300);
+  }, 4000);
+}
+
+function createNotificationContainer() {
+  const container = document.createElement('div');
+  container.id = 'notificationContainer';
+  container.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none';
+  document.body.appendChild(container);
+  return container;
+}
+
+// Refresh page when language changes (re-translate dynamic content)
+function refreshUITranslations() {
+  refreshDashboard();
+  loadPlayers();
+  if (rconConnected) {
+    document.getElementById('rconStatus').innerHTML = '<span class="status-indicator status-online"></span>' + t('status.connected');
+  } else {
+    document.getElementById('rconStatus').innerHTML = '<span class="status-indicator status-offline"></span>' + t('status.disconnected');
+  }
+}
+
+// Enter key on password field
+document.getElementById('password').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') login();
+});
+
+// ===== WARGM Functions =====
+let wargmEditingCardId = null;
+let wargmCardItemCounter = 0;
+
+function switchWargmSubtab(name) {
+  document.querySelectorAll('.wargm-subtab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.wargm-subtab-content').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.wargm-subtab[data-subtab="${name}"]`).classList.add('active');
+  document.getElementById(`subtab-${name}`).classList.add('active');
+}
+
+async function wargmLoadSettings() {
+  try {
+    const res = await authFetch('/api/wargm/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+    document.getElementById('wargmApiUrl').value = s.apiUrl || 'https://api.wargm.ru/v1/';
+    document.getElementById('wargmShopId').value = s.shopId || '';
+    document.getElementById('wargmApiKey').value = s.apiKey || '';
+    document.getElementById('wargmTimeout').value = s.timeout || 10;
+    document.getElementById('wargmDuplicateCheck').value = s.duplicateCheckMinutes || 5;
+    document.getElementById('wargmCooldown').value = s.commandCooldownSeconds || 30;
+    document.getElementById('wargmMaxItems').value = s.maxItemsPerCard || 50;
+  } catch {}
+}
+
+async function wargmSaveSettings() {
+  const settings = {
+    apiUrl: document.getElementById('wargmApiUrl').value.trim(),
+    shopId: document.getElementById('wargmShopId').value.trim(),
+    apiKey: document.getElementById('wargmApiKey').value,
+    timeout: parseInt(document.getElementById('wargmTimeout').value) || 10,
+    duplicateCheckMinutes: parseInt(document.getElementById('wargmDuplicateCheck').value) || 5,
+    commandCooldownSeconds: parseInt(document.getElementById('wargmCooldown').value) || 30,
+    maxItemsPerCard: parseInt(document.getElementById('wargmMaxItems').value) || 50,
+  };
+  try {
+    const res = await authFetch('/api/wargm/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(settings),
+    });
+    const data = await res.json();
+    if (data.success || data.ok) showNotification(t('wargm.saved'), 'success');
+    else showNotification(t('notification.failed'), 'error');
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function wargmTestConnection() {
+  const settings = {
+    apiUrl: document.getElementById('wargmApiUrl').value.trim(),
+    shopId: document.getElementById('wargmShopId').value.trim(),
+    apiKey: document.getElementById('wargmApiKey').value,
+    timeout: parseInt(document.getElementById('wargmTimeout').value) || 10,
+    duplicateCheckMinutes: 5, commandCooldownSeconds: 30, maxItemsPerCard: 50,
+  };
+  const resultDiv = document.getElementById('wargmTestResult');
+  resultDiv.textContent = t('wargm.testing');
+  resultDiv.style.color = 'var(--muted)';
+  try {
+    const res = await authFetch('/api/wargm/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(settings),
+    });
+    const data = await res.json();
+    if (data.ok) { resultDiv.textContent = '✅ ' + data.message; resultDiv.style.color = 'var(--green)'; }
+    else { resultDiv.textContent = '❌ ' + data.message; resultDiv.style.color = 'var(--red)'; }
+  } catch (e) {
+    resultDiv.textContent = '❌ ' + e.message;
+    resultDiv.style.color = 'var(--red)';
+  }
+}
+
+async function wargmLoadCards() {
+  if (document.getElementById('tab-wargm').style.display === 'none') return;
+  const tbody = document.getElementById('wargmCardsBody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted)">⏳</td></tr>';
+  try {
+    const res = await authFetch('/api/wargm/cards');
+    const cards = await res.json();
+    if (!Array.isArray(cards) || cards.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted)">' + t('wargm.noCards') + '</td></tr>';
+      return;
+    }
+    tbody.innerHTML = cards.map(c => `
+      <tr>
+        <td>${c.id}</td>
+        <td>${escHtml(c.name)}</td>
+        <td>${escHtml(c.shopItemId)}</td>
+        <td>${(c.items || []).length}</td>
+        <td>${c.enabled ? '✅' : '❌'}</td>
+        <td>
+          <button class="player-btn" onclick="wargmShowCardEditor(${c.id})">✏️</button>
+          <button class="player-btn" onclick="wargmDuplicateCard(${c.id})">📋</button>
+          <button class="player-btn" onclick="wargmDeleteCard(${c.id})" style="color:var(--red)">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red)">Error</td></tr>';
+  }
+}
+
+async function wargmShowCardEditor(cardId) {
+  wargmEditingCardId = cardId || null;
+  document.getElementById('wargmCardItems').innerHTML = '';
+  document.getElementById('wargmCardModalTitle').textContent = cardId ? t('wargm.editCard') : t('wargm.addCard');
+
+  if (cardId) {
+    try {
+      const res = await authFetch('/api/wargm/cards');
+      const cards = await res.json();
+      const card = cards.find(c => c.id === cardId);
+      if (card) {
+        document.getElementById('wargmCardName').value = card.name || '';
+        document.getElementById('wargmShopItemId').value = card.shopItemId || '';
+        document.getElementById('wargmCardEnabled').checked = card.enabled !== false;
+        if (card.items) {
+          card.items.forEach(item => wargmAddItem(item));
+        }
+      }
+    } catch {}
+  } else {
+    document.getElementById('wargmCardName').value = '';
+    document.getElementById('wargmShopItemId').value = '';
+    document.getElementById('wargmCardEnabled').checked = true;
+    wargmAddItem();
+  }
+
+  document.getElementById('wargmCardModal').style.display = 'flex';
+}
+
+function wargmCloseCardEditor() {
+  document.getElementById('wargmCardModal').style.display = 'none';
+  wargmEditingCardId = null;
+}
+
+function wargmAddItem(prefill) {
+  const idx = wargmCardItemCounter++;
+  const type = prefill?.type || 'item';
+  const data = prefill?.data || {};
+
+  const container = document.getElementById('wargmCardItems');
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.id = `wargmItem_${idx}`;
+  div.style.cssText = 'padding:12px;margin-bottom:8px;position:relative';
+
+  div.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+      <select id="wargmItemType_${idx}" onchange="wargmChangeItemType(${idx})" style="flex:1;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+        <option value="item">📦 Предметы</option>
+        <option value="vehicle">🚗 Транспорт</option>
+        <option value="skill">⚡ Навыки</option>
+        <option value="attributes">🛡️ Атрибуты</option>
+        <option value="money">💵 Деньги</option>
+        <option value="gold">🪙 Золото</option>
+        <option value="cargo_drop">🪂 Карго-дроп</option>
+        <option value="vip">👑 VIP</option>
+      </select>
+      <button class="btn" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;color:var(--red)">🗑️</button>
+    </div>
+    <div id="wargmItemFields_${idx}"></div>
+  `;
+
+  div.querySelector('select').value = type;
+  container.appendChild(div);
+  wargmChangeItemType(idx, prefill);
+}
+
+function wargmChangeItemType(idx, prefill) {
+  const type = document.getElementById(`wargmItemType_${idx}`).value;
+  const fields = document.getElementById(`wargmItemFields_${idx}`);
+  const d = prefill?.data || {};
+  let html = '';
+
+  switch (type) {
+    case 'item':
+      html = `
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+          <div class="form-group" style="position:relative">
+            <label data-i18n="wargm.itemName" style="font-size:11px">Shortname предмета</label>
+            <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.itemName || d.shortname || '')}" placeholder="Apple" oninput="showInlineSuggestions(this)">
+            <div class="wargm-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+          </div>
+          <div class="form-group"><label data-i18n="wargm.amount" style="font-size:11px">Количество</label>
+            <input type="number" id="wargmItem_amount_${idx}" value="${d.amount || 1}" min="1" max="999"></div>
+        </div>`;
+      break;
+    case 'vehicle':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr;gap:8px">
+          <div class="form-group" style="position:relative">
+            <label data-i18n="wargm.vehicleName" style="font-size:11px">Название ТС</label>
+            <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.vehicleName || d.shortname || '')}" placeholder="Offroader_01" oninput="showInlineSuggestions(this)" data-vehicles="1">
+            <div class="wargm-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)" data-i18n="wargm.vehicleHint">Спавнится напрямую командой #SpawnVehicle</div>`;
+      break;
+    case 'skill':
+      html = `
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px">
+          <div class="form-group"><label data-i18n="wargm.skillName" style="font-size:11px">Навык</label>
+            <select id="wargmItem_skill_${idx}" style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+              <option value="ALL" ${d.skillName === 'ALL' ? 'selected' : ''}>⚡ ВСЕ навыки</option>
+              ${['Archery','Awareness','Brawling','Camouflage','Cooking','Demolition','Driving','Endurance','Engineering','Farming','Handgun','Medical','Motorcycling','Resistance','Rifles','Running','Sniping','Stealth','Survival','Tactics','Thievery','"Melee Weapons"','Aviation'].map(s =>
+                `<option value="${s}" ${d.skillName === s ? 'selected' : ''}>${s.replace(/"/g,'')}</option>`
+              ).join('')}
+            </select></div>
+          <div class="form-group"><label data-i18n="wargm.level" style="font-size:11px">Уровень</label>
+            <input type="number" id="wargmItem_level_${idx}" value="${d.level || 4}" min="1" max="4"></div>
+          <div class="form-group"><label style="font-size:11px;color:var(--muted)">—</label>
+            <div style="padding:6px 0;font-size:11px;color:var(--muted)">1-4</div></div>
+        </div>`;
+      break;
+    case 'attributes':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+          <div class="form-group"><label data-i18n="attr.strength" style="font-size:11px">Сила</label>
+            <input type="number" id="wargmItem_str_${idx}" value="${d.strength || 5}" min="1" max="10"></div>
+          <div class="form-group"><label data-i18n="attr.dexterity" style="font-size:11px">Ловкость</label>
+            <input type="number" id="wargmItem_dex_${idx}" value="${d.dexterity || 5}" min="1" max="10"></div>
+          <div class="form-group"><label data-i18n="attr.stamina" style="font-size:11px">Выносливость</label>
+            <input type="number" id="wargmItem_sta_${idx}" value="${d.stamina || 5}" min="1" max="10"></div>
+          <div class="form-group"><label data-i18n="attr.intellect" style="font-size:11px">Интеллект</label>
+            <input type="number" id="wargmItem_int_${idx}" value="${d.intellect || 5}" min="1" max="10"></div>
+        </div>`;
+      break;
+    case 'money':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+          <div class="form-group"><label data-i18n="wargm.amount" style="font-size:11px">Сумма</label>
+            <input type="number" id="wargmItem_amount_${idx}" value="${d.amount || 1000}" min="0" max="999999999"></div>
+          <div class="form-group"><label style="font-size:11px">Сообщение игроку</label>
+            <input type="text" id="wargmItem_message_${idx}" value="${escHtml(d.message || '')}" placeholder="You received N money"></div>
+        </div>`;
+      break;
+    case 'gold':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+          <div class="form-group"><label data-i18n="wargm.amount" style="font-size:11px">Количество</label>
+            <input type="number" id="wargmItem_amount_${idx}" value="${d.amount || 100}" min="0" max="999999999"></div>
+          <div class="form-group"><label style="font-size:11px">Сообщение игроку</label>
+            <input type="text" id="wargmItem_message_${idx}" value="${escHtml(d.message || '')}" placeholder="You received N gold"></div>
+        </div>`;
+      break;
+    case 'cargo_drop':
+      html = `<div style="font-size:11px;color:var(--muted)" data-i18n="wargm.cargoHintAuto">Дроп по координатам игрока (авто)</div>`;
+      break;
+    case 'vip':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr;gap:8px">
+          <div class="form-group"><label style="font-size:11px" data-i18n="wargm.vipDays">Дней VIP</label>
+            <input type="number" id="wargmItem_days_${idx}" value="${d.days || 30}" min="1" max="3650"></div>
+        </div>`;
+      break;
+  }
+
+  fields.innerHTML = html;
+  // Re-apply translations
+  if (typeof applyTranslations === 'function') applyTranslations(fields);
+}
+
+function wargmCollectItemData(idx) {
+  const type = document.getElementById(`wargmItemType_${idx}`).value;
+  const data = {};
+  switch (type) {
+    case 'item':
+    case 'vehicle':
+      data.vehicleName = document.getElementById(`wargmItem_name_${idx}`)?.value || '';
+      data.shortname = data.vehicleName;
+      data.amount = 1;
+      break;
+    case 'skill':
+      data.skillName = document.getElementById(`wargmItem_skill_${idx}`)?.value || '';
+      data.level = parseInt(document.getElementById(`wargmItem_level_${idx}`)?.value) || 1;
+      break;
+    case 'money':
+    case 'gold':
+      data.amount = parseInt(document.getElementById(`wargmItem_amount_${idx}`)?.value) || 0;
+      data.message = document.getElementById(`wargmItem_message_${idx}`)?.value || '';
+      break;
+    case 'attributes':
+      data.strength = parseInt(document.getElementById(`wargmItem_str_${idx}`)?.value) || 5;
+      data.dexterity = parseInt(document.getElementById(`wargmItem_dex_${idx}`)?.value) || 5;
+      data.stamina = parseInt(document.getElementById(`wargmItem_sta_${idx}`)?.value) || 5;
+      data.intellect = parseInt(document.getElementById(`wargmItem_int_${idx}`)?.value) || 5;
+      break;
+    case 'cargo_drop':
+      // no data fields needed; drops at player location
+      break;
+    case 'vip':
+      data.days = parseInt(document.getElementById(`wargmItem_days_${idx}`)?.value) || 30;
+      break;
+  }
+  return { type, data };
+}
+
+async function wargmSaveCard() {
+  const name = document.getElementById('wargmCardName').value.trim();
+  const shopItemId = document.getElementById('wargmShopItemId').value.trim();
+  if (!name || !shopItemId) {
+    showNotification(t('wargm.fillRequired'), 'error');
+    return;
+  }
+
+  const maxItems = parseInt(document.getElementById('wargmMaxItems').value) || 50;
+  const itemElements = document.querySelectorAll('[id^="wargmItemType_"]');
+  if (itemElements.length === 0) {
+    showNotification(t('wargm.addAtLeastOne'), 'error');
+    return;
+  }
+  if (itemElements.length > maxItems) {
+    showNotification(t('wargm.maxItemsExceeded'), 'error');
+    return;
+  }
+
+  const items = [];
+  itemElements.forEach(el => {
+    const idx = parseInt(el.id.replace('wargmItemType_', ''));
+    items.push(wargmCollectItemData(idx));
+  });
+
+  const card = {
+    id: wargmEditingCardId,
+    name,
+    shopItemId,
+    enabled: document.getElementById('wargmCardEnabled').checked,
+    items,
+  };
+
+  try {
+    const res = await authFetch('/api/wargm/cards', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(card),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('wargm.cardSaved'), 'success');
+      wargmCloseCardEditor();
+      wargmLoadCards();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function wargmDeleteCard(id) {
+  if (!confirm(t('wargm.confirmDelete'))) return;
+  try {
+    await authFetch(`/api/wargm/cards/${id}`, { method: 'DELETE' });
+    showNotification(t('wargm.cardDeleted'), 'success');
+    wargmLoadCards();
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function wargmDuplicateCard(id) {
+  try {
+    const res = await authFetch(`/api/wargm/cards/${id}/duplicate`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('wargm.cardDuplicated'), 'success');
+      wargmLoadCards();
+    } else showNotification(t('notification.failed'), 'error');
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function wargmDebugCheck() {
+  const steamId = document.getElementById('wargmDebugSteamId').value.trim();
+  if (!steamId) { showNotification('Enter Steam ID', 'error'); return; }
+  const resultDiv = document.getElementById('wargmDebugResult');
+  resultDiv.style.display = 'block';
+  resultDiv.textContent = '⏳ Requesting...';
+  try {
+    const res = await authFetch('/api/wargm/debug/operations', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ steamId }),
+    });
+    const data = await res.json();
+    resultDiv.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    resultDiv.textContent = '❌ Error: ' + e.message;
+  }
+}
+
+async function wargmExport() {
+  try {
+    const res = await authFetch('/api/wargm/export');
+    const text = await res.text();
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'wargm_cards.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showNotification(t('wargm.exported'), 'success');
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+async function wargmImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const res = await authFetch('/api/wargm/import', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ json: text }),
+    });
+    const data = await res.json();
+    showNotification(t('wargm.imported') + ': ' + (data.imported || 0) + (data.errors?.length ? ', errors: ' + data.errors.length : ''), 'success');
+    event.target.value = '';
+    wargmLoadCards();
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+// Auth helper for WARGM functions
+async function authFetch(url, opts = {}) {
+  const headers = opts.headers || {};
+  headers['Authorization'] = 'Bearer ' + authToken;
+  opts.headers = headers;
+  return fetch(url, opts);
+}
+
+// Settings
+async function loadSettings() {
+  try {
+    const res = await authFetch('/api/config');
+    const data = await res.json();
+    if (data.server) {
+      const sp = document.getElementById('settingsSteamCmdPath');
+      sp.value = data.server.steamCmdPath || '';
+      document.getElementById('settingsServerPath').value = data.server.serverPath || '';
+      // Auto-fill common paths if empty
+      if (!sp.value) {
+        const common = ['D:\\steamcmd', 'D:\\scumServerManager\\steamCMD'];
+        for (const dir of common) {
+          try {
+            const r = await fetch('/api/check-path?path=' + encodeURIComponent(dir), {
+              headers: {'Authorization': 'Bearer ' + authToken}
+            });
+            const j = await r.json();
+            if (j.exists) { sp.value = dir; break; }
+          } catch {}
+        }
+      }
+    }
+  } catch (e) {
+    document.getElementById('settingsStatus').textContent = t('settings.loadError') + ': ' + e.message;
+  }
+}
+
+async function saveSettings() {
+  try {
+    const cfg = await (await authFetch('/api/config')).json();
+    cfg.server = cfg.server || {};
+    cfg.server.steamCmdPath = document.getElementById('settingsSteamCmdPath').value;
+    cfg.server.serverPath = document.getElementById('settingsServerPath').value;
+    const res = await authFetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('settingsStatus').textContent = t('settings.saved');
+      document.getElementById('settingsStatus').style.color = 'var(--green)';
+    } else {
+      document.getElementById('settingsStatus').textContent = data.error || t('notification.failed');
+      document.getElementById('settingsStatus').style.color = 'var(--red)';
+    }
+  } catch (e) {
+    document.getElementById('settingsStatus').textContent = 'Error: ' + e.message;
+    document.getElementById('settingsStatus').style.color = 'var(--red)';
+  }
+}
+
+// Override switchTab to load settings when settings tab is opened
+const origSwitchTab = window.switchTab;
+window.switchTab = function(tab) {
+  if (typeof origSwitchTab === 'function') origSwitchTab(tab);
+  if (tab === 'settings') {
+    loadSettings();
+  } else if (tab === 'wargm') {
+    wargmLoadSettings();
+    wargmLoadCards();
+  }
+};
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Load WARGM settings on page load
+setTimeout(() => {
+  if (authToken) wargmLoadSettings();
+}, 1000);
+</script>
+</body>
+</html>

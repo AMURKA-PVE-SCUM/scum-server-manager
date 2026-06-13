@@ -13,7 +13,7 @@ export function PlayersPage() {
   const [selected, setSelected] = useState<any>(null);
   const [details, setDetails] = useState<any>(null);
   const [editFlags, setEditFlags] = useState<string[]>([]);
-  const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+  const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
 
   useEffect(() => { loadAll(); }, []);
 
@@ -24,7 +24,13 @@ export function PlayersPage() {
   };
 
   const loadAll = async () => {
-    try { await window.electronAPI.db.init(); const p = await window.electronAPI.db.getPlayers(); setPlayers(p || []); } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
+    try {
+      const initRes = await window.electronAPI.db.init();
+      if (initRes && initRes.error) { setSnack({ open: true, message: initRes.error, severity: 'error' }); return; }
+      const p = await window.electronAPI.db.getPlayers();
+      setPlayers(p || []);
+      if (!p || p.length === 0) setSnack({ open: true, message: t('players', 'noPlayers'), severity: 'warning' });
+    } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
     try { await loadAdmins(); } catch {}
   };
 
@@ -33,7 +39,7 @@ export function PlayersPage() {
       const p = await getAdminPath(); const c = await window.electronAPI.files.read(p);
       const lines: {steamId: string; flags: string[]}[] = [];
       c.split('\n').filter(Boolean).forEach((line: string) => {
-        const m = line.match(/^(\d+)(?:\[(.+)\])?$/);
+        const m = line.match(/^(\d+)(?:\[([^\]]+)\])?$/);
         if (m) lines.push({ steamId: m[1], flags: m[2] ? m[2].split(',').map((s: string) => s.trim()).filter(Boolean) : [] });
       });
       setAdminLines(lines);
@@ -61,7 +67,7 @@ export function PlayersPage() {
       const p = await getAdminPath();
       let c = '';
       try { c = await window.electronAPI.files.read(p); } catch {}
-      const lines = c.split('\n').filter((l: string) => !l.match(/^(\d+)(?:\[.+\])?$/) || !l.startsWith(sid));
+      const lines = c.split('\n').filter((l: string) => !l.match(/^(\d+)(?:\[[^\]]+\])?$/) || !l.startsWith(sid));
       await window.electronAPI.files.write(p, lines.join('\n'));
       setAdminLines(adminLines.filter((a) => a.steamId !== sid));
       setSnack({ open: true, message: t('players', 'adminRemoved').replace('{name}', name), severity: 'success' });
@@ -103,7 +109,7 @@ export function PlayersPage() {
                 <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.steamId}</TableCell>
                 <TableCell>{p.famePoints}</TableCell>
                 <TableCell>{p.walletBalance}</TableCell>
-                <TableCell>{p.lastLogin ? new Date(p.lastLogin).toLocaleString() : '-'}</TableCell>
+                <TableCell>{p.lastLogin ? new Date(p.lastLogin * 1000).toLocaleString() : '-'}</TableCell>
                 <TableCell>
                   {isAdmin(p.steamId) ? (
                     <Chip label={t('players', 'admin')} size="small" color="primary" variant="outlined" />

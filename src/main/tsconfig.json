@@ -12,5 +12,5 @@
     "sourceMap": false,
     "declaration": false
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "../types/**/*.d.ts"]
 }

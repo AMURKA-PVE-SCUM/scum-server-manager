@@ -10,6 +10,8 @@ import { LogWatcher } from './logWatcher';
 import { DiscordWebhook } from './discordWebhook';
 import { FtpServer } from './ftpServer';
 import { WebPanel } from './webPanel';
+import { RconClient } from './rconClient';
+import { WargmManager } from './wargmManager';
 import { ScumDatabaseReader, initSqlJs } from './scumDatabase';
 import ElectronStore from 'electron-store';
 import type { AppConfig } from './types';
@@ -41,9 +43,21 @@ function detectServerPath(): string {
 }
 
 function detectSteamCmdPath(): string {
-  const candidates = [__dirname, path.join(__dirname, '..', '..'), process.cwd()];
+  const candidates = [
+    __dirname,
+    path.join(__dirname, '..', '..'),
+    process.cwd(),
+    path.join(process.cwd(), 'bin', 'steam'),
+    path.join(process.cwd(), 'steamCMD'),
+    path.join(process.cwd(), '..', 'scumServerManager', 'bin', 'steam'),
+    path.join(process.cwd(), '..', 'scumServerManager', 'steamCMD'),
+    'D:\\steamcmd',
+    'D:\\scumServerManager\\steamCMD',
+  ];
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'steamcmd.exe'))) return dir;
+    try {
+      if (fs.existsSync(path.join(dir, 'steamcmd.exe'))) return dir;
+    } catch {}
   }
   return '';
 }
@@ -64,6 +78,21 @@ const store = new ElectronStore<AppConfig>({
     theme: 'dark', language: 'ru',
     ftp: { enabled: false, port: 21, username: 'scum', password: 'scum123' },
     webPanel: { enabled: false, port: 8080, username: 'admin', password: 'scum' },
+    rcon: { enabled: false, host: 'localhost', port: 28015, password: '' },
+    packs: {
+      starter: { enabled: true, items: [], cooldownHours: 0 },
+      daily: { enabled: true, items: [], cooldownHours: 24 },
+    },
+    plugins: {
+      teleport: { enabled: true, locations: [] },
+      vip: {
+        enabled: true,
+        players: [],
+        starterBonus: { items: [{ itemId: 'Apple', amount: 10 }], money: 1000, gold: 100, fame: 500 },
+        dailyBonus: { items: [{ itemId: 'Apple', amount: 5 }], money: 500, gold: 50, fame: 200 },
+      },
+      saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 },
+    },
   },
   deserialize: (data: string): AppConfig => { if (data.charCodeAt(0) === 0xfeff) data = data.slice(1); return JSON.parse(data); },
 });
@@ -81,6 +110,8 @@ let consoleWatcher: FSWatcher | null = null;
 let consoleOffset = 0;
 const ftpServer = new FtpServer();
 const webPanel = new WebPanel(store.store.webPanel);
+const rconClient = new RconClient();
+const wargmManager = new WargmManager();
 
 function startRestartScheduler(): void {
   if (restartScheduler) clearInterval(restartScheduler);
@@ -125,6 +156,8 @@ function createWindow(): void {
 }
 
 function initServices(): void {
+  // Clean up old service instances before creating new ones
+  if (logWatcher) logWatcher.destroy();
   const config = store.store;
   fileManager = new FileManager(config.server.serverPath);
   backupManager = new BackupManager(config.backup, config.server.serverPath);
@@ -133,9 +166,100 @@ function initServices(): void {
   discordWebhook = new DiscordWebhook(config.discord);
   serverManager = new ServerManager(config.server);
   logWatcher = new LogWatcher(config.server.serverPath, discordWebhook);
+  logWatcher.setRconClient(rconClient);
+  logWatcher.setTeleportLocations(config.plugins.teleport?.locations || []);
+  logWatcher.setPacksConfig(config.packs);
   scumDatabase = new ScumDatabaseReader(config.server.serverPath);
   webPanel.setServices(serverManager, steamCmd, config.server.serverPath);
+  webPanel.setRconClient(rconClient);
   webPanel.updateConfig(config.webPanel);
+  webPanel.setPacksConfig(config.packs);
+  webPanel.setPacksSaveCallback((packs) => {
+    console.log('[Packs] Saving packs config to store, items:', packs.starter.items.length, 'starter,', packs.daily.items.length, 'daily');
+    console.log('[Packs] Starter items:', JSON.stringify(packs.starter.items));
+    console.log('[Packs] Daily items:', JSON.stringify(packs.daily.items));
+    try {
+      store.set('packs', packs);
+      console.log('[Packs] Store saved successfully');
+    } catch (e: any) {
+      console.error('[Packs] Store save error:', e.message);
+    }
+    logWatcher.setPacksConfig(packs);
+  });
+  webPanel.setPackCooldownProvider({
+    getCooldowns: () => logWatcher.getCooldowns(),
+    resetCooldown: (steamId: string, packType?: 'starter' | 'daily') => logWatcher.resetPlayerCooldown(steamId, packType),
+  });
+  let pluginsCfg = config.plugins;
+  if (!pluginsCfg) {
+    pluginsCfg = {
+      teleport: { enabled: true, locations: [] },
+      vip: {
+        enabled: true, players: [],
+        starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
+        dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
+      },
+      saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 },
+    };
+    store.set('plugins', pluginsCfg);
+  } else if (!pluginsCfg.vip) {
+    pluginsCfg.vip = {
+      enabled: true, players: [],
+      starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
+      dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
+    };
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.saveHome) {
+    pluginsCfg.saveHome = { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 };
+    store.set('plugins', pluginsCfg);
+  }
+  webPanel.setPluginsConfig(pluginsCfg);
+  webPanel.setPluginsSaveCallback((plugins) => {
+    console.log('[Plugins] Saving plugins config to store');
+    try {
+      store.set('plugins', plugins);
+    } catch (e: any) {
+      console.error('[Plugins] Store save error:', e.message);
+    }
+    logWatcher.setTeleportLocations(plugins.teleport?.locations || []);
+    const vip = plugins.vip || {
+      enabled: true, players: [],
+      starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
+      dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
+    };
+    logWatcher.setVipConfig(vip);
+    logWatcher.setSaveHomeConfig(plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 });
+  });
+  const vipCfg = config.plugins.vip || {
+    enabled: true, players: [],
+    starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
+    dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
+  };
+  logWatcher.setVipConfig(vipCfg);
+  logWatcher.setSaveHomeConfig(config.plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 });
+  wargmManager.setVipAddCallback((steamId: string, days: number) => {
+    const cur = store.store;
+    const p = cur.plugins || { teleport: { enabled: true, locations: [] }, vip: vipCfg };
+    if (!p.vip) p.vip = vipCfg;
+    const existing = p.vip.players.findIndex((x: any) => x.steamId === steamId);
+    const expiresAt = Date.now() + days * 86400000;
+    if (existing >= 0) {
+      p.vip.players[existing].expiresAt = Math.max(p.vip.players[existing].expiresAt, expiresAt);
+    } else {
+      p.vip.players.push({ steamId, expiresAt, note: 'WARGM' });
+    }
+    store.set('plugins', p);
+    logWatcher.setVipConfig(p.vip);
+    webPanel.setPluginsConfig(p);
+  });
+  wargmManager.setRconClient(rconClient);
+  webPanel.setWargmManager(wargmManager);
+  logWatcher.setWargmManager(wargmManager);
+  webPanel.setServerConfigProvider({
+    get: () => store.store,
+    save: (cfg: any) => { try { store.store = cfg; initServices(); startRestartScheduler(); startBackupScheduler(); return true; } catch { return false; } },
+  });
 }
 
 function registerIpcHandlers(): void {
@@ -149,11 +273,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle('server:restart', async () => { await serverManager.restart(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('Server restarted').catch(() => {}); return s; });
   ipcMain.handle('server:status', () => serverManager.getStatus());
   ipcMain.handle('server:check-update', async () => {
-    try { if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath); const r = await steamCmd.updateServer(); return { updated: r !== 'already_up_to_date', error: '' }; }
-    catch (e: any) { return { updated: false, error: e.message || 'Update error' }; }
+    try {
+      steamCmd.setSteamCmdPath(store.store.server.steamCmdPath || 'D:\\steamcmd');
+      if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath);
+      const result = await steamCmd.checkForUpdate();
+      return result;
+    } catch (e: any) { return { available: false, error: e.message || 'Update check error' }; }
   });
-  ipcMain.handle('server:update', async () => { if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath); return steamCmd.updateServer(); });
+  ipcMain.handle('server:update', async () => {
+    steamCmd.setSteamCmdPath(store.store.server.steamCmdPath || 'D:\\steamcmd');
+    if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath);
+    return steamCmd.updateServer();
+  });
+  ipcMain.handle('server:manual-update', async () => {
+    steamCmd.setSteamCmdPath(store.store.server.steamCmdPath || 'D:\\steamcmd');
+    if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath);
+    await steamCmd.manualUpdate();
+    return true;
+  });
   ipcMain.handle('server:update-stream', async () => {
+    steamCmd.setSteamCmdPath(store.store.server.steamCmdPath || 'D:\\steamcmd');
     if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath);
     const result = await steamCmd.runUpdateWithProgress((line) => { try { mainWindow?.webContents.send('server:update-line', line); } catch {} });
     try { mainWindow?.webContents.send('server:update-done', result); } catch {}
@@ -222,12 +361,44 @@ function registerIpcHandlers(): void {
   ipcMain.handle('db:getFlags', () => scumDatabase.getFlags());
   ipcMain.handle('db:getBankAccounts', () => scumDatabase.getBankAccounts());
   ipcMain.handle('db:getEconomyLeaderboard', () => scumDatabase.getEconomyLeaderboard());
+
+  // RCON handlers
+  ipcMain.handle('rcon:connect', async (_event, config) => {
+    rconClient.setAutoReconnect(true);
+    const result = await rconClient.connect(config.host, config.port, config.password);
+    if (result.success) {
+      const cur = store.store;
+      cur.rcon = { ...config, enabled: true };
+      store.store = cur;
+    }
+    return result;
+  });
+  ipcMain.handle('rcon:disconnect', () => {
+    rconClient.disconnect();
+    const cur = store.store;
+    cur.rcon.enabled = false;
+    store.store = cur;
+    return true;
+  });
+  ipcMain.handle('rcon:sendCommand', async (_event, command) => {
+    return await rconClient.sendCommand(command);
+  });
+  ipcMain.handle('rcon:status', () => ({
+    connected: rconClient.isConnected(),
+    config: rconClient.getConfig(),
+  }));
+  ipcMain.handle('rcon:saveConfig', async (_event, config) => {
+    const cur = store.store;
+    cur.rcon = config;
+    store.store = cur;
+    return true;
+  });
 }
 
 app.whenReady().then(() => {
-  createWindow();
   initServices();
   registerIpcHandlers();
+  createWindow();
   startRestartScheduler();
 
   const cur = store.store;
@@ -247,8 +418,28 @@ app.whenReady().then(() => {
     try { scumDatabase.setServerPath(store.store.server.serverPath); scumDatabase.open(); console.log('[SCUMdb] Opened SCUM.db'); } catch (e: any) { console.log('[SCUMdb] Not available:', e.message); }
   }).catch((e) => console.log('[SCUMdb] Init error:', e.message));
 
+  wargmManager.init().then(ok => {
+    if (ok) console.log('[WargmDB] Initialized');
+    else console.log('[WargmDB] Init failed');
+  }).catch(e => console.log('[WargmDB] Init error:', e.message));
+
   if (store.store.webPanel.enabled) {
     webPanel.start().catch((e) => console.error('[WebPanel]', e.message));
+  }
+
+  // Auto-connect RCON on startup if config exists
+  if (store.store.rcon.enabled && store.store.rcon.password) {
+    rconClient.setAutoReconnect(true);
+    rconClient.connect(store.store.rcon.host || 'localhost', store.store.rcon.port || 28015, store.store.rcon.password)
+      .then(result => {
+        if (result.success) {
+          console.log('[RCON] Auto-connected on startup');
+          webPanel.startPlayersPoll(); // Start polling players in web panel
+        } else {
+          console.log('[RCON] Auto-connect failed:', result.error);
+        }
+      })
+      .catch(e => console.log('[RCON] Auto-connect error:', e.message));
   }
 
   if (store.store.server.autoStart) serverManager.start();

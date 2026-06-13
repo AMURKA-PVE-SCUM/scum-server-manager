@@ -52,6 +52,7 @@ export class LogWatcher {
     { trigger: '!teleport', rconCommand: '', description: '', helpTrigger: '!телепорт' },
     { trigger: '!vip', rconCommand: '', description: '', helpTrigger: '!вип' },
     { trigger: '!nameplates', rconCommand: '', description: '', helpTrigger: '!ники' },
+    { trigger: '!players', rconCommand: '', description: '', helpTrigger: '!игроки' },
     { trigger: '!savedom', rconCommand: '', description: '', helpTrigger: '!сохранитьдом' },
     { trigger: '!home', rconCommand: '', description: '', helpTrigger: '!дом' },
     { trigger: '!homes', rconCommand: '', description: '', helpTrigger: '!дома' },
@@ -69,6 +70,7 @@ export class LogWatcher {
     '!вип': '!vip',
     '!варгм': '!wargm',
     '!ники': '!nameplates',
+    '!игроки': '!players',
     '!сохранитьдом': '!savedom',
     '!дом': '!home',
     '!дома': '!homes',
@@ -272,7 +274,16 @@ export class LogWatcher {
     // Nameplates command
     if (cmdKey === '!nameplates') {
       const r = await this.rconClient.sendCommand(`#ShowNamePlates true ${steamId}`);
-      await this.rconClient.sendCommand(`SendChat 4 "${r.success ? 'Ники игроков включены' : 'Ошибка: ' + (r.response || 'неизвестно')}" ${steamId}`);
+      const msg = r.success ? 'Ники игроков включены' : `Ошибка: ${r.response || r.error || 'неизвестно'}`;
+      await this.rconClient.sendCommand(`SendChat 4 "${msg}" ${steamId}`);
+      return;
+    }
+
+    // ShowOtherPlayerInfo command
+    if (cmdKey === '!players') {
+      const r = await this.rconClient.sendCommand(`#ShowOtherPlayerInfo true ${steamId}`);
+      const msg = r.success ? 'Игроки на карте включены' : `Ошибка: ${r.response || r.error || 'неизвестно'}`;
+      await this.rconClient.sendCommand(`SendChat 4 "${msg}" ${steamId}`);
       return;
     }
 
@@ -672,16 +683,28 @@ export class LogWatcher {
       this.scumLogOffset = stat.size;
       for (const line of text.split('\n').filter(Boolean)) {
         const pm = line.match(/HandlePossessedBy:\s*(\d+),\s*(\d+),\s*(\S+)/);
-        if (pm) { this.discord.sendLoginEvent(pm[3], '', 'join').catch(() => {}); this.addEvent('login', `${pm[3]} connected`); continue; }
+        if (pm) { this.discord.sendLoginEvent(pm[3], '', 'join').catch(() => {}); this.addEvent('login', `${pm[3]} connected`); this.announceJoinLeave(pm[3], 'join').catch(() => {}); continue; }
         const lm = line.match(/LogSCUM:.+'(\d+):([^(]+)\((\d+)\)'.+logged in/);
-        if (lm) { this.discord.sendLoginEvent(lm[2].trim(), '', 'join').catch(() => {}); this.addEvent('login', `${lm[2].trim()} connected`); continue; }
+        if (lm) { this.discord.sendLoginEvent(lm[2].trim(), '', 'join').catch(() => {}); this.addEvent('login', `${lm[2].trim()} connected`); this.announceJoinLeave(lm[2].trim(), 'join').catch(() => {}); continue; }
         const llout = line.match(/LogSCUM:.+'(\d+):([^(]+)\(\d+\)'.+logged out/);
-        if (llout) { this.discord.sendLoginEvent(llout[2].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${llout[2].trim()} disconnected`); continue; }
+        if (llout) { this.discord.sendLoginEvent(llout[2].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${llout[2].trim()} disconnected`); this.announceJoinLeave(llout[2].trim(), 'leave').catch(() => {}); continue; }
         const plout = line.match(/Prisoner logging out:\s*([^(]+)\s*\(\d+\)/);
-        if (plout) { this.discord.sendLoginEvent(plout[1].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${plout[1].trim()} disconnected`); continue; }
+        if (plout) { this.discord.sendLoginEvent(plout[1].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${plout[1].trim()} disconnected`); this.announceJoinLeave(plout[1].trim(), 'leave').catch(() => {}); continue; }
         const gm = line.match(/Global Stats:.*?P:\s*(\d+)/);
         if (gm) this.lastPlayerCount = parseInt(gm[1], 10);
       }
+    } catch {}
+  }
+
+  private async announceJoinLeave(name: string, type: 'join' | 'leave'): Promise<void> {
+    if (!this.rconClient || !this.rconClient.isConnected()) return;
+    try {
+      const res = await this.rconClient.sendCommand('ListPlayers');
+      if (!res.success) return;
+      const online = (res.response.match(/Name:/g) || []).length;
+      const emoji = type === 'join' ? '🟢' : '🔴';
+      const action = type === 'join' ? 'подключился' : 'вышел';
+      await this.rconClient.sendCommand(`SendChat 2 "${emoji} ${name} ${action} | Online: ${online}"`);
     } catch {}
   }
 

@@ -785,6 +785,7 @@ const translations = {
     'playerCard.immortalOn': '🛡 Бессмертие ВКЛ',
     'playerCard.immortalOff': '🛡 Бессмертие ВЫКЛ',
     'playerCard.showNamePlates': '👤 Показать ники',
+    'playerCard.showOtherPlayerInfo': '🗺️ Игроки на карте',
     'playerCard.killPlayer': '💀 Убить игрока',
     'playerCard.silence': '🔇 Замутить',
     'playerCard.knockout': '😵 Нокаут',
@@ -1035,6 +1036,7 @@ const translations = {
     'playerCard.immortalOn': '🛡 Immortality ON',
     'playerCard.immortalOff': '🛡 Immortality OFF',
     'playerCard.showNamePlates': '👤 Show Name Plates',
+    'playerCard.showOtherPlayerInfo': '🗺️ Players on Map',
     'playerCard.killPlayer': '💀 Kill Player',
     'playerCard.silence': '🔇 Silence',
     'playerCard.knockout': '😵 Knockout',
@@ -1998,6 +2000,9 @@ async function showPlayerCard(steamId, playerName) {
       </button>
       <button class="action-btn success" onclick="playerAction('${steamId}', 'showNamePlates', {}); closePlayerCard()">
          ${t('playerCard.showNamePlates')}
+      </button>
+      <button class="action-btn success" onclick="playerAction('${steamId}', 'showOtherPlayerInfo', {}); closePlayerCard()">
+         ${t('playerCard.showOtherPlayerInfo')}
       </button>
       <button class="action-btn danger" onclick="playerAction('${steamId}', 'suicide', {}); closePlayerCard()">
         ${t('playerCard.killPlayer')}

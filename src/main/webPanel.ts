@@ -718,6 +718,9 @@ export class WebPanel {
         case 'showNamePlates':
           command = `#ShowNamePlates true ${steamId}`;
           break;
+        case 'showOtherPlayerInfo':
+          command = `#ShowOtherPlayerInfo true ${steamId}`;
+          break;
         case 'suicide':
           command = `Suicide ${steamId}`;
           break;

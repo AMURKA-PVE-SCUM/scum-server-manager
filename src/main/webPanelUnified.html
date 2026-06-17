@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SCUM Server Manager</title>
+<link rel="icon" href="/favicon.ico">
 <style>
 :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -97,6 +98,8 @@ tr:hover{background:rgba(88,166,255,0.05)}
 .wargm-subtab:hover{color:var(--text)}
 .wargm-subtab-content{display:none}
 .wargm-subtab-content.active{display:block}
+.item-icon{width:24px;height:24px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:2px;flex-shrink:0}
+.pack-item-icon{width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:4px;border-radius:2px;flex-shrink:0}
 .packs-subtab{padding:10px 20px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all 0.2s}
 .packs-subtab.active{background:var(--surface);color:var(--text);border-bottom-color:var(--surface)}
 .packs-subtab:hover{color:var(--text)}
@@ -183,8 +186,18 @@ tr:hover{background:rgba(88,166,255,0.05)}
           <button class="btn btn-success" onclick="serverAction('start')"><span data-i18n="server.start">▶ Старт</span></button>
           <button class="btn btn-danger" onclick="serverAction('stop')"><span data-i18n="server.stop">⏹ Стоп</span></button>
           <button class="btn btn-warning" onclick="serverAction('restart')"><span data-i18n="server.restart">↻ Перезапуск</span></button>
-          <button class="btn" onclick="serverAction('update')"><span data-i18n="server.update">↓ Обновить сервер</span></button>
+          <button class="btn" id="updateBtn" onclick="startUpdateStream()"><span data-i18n="server.update">↓ Обновить сервер</span></button>
           <button class="btn" onclick="refreshDashboard()"><span data-i18n="server.refresh">⟳ Обновить</span></button>
+        </div>
+        <div id="updateProgress" style="display:none;margin-top:16px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span id="updateState" style="color:#58a6ff;font-weight:600;font-size:13px">Connecting...</span>
+            <span id="updatePercent" style="color:#e6edf3;font-weight:700;font-size:13px">0%</span>
+          </div>
+          <div style="background:#21262d;border-radius:4px;height:8px;overflow:hidden">
+            <div id="updateBar" style="background:#58a6ff;height:100%;width:0%;transition:width 0.3s;border-radius:4px"></div>
+          </div>
+          <div id="updateDetail" style="color:#8b949e;font-size:12px;margin-top:4px"></div>
         </div>
       </div>
 
@@ -695,17 +708,43 @@ let cachedPlayersList = [];
 
 // Item database loaded from API
 let allItems = [];
+let itemImagesMap = null;
 
 async function loadItems() {
   try {
     const h = authToken ? {'Authorization': 'Bearer ' + authToken} : {};
     const res = await fetch('/api/items', {headers: h});
-    if (res.ok) { allItems = await res.json(); return; }
+    if (res.ok) { allItems = await res.json(); }
   } catch (e) { console.error('Failed to load items:', e); }
   // Retry after delay if failed
   setTimeout(loadItems, 2000);
 }
 loadItems();
+
+async function loadItemImages() {
+  try {
+    const h = authToken ? {'Authorization': 'Bearer ' + authToken} : {};
+    const res = await fetch('/api/item-images-map', {headers: h});
+    if (res.ok) { itemImagesMap = await res.json(); }
+  } catch (e) { console.error('Failed to load item images:', e); }
+  if (!itemImagesMap) setTimeout(loadItemImages, 3000);
+}
+loadItemImages();
+
+function getItemImage(name) {
+  if (!itemImagesMap || !name) return null;
+  return itemImagesMap[name] || null;
+}
+
+function getItemIconHtml(name) {
+  const url = getItemImage(name);
+  return url ? `<img src="${url}" class="item-icon" loading="lazy" onerror="this.style.display='none'">` : '';
+}
+
+function getPackItemIconHtml(name) {
+  const url = getItemImage(name);
+  return url ? `<img src="${url}" class="pack-item-icon" loading="lazy" onerror="this.style.display='none'">` : '';
+}
 
 // SCUM Vehicles Database
 const SCUM_VEHICLES = [
@@ -858,6 +897,8 @@ const translations = {
     'notification.enterVehicle': 'Введите ID ТС',
     'notification.enterAmount': 'Введите корректную сумму',
     'notification.enterFame': 'Введите корректное количество',
+    'notification.alreadyUpToDate': 'Сервер уже обновлён',
+    'notification.updateStarted': 'Обновление запущено...',
     'console.cmd': '> ',
     'console.system': '[СИСТЕМА] ',
     'console.error': '[ОШИБКА] ',
@@ -1109,6 +1150,8 @@ const translations = {
     'notification.enterVehicle': 'Please enter vehicle ID',
     'notification.enterAmount': 'Please enter a valid amount',
     'notification.enterFame': 'Please enter a valid fame amount',
+    'notification.alreadyUpToDate': 'Server is already up to date',
+    'notification.updateStarted': 'Update started...',
     'console.cmd': '> ',
     'console.system': '[SYSTEM] ',
     'console.error': '[ERROR] ',
@@ -1335,6 +1378,89 @@ async function serverAction(action) {
   }
 }
 
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+let updateSSESource = null;
+
+function startUpdateStream() {
+  const btn = document.getElementById('updateBtn');
+  const progressDiv = document.getElementById('updateProgress');
+  const stateEl = document.getElementById('updateState');
+  const percentEl = document.getElementById('updatePercent');
+  const barEl = document.getElementById('updateBar');
+  const detailEl = document.getElementById('updateDetail');
+
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  progressDiv.style.display = 'block';
+  stateEl.textContent = 'Connecting to Steam...';
+  percentEl.textContent = '0%';
+  barEl.style.width = '0%';
+  barEl.style.background = '#58a6ff';
+  detailEl.textContent = '';
+
+  if (updateSSESource) { updateSSESource.close(); updateSSESource = null; }
+
+  const url = `/api/update-stream?token=${authToken}`;
+  updateSSESource = new EventSource(url);
+
+  updateSSESource.addEventListener('progress', (e) => {
+    try {
+      const p = JSON.parse(e.data);
+      const pct = p.percent || 0;
+      percentEl.textContent = pct.toFixed(1) + '%';
+      barEl.style.width = pct + '%';
+      stateEl.textContent = p.detail || p.state || 'Working...';
+      if (p.bytesDownloaded != null && p.bytesTotal != null && p.bytesTotal > 0) {
+        detailEl.textContent = formatBytes(p.bytesDownloaded) + ' / ' + formatBytes(p.bytesTotal) + (p.speed ? ' (' + p.speed + ')' : '');
+      }
+      if (p.state === 'error') {
+        barEl.style.background = '#f85149';
+        stateEl.style.color = '#f85149';
+      } else if (p.state === 'done') {
+        barEl.style.background = '#3fb950';
+        stateEl.style.color = '#3fb950';
+      }
+    } catch {}
+  });
+
+  updateSSESource.addEventListener('done', (e) => {
+    updateSSESource.close(); updateSSESource = null;
+    const result = e.data;
+    if (result === 'already_up_to_date') {
+      showNotification(t('notification.alreadyUpToDate') || 'Already up to date', 'success');
+    } else {
+      showNotification(t('notification.success'), 'success');
+    }
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    refreshDashboard();
+  });
+
+  updateSSESource.addEventListener('error', (e) => {
+    if (e.data) {
+      stateEl.textContent = 'Error: ' + e.data;
+      barEl.style.background = '#f85149';
+      stateEl.style.color = '#f85149';
+      showNotification('Update error: ' + e.data, 'error');
+    }
+    updateSSESource.close(); updateSSESource = null;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  });
+
+  updateSSESource.onerror = () => {
+    updateSSESource.close(); updateSSESource = null;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  };
+}
+
 // Refresh dashboard
 async function refreshDashboard() {
   try {
@@ -1432,9 +1558,11 @@ function renderPackItems(containerId, items) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
     row.className = 'pack-row';
+    const iconHtml = getPackItemIconHtml(item.itemId);
     row.innerHTML = `
-      <div style="flex:1;position:relative">
-        <input type="text" class="pack-item-id" value="${item.itemId}" placeholder="Item name" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="onPackChanged()">
+      <div style="flex:1;position:relative;display:flex;align-items:center;gap:4px">
+        <div class="pack-item-icon-wrapper" style="flex-shrink:0;display:flex;align-items:center;width:20px">${iconHtml}</div>
+        <input type="text" class="pack-item-id" value="${item.itemId}" placeholder="Item name" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this);updatePackItemIcon(this)" onchange="onPackChanged()">
         <div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
       </div>
       <input type="number" class="pack-item-amt" value="${item.amount}" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()">
@@ -1475,8 +1603,9 @@ function addPackItem(pack) {
   row.className = 'pack-row';
   row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
   row.innerHTML = `
-    <div style="flex:1;position:relative">
-      <input type="text" class="pack-item-id" value="" placeholder="Item name" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="onPackChanged()">
+    <div style="flex:1;position:relative;display:flex;align-items:center;gap:4px">
+      <div class="pack-item-icon-wrapper" style="flex-shrink:0;display:flex;align-items:center;width:20px"></div>
+      <input type="text" class="pack-item-id" value="" placeholder="Item name" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="updatePackItemIcon(this);onPackChanged()">
       <div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
     </div>
     <input type="number" class="pack-item-amt" value="" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()">
@@ -1485,6 +1614,13 @@ function addPackItem(pack) {
   container.appendChild(row);
   const inp = row.querySelector('.pack-item-id');
   if (inp) { inp.focus(); }
+}
+
+function updatePackItemIcon(input) {
+  const wrapper = input.parentElement.querySelector('.pack-item-icon-wrapper');
+  if (!wrapper) return;
+  const url = getItemImage(input.value.trim());
+  wrapper.innerHTML = url ? `<img src="${url}" class="pack-item-icon" loading="lazy">` : '';
 }
 
 async function loadPacks() {
@@ -1689,8 +1825,26 @@ function renderVipItems(containerId, items) {
   }
   container.innerHTML = items.map((item, i) => {
     const packType = containerId === 'vipStarterItems' ? 'starter' : 'daily';
-    return '<div class="pack-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;position:relative"><input type="text" value="' + escapeHtml(item.itemId) + '" placeholder="ItemID" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:Consolas,monospace" oninput="showInlineSuggestions(this)" onchange="vipConfig.' + packType + 'Bonus.items[' + i + '].itemId=this.value"><div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:70px;background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:180px;overflow-y:auto;z-index:10"></div><input type="number" value="' + item.amount + '" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="vipConfig.' + packType + 'Bonus.items[' + i + '].amount=parseInt(this.value)"><button class="btn btn-danger" style="padding:8px 12px" onclick="vipConfig.' + packType + 'Bonus.items.splice(' + i + ', 1); loadVipConfig()">✕</button></div>';
+    const iconHtml = getPackItemIconHtml(item.itemId);
+    return '<div class="pack-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;position:relative"><div class="pack-item-icon-wrapper" style="flex-shrink:0;display:flex;align-items:center;width:20px">' + iconHtml + '</div><input type="text" value="' + escapeHtml(item.itemId) + '" placeholder="ItemID" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:Consolas,monospace" oninput="showInlineSuggestions(this);updateVipItemIcon(this,' + i + ')" onchange="vipConfig.' + packType + 'Bonus.items[' + i + '].itemId=this.value;updateVipItemIcon(this,' + i + ')"><div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:70px;background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:180px;overflow-y:auto;z-index:10"></div><input type="number" value="' + item.amount + '" min="1" style="width:70px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="vipConfig.' + packType + 'Bonus.items[' + i + '].amount=parseInt(this.value)"><button class="btn btn-danger" style="padding:8px 12px" onclick="vipConfig.' + packType + 'Bonus.items.splice(' + i + ', 1); loadVipConfig()">✕</button></div>';
   }).join('');
+}
+
+function updateVipItemIcon(input, idx) {
+  const row = input.closest('.pack-row');
+  if (!row) return;
+  const wrapper = row.querySelector('.pack-item-icon-wrapper');
+  if (!wrapper) return;
+  const url = getItemImage(input.value.trim());
+  wrapper.innerHTML = url ? `<img src="${url}" class="pack-item-icon" loading="lazy">` : '';
+}
+
+function updateWargmItemIcon(idx) {
+  const input = document.getElementById(`wargmItem_name_${idx}`);
+  const iconDiv = document.getElementById(`wargmItem_icon_${idx}`);
+  if (!input || !iconDiv) return;
+  const url = getItemImage(input.value.trim());
+  iconDiv.innerHTML = url ? `<img src="${url}" class="item-icon" loading="lazy">` : '';
 }
 
 function addVipItem(packType) {
@@ -2087,8 +2241,8 @@ function showItemSuggestions() {
   // Build suggestions HTML
   selectedItemIndex = -1;
   suggestionsDiv.innerHTML = matches.map((item, index) => `
-    <div class="suggestion-item" data-index="${index}" onclick="selectItem('${item}')" onmouseenter="highlightSuggestion(${index})">
-      ${highlightMatch(item, query)}
+    <div class="suggestion-item" data-index="${index}" onclick="selectItem('${item}')" onmouseenter="highlightSuggestion(${index})" style="display:flex;align-items:center">
+      ${getItemIconHtml(item)}${highlightMatch(item, query)}
     </div>
   `).join('');
   
@@ -2151,20 +2305,36 @@ function hideItemSuggestions() {
 
 // Inline suggestions for pack items and WARGM
 function showInlineSuggestions(input, customSource) {
-  const box = input.parentElement.querySelector('.pack-suggestions, .wargm-suggestions');
+  const box = input.closest('.form-group')?.querySelector('.pack-suggestions, .wargm-suggestions')
+    || input.parentElement.querySelector('.pack-suggestions, .wargm-suggestions');
   if (!box) return;
   const query = input.value.toLowerCase().trim();
   if (!query) { box.style.display = 'none'; return; }
-  // Check if input has data-vehicles attribute (for WARGM vehicle)
   const src = customSource || (input.dataset.vehicles ? SCUM_VEHICLES : allItems);
   const matches = src.filter(it => it.toLowerCase().includes(query)).slice(0, 20);
   if (!matches.length) { box.style.display = 'none'; return; }
   const escR = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const isVehicle = input.dataset.vehicles;
   box.innerHTML = matches.map((it, i) =>
-    `<div class="inline-ac-item" style="padding:8px 12px;cursor:pointer;color:#e6edf3;font-family:'Consolas',monospace;font-size:13px" onclick="var inp=this.parentElement.previousElementSibling;inp.value=this.textContent.trim();inp.dispatchEvent(new Event('change',{bubbles:true}));this.parentElement.style.display='none'">${it.replace(new RegExp('(' + escR(query) + ')', 'gi'), '<strong style="color:#58a6ff">$1</strong>')}</div>`
+    `<div class="inline-ac-item" style="padding:8px 12px;cursor:pointer;color:#e6edf3;font-family:'Consolas',monospace;font-size:13px;display:flex;align-items:center" data-value="${it}">${isVehicle ? '' : getItemIconHtml(it)}${it.replace(new RegExp('(' + escR(query) + ')', 'gi'), '<strong style="color:#58a6ff">$1</strong>')}</div>`
   ).join('');
   box.style.display = 'block';
 }
+
+// Handle suggestion clicks via delegation
+document.addEventListener('click', function(e) {
+  const item = e.target.closest('.inline-ac-item');
+  if (!item) return;
+  const box = item.parentElement;
+  if (!box || !box.classList.contains('pack-suggestions') && !box.classList.contains('wargm-suggestions')) return;
+  const value = item.dataset.value;
+  const input = box.parentElement.querySelector('input');
+  if (!input || !value) return;
+  input.value = value;
+  input.dispatchEvent(new Event('input', {bubbles: true}));
+  input.dispatchEvent(new Event('change', {bubbles: true}));
+  box.style.display = 'none';
+});
 
 async function executeGiveItem() {
   const itemId = document.getElementById('giveItemId').value.trim();
@@ -2675,8 +2845,9 @@ async function confirmAction() {
 
 // SSE for console
 function setupSSE() {
-  const evtSource = new EventSource('/api/console/stream');
-  evtSource.onmessage = (event) => {
+  const url = authToken ? '/api/console/stream?token=' + authToken : '/api/console/stream';
+  const evtSource = new EventSource(url);
+  evtSource.addEventListener('line', (event) => {
     const console = document.getElementById('dashboardConsole');
     const line = document.createElement('div');
     line.className = 'console-line';
@@ -2688,7 +2859,9 @@ function setupSSE() {
     while (console.children.length > 100) {
       console.removeChild(console.firstChild);
     }
-  };
+  });
+  evtSource.addEventListener('connected', () => {});
+  evtSource.onerror = () => {};
 }
 
 // Auto-refresh dashboard status every 5 seconds
@@ -2931,7 +3104,10 @@ function wargmChangeItemType(idx, prefill) {
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
           <div class="form-group" style="position:relative">
             <label data-i18n="wargm.itemName" style="font-size:11px">Shortname предмета</label>
-            <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.itemName || d.shortname || '')}" placeholder="Apple" oninput="showInlineSuggestions(this)">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div id="wargmItem_icon_${idx}" style="flex-shrink:0;width:24px;height:24px;display:flex;align-items:center"></div>
+              <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.itemName || d.shortname || '')}" placeholder="Apple" oninput="showInlineSuggestions(this);updateWargmItemIcon(${idx})" style="flex:1">
+            </div>
             <div class="wargm-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
           </div>
           <div class="form-group"><label data-i18n="wargm.amount" style="font-size:11px">Количество</label>
@@ -3011,6 +3187,8 @@ function wargmChangeItemType(idx, prefill) {
   fields.innerHTML = html;
   // Re-apply translations
   if (typeof applyTranslations === 'function') applyTranslations(fields);
+  // Update icon if editing existing item
+  if (type === 'item' && prefill) updateWargmItemIcon(idx);
 }
 
 function wargmCollectItemData(idx) {
@@ -3018,6 +3196,10 @@ function wargmCollectItemData(idx) {
   const data = {};
   switch (type) {
     case 'item':
+      data.itemName = document.getElementById(`wargmItem_name_${idx}`)?.value || '';
+      data.shortname = data.itemName;
+      data.amount = parseInt(document.getElementById(`wargmItem_amount_${idx}`)?.value) || 1;
+      break;
     case 'vehicle':
       data.vehicleName = document.getElementById(`wargmItem_name_${idx}`)?.value || '';
       data.shortname = data.vehicleName;

@@ -51,10 +51,12 @@ export class WebPanel {
   };
   private pluginsSaveCallback: ((cfg: PluginsConfig) => void) | null = null;
   private itemsCache: string[] | null = null;
+  private itemImagesMap: Record<string, string> = {};
 
   constructor(config: WebPanelConfig) {
     this.config = config;
     this.loadItemsCache();
+    setTimeout(() => this.loadItemImagesMap(), 0);
   }
 
   private loadItemsCache(): void {
@@ -89,6 +91,95 @@ export class WebPanel {
     } catch {}
     console.warn('[WebPanel] iditem.txt not found');
     this.itemsCache = [];
+  }
+
+  private loadItemImagesMap(): void {
+    const candidates = [
+      path.join(process.cwd(), 'SCUM-Images', 'items'),
+      path.join(process.cwd(), '..', 'SCUM-Images', 'items'),
+      path.join(__dirname, '..', '..', 'SCUM-Images', 'items'),
+    ];
+    let imagesDir = '';
+    for (const p of candidates) { if (fs.existsSync(p)) { imagesDir = p; break; } }
+    if (!imagesDir) { console.warn('[WebPanel] SCUM-Images/items not found'); return; }
+
+    // Collect all image entries with their word-sets for scoring
+    interface ImgEntry { key: string; url: string; words: string[] }
+    const images: ImgEntry[] = [];
+    const scan = (dir: string) => {
+      let entries: string[];
+      try { entries = fs.readdirSync(dir); } catch { return; }
+      for (const name of entries) {
+        const full = path.join(dir, name);
+        try {
+          if (fs.statSync(full).isDirectory()) { scan(full); }
+          else if (name.toLowerCase().endsWith('.png')) {
+            const key = name.replace(/\.png$/i, '').replace(/^ico_/i, '').toLowerCase();
+            const rel = path.relative(imagesDir, full).replace(/\\/g, '/');
+            images.push({ key, url: `/api/item-image/${rel}`, words: [...new Set(key.split('_'))] });
+          }
+        } catch {}
+      }
+    };
+    scan(imagesDir);
+
+    const toSnakeCase = (s: string) =>
+      s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2').toLowerCase();
+
+    const extractWords = (name: string): Set<string> => {
+      const w = new Set<string>();
+      for (const token of name.split('_')) {
+        for (const sub of token.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase().split('_')) {
+          if (sub.length >= 2) w.add(sub);
+        }
+      }
+      return w;
+    };
+
+    // Score each image against the item, pick the best
+    const bestMatch = (itemName: string): string | null => {
+      const lower = itemName.toLowerCase();
+      const snaked = toSnakeCase(itemName);
+      const itemWords = extractWords(itemName);
+      const itemWordArr = [...itemWords];
+
+      let bestScore = 0;
+      let best: string | null = null;
+
+      for (const img of images) {
+        // Exact match = instant win
+        if (img.key === lower || img.key === snaked) return img.url;
+
+        let matched = 0;
+        for (const iw of itemWordArr) {
+          if (img.words.includes(iw)) matched++;
+        }
+        if (matched === 0) continue;
+
+        const matchRatio = matched / Math.max(itemWordArr.length, 1);
+        const imgCoverage = matched / Math.max(img.words.length, 1);
+        // Score formula: prefer high word coverage on both sides
+        const score = matchRatio * 100 + imgCoverage * 50;
+        if (score > bestScore) { bestScore = score; best = img.url; }
+      }
+      // Require at least 50% item word overlap
+      return bestScore >= 50 ? best : null;
+    };
+
+    const map: Record<string, string> = {};
+    for (const img of images) map[img.key] = img.url;
+
+    if (this.itemsCache) {
+      let matched = 0;
+      for (const item of this.itemsCache) {
+        const url = bestMatch(item);
+        if (url) { map[item] = url; matched++; }
+      }
+      console.log(`[WebPanel] Images: ${images.length} files, ${matched}/${this.itemsCache.length} items matched (${Object.keys(map).length} map entries)`);
+    } else {
+      console.log(`[WebPanel] Images: ${images.length} files`);
+    }
+    this.itemImagesMap = map;
   }
 
   setServices(sm: any, sc: any, sp: string): void {
@@ -154,15 +245,32 @@ export class WebPanel {
         if (url === '/' && method === 'GET') {
           this.serveIndex(res);
         } else if (url === '/favicon.ico' && method === 'GET') {
-          // Return empty 204 for favicon to avoid 401 errors
-          res.writeHead(204);
-          res.end();
+          try {
+            const icoPaths = [
+              path.join(__dirname, '..', '..', 'assets', 'icon.ico'),
+              path.join(process.cwd(), 'assets', 'icon.ico'),
+              path.join(process.cwd(), 'resources', 'assets', 'icon.ico'),
+            ];
+            for (const p of icoPaths) {
+              if (fs.existsSync(p)) {
+                res.writeHead(200, { 'Content-Type': 'image/x-icon', 'Cache-Control': 'public, max-age=86400' });
+                res.end(fs.readFileSync(p));
+                return;
+              }
+            }
+            res.writeHead(204);
+            res.end();
+          } catch { res.writeHead(204); res.end(); }
         } else if (url === '/api/login' && method === 'POST') {
           this.handleLogin(req, res);
         } else if (url.startsWith('/api/console') && method === 'GET') {
           this.handleConsoleSSE(req, res);
         } else if (url === '/api/items' && method === 'GET') {
           this.handleItems(res);
+        } else if (url === '/api/item-images-map' && method === 'GET') {
+          this.sendJson(res, this.itemImagesMap);
+        } else if (url.startsWith('/api/item-image/') && method === 'GET') {
+          this.serveItemImage(url.slice('/api/item-image/'.length), res);
         } else if (!this.authenticated(req)) {
           this.sendJson(res, { error: 'Unauthorized' }, 401);
         } else if (url === '/api/status' && method === 'GET') {
@@ -175,6 +283,8 @@ export class WebPanel {
           this.handleRestart(res);
         } else if (url === '/api/update' && method === 'POST') {
           this.handleUpdate(res);
+        } else if (url === '/api/update-stream' && method === 'GET') {
+          this.handleUpdateStream(req, res);
         } else if (url === '/api/update-manual' && method === 'POST') {
           this.handleUpdateManual(res);
         } else if (url === '/api/config' && method === 'GET') {
@@ -409,6 +519,53 @@ export class WebPanel {
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);
     }
+  }
+
+  private handleUpdateStream(req: http.IncomingMessage, res: http.ServerResponse): void {
+    if (this.config.username && this.config.password) {
+      const qIdx = (req.url || '').indexOf('?');
+      const params = new URLSearchParams(qIdx >= 0 ? (req.url || '').slice(qIdx + 1) : '');
+      const queryToken = params.get('token');
+      if (!queryToken || !this.tokens.has(queryToken)) {
+        res.writeHead(401);
+        res.end('Unauthorized');
+        return;
+      }
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    this.sendSSE(res, 'connected', 'Update stream connected');
+
+    (async () => {
+      try {
+        if (!this.steamCmd) { this.sendSSE(res, 'error', 'SteamCMD not initialized'); res.end(); return; }
+        if (this.serverPath) this.steamCmd.setServerPath(this.serverPath);
+        const steamCmdPath = this.serverConfigProvider?.get().server.steamCmdPath || 'D:\\steamcmd';
+        this.steamCmd.setSteamCmdPath(steamCmdPath);
+        if (!fs.existsSync(path.join(steamCmdPath, 'steamcmd.exe'))) {
+          this.sendSSE(res, 'error', `SteamCMD not found: ${path.join(steamCmdPath, 'steamcmd.exe')}`);
+          res.end();
+          return;
+        }
+
+        const result = await this.steamCmd.runUpdateWithDetailedProgress(
+          (progress: any) => {
+            this.sendSSE(res, 'progress', JSON.stringify(progress));
+          },
+        );
+        this.sendSSE(res, 'done', result);
+      } catch (e: any) {
+        this.sendSSE(res, 'error', e.message || 'Update failed');
+      }
+      res.end();
+    })();
+
+    req.on('close', () => {});
   }
 
   private handleGetConfig(res: http.ServerResponse): void {
@@ -1298,5 +1455,29 @@ export class WebPanel {
       res.writeHead(500);
       res.end('Error loading panel: ' + e.message);
     }
+  }
+
+  private serveItemImage(relPath: string, res: http.ServerResponse): void {
+    const decoded = decodeURIComponent(relPath.replace(/\+/g, ' '));
+    // Prevent directory traversal
+    const safe = path.normalize(decoded).replace(/^(\.\.(\/|\\|$))+/, '');
+    const candidates = [
+      path.join(process.cwd(), 'SCUM-Images', 'items', safe),
+      path.join(process.cwd(), '..', 'SCUM-Images', 'items', safe),
+      path.join(__dirname, '..', '..', 'SCUM-Images', 'items', safe),
+    ];
+    for (const p of candidates) {
+      try {
+        if (fs.existsSync(p)) {
+          const ext = path.extname(p).toLowerCase();
+          const mime: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+          res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
+          res.end(fs.readFileSync(p));
+          return;
+        }
+      } catch {}
+    }
+    res.writeHead(404);
+    res.end('Not found');
   }
 }

@@ -148,6 +148,7 @@ function createWindow(): void {
     width: 1400, height: 900, minWidth: 1024, minHeight: 700,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     show: false, autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', '..', 'assets', 'icon.ico'),
   });
   if (process.env.NODE_ENV === 'development') { mainWindow.loadURL('http://localhost:5173'); mainWindow.webContents.openDevTools(); }
   else { mainWindow.loadFile(path.join(__dirname, '../renderer/index.html')); }
@@ -294,7 +295,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle('server:update-stream', async () => {
     steamCmd.setSteamCmdPath(store.store.server.steamCmdPath || 'D:\\steamcmd');
     if (store.store.server.serverPath) steamCmd.setServerPath(store.store.server.serverPath);
-    const result = await steamCmd.runUpdateWithProgress((line) => { try { mainWindow?.webContents.send('server:update-line', line); } catch {} });
+    const result = await steamCmd.runUpdateWithDetailedProgress(
+      (progress) => { try { mainWindow?.webContents.send('server:update-progress', progress); } catch {} },
+    );
     try { mainWindow?.webContents.send('server:update-done', result); } catch {}
     return result;
   });

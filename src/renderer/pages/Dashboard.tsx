@@ -8,12 +8,40 @@ import StopIcon from '@mui/icons-material/Stop';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useTranslation } from '../contexts/LanguageContext';
 
+interface UpdateProgress {
+  state: string;
+  percent: number;
+  bytesDownloaded?: number;
+  bytesTotal?: number;
+  speed?: string;
+  detail?: string;
+}
+
+const STATE_LABELS: Record<string, string> = {
+  connecting: 'Connecting to Steam...',
+  preallocating: 'Preallocating...',
+  downloading: 'Downloading...',
+  verifying: 'Verifying...',
+  committing: 'Committing...',
+  finalizing: 'Finalizing...',
+  done: 'Complete',
+  error: 'Error',
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 export function Dashboard() {
   const { t } = useTranslation();
   const [config, setConfig] = useState<any>(null);
   const [status, setStatus] = useState<any>({ running: false, players: 0, uptime: 0 });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
   const [updateLines, setUpdateLines] = useState<string[]>([]);
   const [savingLaunch, setSavingLaunch] = useState(false);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
@@ -128,7 +156,11 @@ export function Dashboard() {
                   onClick={async () => {
                     setUpdating(true);
                     setUpdateLines([]);
+                    setUpdateProgress({ state: 'connecting', percent: 0, detail: 'Starting update...' });
                     window.electronAPI.server.removeUpdateListeners();
+                    window.electronAPI.server.onUpdateProgress((progress) => {
+                      setUpdateProgress(progress);
+                    });
                     window.electronAPI.server.onUpdateLine((line) => {
                       setUpdateLines((prev) => [...prev, line]);
                     });
@@ -150,16 +182,40 @@ export function Dashboard() {
                 </Button>
 
               </Box>
-              {updating && updateLines.length > 0 && (
+              {updating && updateProgress && (
                 <Card variant="outlined" sx={{ mt: 2, bgcolor: '#0d1117' }}>
-                  <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                    <Box sx={{ maxHeight: 200, overflow: 'auto', fontFamily: 'monospace', fontSize: 12, color: '#8b949e' }}>
-                      {updateLines.map((l, i) => (
-                        <Typography key={i} variant="caption" sx={{ display: 'block', lineHeight: 1.5, color: l.includes('ERROR') ? '#f85149' : l.includes('Downloading') || l.includes('downloading') ? '#58a6ff' : l.includes('Success') ? '#3fb950' : '#8b949e' }}>
-                          {l}
+                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                    <Box sx={{ mb: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: updateProgress.state === 'error' ? '#f85149' : '#58a6ff', fontWeight: 'bold' }}>
+                          {updateProgress.detail || STATE_LABELS[updateProgress.state] || updateProgress.state}
                         </Typography>
-                      ))}
+                        <Typography variant="caption" sx={{ color: '#e6edf3', fontWeight: 'bold' }}>
+                          {updateProgress.percent.toFixed(1)}%
+                        </Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={updateProgress.percent}
+                        color={updateProgress.state === 'error' ? 'error' : updateProgress.state === 'done' ? 'success' : 'primary'}
+                        sx={{ height: 8, borderRadius: 1, bgcolor: '#21262d' }}
+                      />
+                      {(updateProgress.bytesDownloaded != null && updateProgress.bytesTotal != null && updateProgress.bytesTotal > 0) && (
+                        <Typography variant="caption" sx={{ color: '#8b949e', mt: 0.5, display: 'block' }}>
+                          {formatBytes(updateProgress.bytesDownloaded)} / {formatBytes(updateProgress.bytesTotal)}
+                          {updateProgress.speed && ` (${updateProgress.speed})`}
+                        </Typography>
+                      )}
                     </Box>
+                    {updateLines.length > 0 && (
+                      <Box sx={{ maxHeight: 150, overflow: 'auto', fontFamily: 'monospace', fontSize: 11, borderTop: '1px solid #21262d', pt: 1 }}>
+                        {updateLines.slice(-20).map((l, i) => (
+                          <Typography key={i} variant="caption" sx={{ display: 'block', lineHeight: 1.5, color: l.includes('ERROR') || l.includes('error') ? '#f85149' : l.includes('Success') ? '#3fb950' : '#8b949e' }}>
+                            {l}
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
                   </CardContent>
                 </Card>
               )}

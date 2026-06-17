@@ -3,7 +3,16 @@ import fs from 'fs-extra';
 import path from 'path';
 
 const APP_ID = '3792580';
-const TIMEOUT = 600000;
+const TIMEOUT = 900000;
+
+export interface UpdateProgress {
+  state: 'connecting' | 'downloading' | 'preallocating' | 'verifying' | 'committing' | 'finalizing' | 'done' | 'error';
+  percent: number;
+  bytesDownloaded?: number;
+  bytesTotal?: number;
+  speed?: string;
+  detail?: string;
+}
 
 export class SteamCmd {
   private steamCmdPath: string;
@@ -26,30 +35,39 @@ export class SteamCmd {
   }
 
   private async preventSelfUpdate(): Promise<void> {
-    const dirsToClean = [
-      'appcache', 'depotcache',
-      'steamcmd_old.exe', 'steamcmd_bins_win32.zip', 'steamcmd_win32.zip',
-    ];
-    for (const item of dirsToClean) {
-      const p = path.join(this.steamCmdPath, item);
-      try { await fs.remove(p); } catch {}
-    }
-    // Удаляем package/ (папку) и создаём файл package — SteamCMD не сможет
-    // записать туда обновление и пропустит самообновление.
+    try { await fs.remove(path.join(this.steamCmdPath, 'steamcmd_old.exe')); } catch {}
+    try { await fs.remove(path.join(this.steamCmdPath, 'steamcmd_bins_win32.zip')); } catch {}
+    try { await fs.remove(path.join(this.steamCmdPath, 'steamcmd_win32.zip')); } catch {}
+
+    // Remove stale package/ directory then create empty file to block self-update writes
     const pkg = path.join(this.steamCmdPath, 'package');
-    try { await fs.remove(pkg); } catch {}
+    try { const s = await fs.stat(pkg); if (s.isDirectory()) await fs.remove(pkg); } catch {}
     try { await fs.writeFile(pkg, ''); } catch {}
 
-    // steam.cfg с пустым bootstrapper — SteamCMD не будет проверять версию
     const cfg = path.join(this.steamCmdPath, 'steam.cfg');
     try { await fs.writeFile(cfg, 'BootStrapperInhibitAll=1\n', 'utf8'); } catch {}
 
     const vdf = path.join(this.steamCmdPath, 'steamcmd_update.vdf');
     try { await fs.writeFile(vdf, `"steamcmd_update"\n{\n\t"version"\t"9999999999"\n}\n`, 'utf8'); } catch {}
-    for (const sub of ['logs', 'config']) {
-      const p = path.join(this.steamCmdPath, sub);
-      try { await fs.emptyDir(p); } catch {}
+  }
+
+  private async preventSelfUpdateFull(): Promise<void> {
+    const dirsToClean = [
+      'appcache', 'depotcache',
+      'steamcmd_old.exe', 'steamcmd_bins_win32.zip', 'steamcmd_win32.zip',
+    ];
+    for (const item of dirsToClean) {
+      try { await fs.remove(path.join(this.steamCmdPath, item)); } catch {}
     }
+    const pkg = path.join(this.steamCmdPath, 'package');
+    try { await fs.remove(pkg); } catch {}
+    try { await fs.writeFile(pkg, ''); } catch {}
+
+    const cfg = path.join(this.steamCmdPath, 'steam.cfg');
+    try { await fs.writeFile(cfg, 'BootStrapperInhibitAll=1\n', 'utf8'); } catch {}
+
+    const vdf = path.join(this.steamCmdPath, 'steamcmd_update.vdf');
+    try { await fs.writeFile(vdf, `"steamcmd_update"\n{\n\t"version"\t"9999999999"\n}\n`, 'utf8'); } catch {}
   }
 
   async install(): Promise<void> {
@@ -127,28 +145,128 @@ export class SteamCmd {
     return this.doUpdate(onLine);
   }
 
-  private async doUpdate(onLine?: (line: string) => void): Promise<string> {
+  runUpdateWithDetailedProgress(onProgress: (progress: UpdateProgress) => void): Promise<string> {
+    return this.doUpdate(undefined, onProgress);
+  }
+
+  private parseSteamCmdProgress(line: string, current: UpdateProgress): UpdateProgress {
+    const progressMatch = line.match(/progress:\s*([\d.]+)\s*\((\d+)\s*\/\s*(\d+)\)/i);
+    if (progressMatch) {
+      current.percent = parseFloat(progressMatch[1]);
+      current.bytesDownloaded = parseInt(progressMatch[2]);
+      current.bytesTotal = parseInt(progressMatch[3]);
+    }
+
+    const simpleProgressMatch = line.match(/progress:\s*([\d.]+)/i);
+    if (!progressMatch && simpleProgressMatch) {
+      current.percent = parseFloat(simpleProgressMatch[1]);
+    }
+
+    if (/Update state \(0x3\)/i.test(line)) {
+      current.state = 'connecting';
+      current.detail = 'Reconfiguring...';
+    } else if (/Update state \(0x5\)/i.test(line)) {
+      current.state = 'preallocating';
+      current.detail = 'Preallocating disk space...';
+    } else if (/Update state \(0x61\)/i.test(line) || /downloading/i.test(line)) {
+      current.state = 'downloading';
+      const depotMatch = line.match(/depot\s+(\d+)/i);
+      if (depotMatch) current.detail = `Downloading depot ${depotMatch[1]}...`;
+      else current.detail = 'Downloading...';
+    } else if (/Update state \(0x63\)/i.test(line) || /verif/i.test(line)) {
+      current.state = 'verifying';
+      current.detail = 'Verifying installation...';
+    } else if (/Update state \(0x65\)/i.test(line) || /commit/i.test(line)) {
+      current.state = 'committing';
+      current.detail = 'Committing files...';
+    } else if (/Success!/i.test(line)) {
+      current.state = 'done';
+      current.percent = 100;
+      current.detail = 'Update complete!';
+    } else if (/Already up to date/i.test(line)) {
+      current.state = 'done';
+      current.percent = 100;
+      current.detail = 'Already up to date';
+    } else if (/Error|error|FAILED|fatal/i.test(line) && !/progress/i.test(line)) {
+      current.state = 'error';
+      current.detail = line.slice(0, 200);
+    }
+
+    const speedMatch = line.match(/([\d.]+)\s*(MB\/s|KB\/s|GB\/s)/i);
+    if (speedMatch) current.speed = speedMatch[0];
+
+    return current;
+  }
+
+  private async doUpdate(onLine?: (line: string) => void, onProgress?: (progress: UpdateProgress) => void): Promise<string> {
     if (!this.serverPath) throw new Error('Server path not set');
     await this.preventSelfUpdate();
     const before = this.readManifestBuildId();
+    console.log(`[SteamCMD] serverPath=${this.serverPath}, before buildId=${before}`);
     const args = ['+force_install_dir', this.serverPath, '+login', 'anonymous', '+app_update', APP_ID, 'validate', '+quit'];
 
+    const progress: UpdateProgress = { state: 'connecting', percent: 0, detail: 'Connecting to Steam...' };
+    if (onProgress) onProgress(progress);
+
     for (let attempt = 1; attempt <= 3; attempt++) {
+      let sawSuccess = false;
+
       try {
-        const output = await this.spawnSteamCmd(args, true, onLine);
+        const wrappedLine = (line: string) => {
+          if (onLine) onLine(line);
+          if (/Success!/i.test(line)) sawSuccess = true;
+          if (onProgress) {
+            this.parseSteamCmdProgress(line, progress);
+            onProgress({ ...progress });
+          }
+        };
+
+        const output = await this.spawnSteamCmd(args, true, wrappedLine);
+
+        if (/Success!/i.test(output)) sawSuccess = true;
+
+        console.log(`[SteamCMD] attempt=${attempt} sawSuccess=${sawSuccess}`);
+        console.log(`[SteamCMD] output tail: ${output.trim().split('\n').slice(-5).join(' | ')}`);
+
+        if (onProgress) {
+          progress.state = 'done';
+          progress.percent = 100;
+          progress.detail = 'Complete';
+          onProgress({ ...progress });
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
         const after = this.readManifestBuildId();
+        console.log(`[SteamCMD] after buildId=${after}`);
+
+        if (output.toLowerCase().includes('already up to date')) return 'already_up_to_date';
+        if (sawSuccess) return 'update_applied';
         if (after && before && after !== before) return 'update_applied';
         if (!after && !before) return 'done';
-        if (output.toLowerCase().includes('already up to date')) return 'already_up_to_date';
-        return 'already_up_to_date';
+        return 'update_applied';
       } catch (e: any) {
         const msg = e.message || '';
         const isCorrupted = msg.includes('Fatal Error') || msg.includes('4294967294') || msg.includes('must be online') || msg.includes('threadtools');
         const isRecoverable = [1, 6, 8].includes(e.exitCode);
+
+        console.log(`[SteamCMD] attempt=${attempt} error: ${msg}, exitCode=${e.exitCode}`);
+
+        if (onProgress) {
+          progress.state = 'error';
+          progress.detail = `Attempt ${attempt}/3 failed: ${msg.slice(0, 200)}`;
+          onProgress({ ...progress });
+        }
+
         if (attempt < 3 && (isRecoverable || isCorrupted)) {
           if (isCorrupted) {
+            if (onProgress) {
+              progress.state = 'connecting';
+              progress.percent = 0;
+              progress.detail = 'SteamCMD corrupted, reinstalling...';
+              onProgress({ ...progress });
+            }
             try {
-              await this.preventSelfUpdate();
+              await this.preventSelfUpdateFull();
               await fs.remove(this.exePath());
               await this.install();
             } catch (reinstallErr: any) {
@@ -160,11 +278,16 @@ export class SteamCmd {
                 `5. Вручную скачайте steamcmd.zip с https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip и распакуйте в "${this.steamCmdPath}"`,
               ];
               throw new Error(
-                `SteamCMD повреждён (код 4294967294). Переустановка не удалась.\n\n` +
-                `Рекомендации:\n${hints.join('\n')}\n\n` +
-                `Ошибка: ${reinstallErr.message}`
+                `SteamCMD corrupted (code 4294967294). Reinstall failed.\n\n` +
+                `Hints:\n${hints.join('\n')}\n\n` +
+                `Error: ${reinstallErr.message}`
               );
             }
+          }
+          if (onProgress) {
+            progress.state = 'connecting';
+            progress.detail = `Retrying... (attempt ${attempt + 1}/3)`;
+            onProgress({ ...progress });
           }
           await new Promise(r => setTimeout(r, 3000));
           continue;
@@ -187,19 +310,21 @@ export class SteamCmd {
 
   private spawnSteamCmd(args: string[], captureOutput: boolean, onLine?: (line: string) => void): Promise<string> {
     const exe = this.exePath();
+    console.log(`[SteamCMD] spawn: ${exe} ${args.join(' ')}`);
 
     return new Promise((resolve, reject) => {
       if (!fs.existsSync(exe)) return reject(new Error('SteamCMD not found'));
 
       const proc = spawn(exe, args, {
         cwd: this.steamCmdPath,
-        windowsHide: true,
+        windowsHide: false,
         stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore',
       });
 
       const t = setTimeout(() => {
+        console.log(`[SteamCMD] TIMEOUT after ${TIMEOUT / 1000}s, killing PID ${proc.pid}`);
         try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch {}
-        reject(Object.assign(new Error('Timeout'), { exitCode: -1 }));
+        reject(Object.assign(new Error('SteamCMD timeout - no response for 15 minutes'), { exitCode: -1 }));
       }, TIMEOUT);
 
       let output = '';
@@ -217,9 +342,10 @@ export class SteamCmd {
       proc.on('error', (e) => { clearTimeout(t); reject(e); });
       proc.on('close', (code) => {
         clearTimeout(t);
+        console.log(`[SteamCMD] process closed with code=${code}`);
         if (code === 0 || code === 7) resolve(captureOutput ? output : '');
         else {
-          const tail = captureOutput ? output.trim().split('\n').slice(-3).join(' ').slice(0, 500) : '';
+          const tail = captureOutput ? output.trim().split('\n').slice(-5).join(' | ').slice(0, 500) : '';
           reject(Object.assign(new Error(`SteamCMD exit code ${code}: ${tail}`), { exitCode: code }));
         }
       });

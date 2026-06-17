@@ -17,6 +17,7 @@ interface ElectronAPI {
     update: () => Promise<string>;
     updateStream: () => Promise<string>;
     onUpdateLine: (cb: (line: string) => void) => void;
+    onUpdateProgress: (cb: (progress: { state: string; percent: number; bytesDownloaded?: number; bytesTotal?: number; speed?: string; detail?: string }) => void) => void;
     onUpdateDone: (cb: (result: string) => void) => void;
     removeUpdateListeners: () => void;
     consoleStart: () => Promise<void>;

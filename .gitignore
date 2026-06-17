@@ -46,6 +46,7 @@ src/renderer/pages/*.d.ts.map
 !README.md
 !AGENTS.md
 !.gitkeep
+!iditem.txt
 .env
 settings.local.json
 SCUM.db

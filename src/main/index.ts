@@ -13,6 +13,7 @@ import { WebPanel } from './webPanel';
 import { RconClient } from './rconClient';
 import { WargmManager } from './wargmManager';
 import { ScumDatabaseReader, initSqlJs } from './scumDatabase';
+import { autoUpdater } from 'electron-updater';
 import ElectronStore from 'electron-store';
 import type { AppConfig } from './types';
 
@@ -92,6 +93,31 @@ const store = new ElectronStore<AppConfig>({
         dailyBonus: { items: [{ itemId: 'Apple', amount: 5 }], money: 500, gold: 50, fame: 200 },
       },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 },
+      airdrop: {
+        enabled: false,
+        chestItem: 'Improvised_Metal_Chest',
+        minItems: 3,
+        maxItems: 8,
+        cooldownMinutes: 60,
+        autoDropEnabled: false,
+        autoDropIntervalMinutes: 120,
+        autoDropMinPlayers: 5,
+      },
+      rewards: {
+        enabled: false,
+        hourlyEnabled: true,
+        hourlyGold: 10,
+        hourlyMoney: 100,
+        hourlyFame: 5,
+        topEnabled: true,
+        topIntervalDays: 10,
+        topCount: 3,
+        topGold: 100,
+        topMoney: 1000,
+        topFame: 50,
+      },
+      chatSender: 'AMUR bot',
+      ratingBlacklist: [],
     },
   },
   deserialize: (data: string): AppConfig => { if (data.charCodeAt(0) === 0xfeff) data = data.slice(1); return JSON.parse(data); },
@@ -201,6 +227,30 @@ function initServices(): void {
         dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
       },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 },
+      airdrop: {
+        enabled: false,
+        chestItem: 'Improvised_Metal_Chest',
+        minItems: 3, maxItems: 8,
+        cooldownMinutes: 60,
+        autoDropEnabled: false,
+        autoDropIntervalMinutes: 120,
+        autoDropMinPlayers: 5,
+      },
+      rewards: {
+        enabled: false,
+        hourlyEnabled: true,
+        hourlyGold: 10,
+        hourlyMoney: 100,
+        hourlyFame: 5,
+        topEnabled: true,
+        topIntervalDays: 10,
+        topCount: 3,
+        topGold: 100,
+        topMoney: 1000,
+        topFame: 50,
+      },
+      chatSender: 'AMUR bot',
+      ratingBlacklist: [],
     };
     store.set('plugins', pluginsCfg);
   } else if (!pluginsCfg.vip) {
@@ -213,6 +263,46 @@ function initServices(): void {
   }
   if (!pluginsCfg.saveHome) {
     pluginsCfg.saveHome = { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 };
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.airdrop) {
+    pluginsCfg.airdrop = {
+      enabled: false,
+      chestItem: 'Improvised_Metal_Chest',
+      minItems: 3, maxItems: 8,
+      cooldownMinutes: 60,
+      autoDropEnabled: false,
+      autoDropIntervalMinutes: 120,
+      autoDropMinPlayers: 5,
+    };
+    store.set('plugins', pluginsCfg);
+  }
+  if (pluginsCfg.airdrop.autoDropMinPlayers === undefined) {
+    pluginsCfg.airdrop.autoDropMinPlayers = 5;
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.chatSender) {
+    pluginsCfg.chatSender = 'AMUR bot';
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.rewards) {
+    pluginsCfg.rewards = {
+      enabled: false,
+      hourlyEnabled: true,
+      hourlyGold: 10,
+      hourlyMoney: 100,
+      hourlyFame: 5,
+      topEnabled: true,
+      topIntervalDays: 10,
+      topCount: 3,
+      topGold: 100,
+      topMoney: 1000,
+      topFame: 50,
+    };
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.ratingBlacklist) {
+    pluginsCfg.ratingBlacklist = [];
     store.set('plugins', pluginsCfg);
   }
   webPanel.setPluginsConfig(pluginsCfg);
@@ -255,6 +345,7 @@ function initServices(): void {
     webPanel.setPluginsConfig(p);
   });
   wargmManager.setRconClient(rconClient);
+  if (config.server.serverPath) wargmManager.setServerPath(config.server.serverPath);
   webPanel.setWargmManager(wargmManager);
   logWatcher.setWargmManager(wargmManager);
   webPanel.setServerConfigProvider({
@@ -301,6 +392,17 @@ function registerIpcHandlers(): void {
     try { mainWindow?.webContents.send('server:update-done', result); } catch {}
     return result;
   });
+  ipcMain.handle('app:get-version', () => app.getVersion());
+  ipcMain.handle('app:check-update', async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      if (!result) return { available: false };
+      return { available: true, version: result.updateInfo.version };
+    } catch {
+      return { available: false };
+    }
+  });
+
   ipcMain.handle('server:console-start', () => {
     const logPath = path.join(store.store.server.serverPath || '', 'SCUM', 'Saved', 'Logs', 'SCUM.log');
     if (!fs.existsSync(logPath)) { try { mainWindow?.webContents.send('server:console-lines', ['[CONSOLE] SCUM.log not found. Start the server first.']); } catch {} return; }
@@ -403,6 +505,26 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createWindow();
   startRestartScheduler();
+
+  // Auto-updater
+  autoUpdater.logger = console;
+  autoUpdater.autoDownload = false;
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  autoUpdater.on('update-available', (info) => {
+    console.log('[Updater] Update available:', info.version);
+  });
+  autoUpdater.on('update-not-available', () => {
+    console.log('[Updater] No updates available');
+  });
+  autoUpdater.on('error', (err) => {
+    console.log('[Updater] Error:', err.message);
+  });
+  autoUpdater.on('download-progress', (p) => {
+    console.log('[Updater] Downloading:', p.percent.toFixed(1) + '%');
+  });
+  autoUpdater.on('update-downloaded', () => {
+    autoUpdater.quitAndInstall();
+  });
 
   const cur = store.store;
   let changed = false;

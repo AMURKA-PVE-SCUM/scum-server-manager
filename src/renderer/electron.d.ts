@@ -1,4 +1,8 @@
 interface ElectronAPI {
+  app: {
+    getVersion: () => Promise<string>;
+    checkUpdate: () => Promise<{ available: boolean; version?: string }>;
+  };
   config: {
     get: () => Promise<any>;
     set: (config: any) => Promise<boolean>;

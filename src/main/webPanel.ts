@@ -5,7 +5,8 @@ import crypto from 'crypto';
 import { watch, FSWatcher } from 'chokidar';
 import { RconClient } from './rconClient';
 import { WargmManager } from './wargmManager';
-import type { PackConfig, PluginsConfig, TeleportLocation, VipConfig, WargmCard, WargmSettings, WebPanelConfig, OnlinePlayer } from './types';
+import { RatingManager } from './ratingManager';
+import type { PackConfig, PluginsConfig, TeleportLocation, VipConfig, WargmCard, WargmSettings, WebPanelConfig, OnlinePlayer, AirdropCalibrationPoint } from './types';
 
 interface SSEClient {
   id: number;
@@ -40,6 +41,7 @@ export class WebPanel {
     resetCooldown: (steamId: string, packType?: 'starter' | 'daily') => void;
   } | null = null;
   private wargmManager: WargmManager | null = null;
+  private ratingManager: RatingManager | null = null;
   private pluginsConfig: PluginsConfig = {
     teleport: { enabled: true, locations: [] },
     vip: {
@@ -48,14 +50,52 @@ export class WebPanel {
       dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
     },
     saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 },
+    airdrop: {
+      enabled: false,
+      chestItem: 'Improvised_Metal_Chest',
+      minItems: 3,
+      maxItems: 8,
+      cooldownMinutes: 60,
+      autoDropEnabled: false,
+      autoDropIntervalMinutes: 120,
+      autoDropMinPlayers: 5,
+    },
+    rewards: {
+      enabled: false,
+      hourlyEnabled: true,
+      hourlyGold: 10,
+      hourlyMoney: 100,
+      hourlyFame: 5,
+      topEnabled: true,
+      topIntervalDays: 10,
+      topCount: 3,
+      topGold: 100,
+      topMoney: 1000,
+      topFame: 50,
+    },
+    chatSender: 'AMUR bot',
+    ratingBlacklist: [],
   };
   private pluginsSaveCallback: ((cfg: PluginsConfig) => void) | null = null;
   private itemsCache: string[] | null = null;
   private itemImagesMap: Record<string, string> = {};
+  private chatOffsets = new Map<string, number>();
+  private commandPoller: NodeJS.Timeout | null = null;
+  private autoDropTimer: NodeJS.Timeout | null = null;
+  private calibrationData: AirdropCalibrationPoint[] = [];
+  private calibrationActive = false;
+  private calibrationIndex = 0;
+  private calibrationSteamId = '';
+  private readonly CALIBRATION_POINTS_COUNT = 125;
+  private rewardTimer: NodeJS.Timeout | null = null;
+  private rewardsDataPath = '';
+  private lastHourlyReward: Record<string, number> = {};
+  private lastTopRewardTime = 0;
 
   constructor(config: WebPanelConfig) {
     this.config = config;
     this.loadItemsCache();
+    this.loadCalibrationData();
     setTimeout(() => this.loadItemImagesMap(), 0);
   }
 
@@ -98,6 +138,7 @@ export class WebPanel {
       path.join(process.cwd(), 'SCUM-Images', 'items'),
       path.join(process.cwd(), '..', 'SCUM-Images', 'items'),
       path.join(__dirname, '..', '..', 'SCUM-Images', 'items'),
+      path.join(process.cwd(), 'resources', 'SCUM-Images', 'items'),
     ];
     let imagesDir = '';
     for (const p of candidates) { if (fs.existsSync(p)) { imagesDir = p; break; } }
@@ -106,6 +147,16 @@ export class WebPanel {
     // Collect all image entries with their word-sets for scoring
     interface ImgEntry { key: string; url: string; words: string[] }
     const images: ImgEntry[] = [];
+    const imgWordExtract = (rawName: string): string[] => {
+      const w = new Set<string>();
+      const cleaned = rawName.replace(/\.png$/i, '').replace(/^ico_/i, '');
+      for (const token of cleaned.split('_')) {
+        for (const sub of token.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase().split('_')) {
+          if (sub.length >= 2) w.add(sub);
+        }
+      }
+      return [...w];
+    };
     const scan = (dir: string) => {
       let entries: string[];
       try { entries = fs.readdirSync(dir); } catch { return; }
@@ -116,7 +167,7 @@ export class WebPanel {
           else if (name.toLowerCase().endsWith('.png')) {
             const key = name.replace(/\.png$/i, '').replace(/^ico_/i, '').toLowerCase();
             const rel = path.relative(imagesDir, full).replace(/\\/g, '/');
-            images.push({ key, url: `/api/item-image/${rel}`, words: [...new Set(key.split('_'))] });
+            images.push({ key, url: `/api/item-image/${rel}`, words: imgWordExtract(name) });
           }
         } catch {}
       }
@@ -175,17 +226,125 @@ export class WebPanel {
         const url = bestMatch(item);
         if (url) { map[item] = url; matched++; }
       }
-      console.log(`[WebPanel] Images: ${images.length} files, ${matched}/${this.itemsCache.length} items matched (${Object.keys(map).length} map entries)`);
+      // Manual overrides for vehicles whose names don't match their icon filenames
+    const manualOverrides: Record<string, string> = {
+      'BPC_Barba': '/api/item-image/ICO_MotorBoat_01_A.png',
+      'BPC_Laika': '/api/item-image/ICO_Laika.png',
+      'BPC_Dirtbike': '/api/item-image/ICO_Motorcycle_01_A.png',
+      'BPC_MountainBike': '/api/item-image/ICO_Bicycle_02_A.png',
+      'BPC_CityBike': '/api/item-image/ICO_Bicycle_01_A.png',
+    };
+    for (const [key, url] of Object.entries(manualOverrides)) {
+      if (!map[key]) map[key] = url;
+    }
+    // Match vehicle names against icons
+    const allVehicles = ['BPC_WolfsWagen','BPC_Laika','BPC_Barba','BPC_Dirtbike','BPC_CityBike','BPC_MountainBike','BPC_Kinglet_Duster','BPC_Kinglet_Mariner','BPC_RIS','BPC_Dinghy','BPC_Cruiser','BPC_Tractor','BPC_SidecarBike','BPC_Rager'];
+    for (const v of allVehicles) {
+      if (!map[v]) { const url = bestMatch(v); if (url) map[v] = url; }
+    }
+    console.log(`[WebPanel] Images: ${images.length} files, ${matched}/${this.itemsCache.length} items matched (${Object.keys(map).length} map entries)`);
     } else {
       console.log(`[WebPanel] Images: ${images.length} files`);
     }
     this.itemImagesMap = map;
   }
 
+  private generateCalibrationPoints(): { x: number; y: number; sector: string }[] {
+    const MIN_X = -905000, MAX_X = 619000, MIN_Y = -905000, MAX_Y = 619000;
+    const SPAN = MAX_X - MIN_X;
+    const SECTOR_PX = 4096 / 5;
+    const rowLabels = ['D', 'C', 'B', 'A', 'Z'];
+    const colLabels = ['4', '3', '2', '1', '0'];
+    const points: { x: number; y: number; sector: string }[] = [];
+    const offsets = [
+      [0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75],
+    ];
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const sectorLeft = c * SECTOR_PX;
+        const sectorTop = r * SECTOR_PX;
+        for (const [ox, oy] of offsets) {
+          const px = sectorLeft + ox * SECTOR_PX;
+          const py = sectorTop + oy * SECTOR_PX;
+          const x = MAX_X - (px / 4096) * SPAN;
+          const y = MIN_Y + (py / 4096) * SPAN;
+          points.push({ x: Math.round(x), y: Math.round(y), sector: rowLabels[r] + colLabels[c] });
+        }
+      }
+    }
+    return points;
+  }
+
+  private get calibrationFilePath(): string {
+    if (this.serverPath) {
+      return path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'airdrop_calibration.json');
+    }
+    return path.join(process.cwd(), 'data', 'airdrop_calibration.json');
+  }
+
+  private loadCalibrationData(): void {
+    try {
+      const primary = this.calibrationFilePath;
+      const fallback = path.join(process.cwd(), 'data', 'airdrop_calibration.json');
+      let loaded = false;
+      for (const fp of [primary, fallback]) {
+        if (fs.existsSync(fp)) {
+          const raw = fs.readFileSync(fp, 'utf-8');
+          const data = JSON.parse(raw);
+          if (Array.isArray(data)) {
+            this.calibrationData = data.filter((p: any) => typeof p.x === 'number' && typeof p.y === 'number' && typeof p.z === 'number');
+            console.log(`[Airdrop] Loaded ${this.calibrationData.length} calibration points from ${fp}`);
+            loaded = true;
+            if (fp !== primary) {
+              // Migrate to primary path
+              this.saveCalibrationData();
+            }
+            break;
+          }
+        }
+      }
+      if (!loaded) this.calibrationData = [];
+    } catch (e) {
+      console.warn('[Airdrop] Failed to load calibration data:', e);
+      this.calibrationData = [];
+    }
+  }
+
+  private saveCalibrationData(): void {
+    try {
+      const fp = this.calibrationFilePath;
+      fs.ensureDirSync(path.dirname(fp));
+      fs.writeFileSync(fp, JSON.stringify(this.calibrationData, null, 2), 'utf-8');
+      console.log(`[Airdrop] Saved ${this.calibrationData.length} calibration points to ${fp}`);
+    } catch (e) {
+      console.error('[Airdrop] Failed to save calibration data:', e);
+    }
+  }
+
+  private findCalibrationZ(x: number, y: number): number | null {
+    if (this.calibrationData.length === 0) return null;
+    let best: AirdropCalibrationPoint | null = null;
+    let bestDist = Infinity;
+    for (const p of this.calibrationData) {
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    }
+    const maxDist = 100000 ** 2;
+    if (best && bestDist <= maxDist) return best.z;
+    return null;
+  }
+
   setServices(sm: any, sc: any, sp: string): void {
     this.serverManager = sm;
     this.steamCmd = sc;
     this.serverPath = sp;
+    if (sp) {
+      this.loadCalibrationData();
+      this.loadRewardsData();
+    }
   }
 
   setServerConfigProvider(provider: { get: () => any; save: (cfg: any) => boolean }): void {
@@ -265,12 +424,21 @@ export class WebPanel {
           this.handleLogin(req, res);
         } else if (url.startsWith('/api/console') && method === 'GET') {
           this.handleConsoleSSE(req, res);
+        } else if (url.startsWith('/api/chat') && method === 'GET') {
+          this.handleChatSSE(req, res);
         } else if (url === '/api/items' && method === 'GET') {
           this.handleItems(res);
         } else if (url === '/api/item-images-map' && method === 'GET') {
           this.sendJson(res, this.itemImagesMap);
         } else if (url.startsWith('/api/item-image/') && method === 'GET') {
           this.serveItemImage(url.slice('/api/item-image/'.length), res);
+        } else if (url.startsWith('/api/map-image/') && method === 'GET') {
+          const variant = url.slice('/api/map-image/'.length);
+          this.serveMapImage(variant, res);
+        } else if (url === '/api/flags' && method === 'GET') {
+          this.handleFlags(res);
+        } else if (url === '/api/vehicles' && method === 'GET') {
+          this.handleVehicles(res);
         } else if (!this.authenticated(req)) {
           this.sendJson(res, { error: 'Unauthorized' }, 401);
         } else if (url === '/api/status' && method === 'GET') {
@@ -361,6 +529,49 @@ export class WebPanel {
           this.handleWargmDeliveries(steamId, res);
         } else if (url === '/api/wargm/debug/operations' && method === 'POST') {
           this.handleWargmDebugOperations(req, res);
+        } else if (url === '/api/plugins/airdrop' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.airdrop);
+        } else if (url === '/api/plugins/airdrop' && method === 'POST') {
+          this.handleSetAirdrop(req, res);
+        } else if (url === '/api/plugins/airdrop/drop' && method === 'POST') {
+          this.handleAirdropDrop(req, res);
+        } else if (url === '/api/plugins/airdrop/calibrate/start' && method === 'POST') {
+          this.handleCalibrateStart(req, res);
+        } else if (url === '/api/plugins/airdrop/calibrate/record' && method === 'POST') {
+          this.handleCalibrateRecord(req, res);
+        } else if (url === '/api/plugins/airdrop/calibrate/skip' && method === 'POST') {
+          this.handleCalibrateSkip(req, res);
+        } else if (url === '/api/plugins/airdrop/calibrate/status' && method === 'GET') {
+          this.handleCalibrateStatus(res);
+        } else if (url === '/api/plugins/airdrop/calibrate/cancel' && method === 'POST') {
+          this.handleCalibrateCancel(req, res);
+        } else if (url === '/api/plugins/airdrop/calibrate/reset' && method === 'POST') {
+          this.handleCalibrateReset(req, res);
+        } else if (url === '/api/plugins/chat-sender' && method === 'GET') {
+          this.sendJson(res, { sender: this.pluginsConfig.chatSender || 'AMUR bot' });
+        } else if (url === '/api/plugins/chat-sender' && method === 'POST') {
+          this.handleSetChatSender(req, res);
+        } else if (url === '/api/plugins/rewards' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.rewards);
+        } else if (url === '/api/plugins/rewards' && method === 'POST') {
+          this.handleSetRewards(req, res);
+        } else if (url === '/api/plugins/rewards/data' && method === 'GET') {
+          this.handleRewardsData(res);
+        } else if (url === '/api/plugins/rewards/status' && method === 'GET') {
+          this.sendJson(res, { lastTopRewardTime: this.lastTopRewardTime });
+        } else if (url === '/api/plugins/rating/blacklist' && method === 'GET') {
+          this.sendJson(res, { blacklist: this.pluginsConfig.ratingBlacklist || [] });
+        } else if (url === '/api/plugins/rating/blacklist' && method === 'POST') {
+          this.handleSetBlacklist(req, res);
+        } else if (url === '/api/rating/leaderboard' && method === 'GET') {
+          this.handleRatingLeaderboard(res);
+        } else if (url.match(/^\/api\/rating\/player\/(\d+)$/) && method === 'GET') {
+          const steamId = url.match(/^\/api\/rating\/player\/(\d+)$/)![1];
+          this.handleRatingPlayer(steamId, res);
+        } else if (url === '/api/app/version' && method === 'GET') {
+          this.handleAppVersion(res);
+        } else if (url === '/api/app/check-update' && method === 'GET') {
+          this.handleCheckAppUpdate(res);
         } else {
           res.writeHead(404);
           res.end('Not found');
@@ -372,17 +583,48 @@ export class WebPanel {
         reject(new Error(`Web Panel: ${err.message}`));
       });
 
+      if (this.serverPath) {
+        this.ratingManager = new RatingManager();
+        this.ratingManager.init(this.serverPath);
+      }
       this.server.listen(this.config.port, '0.0.0.0', () => {
         console.log(`[WebPanel] Listening on http://0.0.0.0:${this.config.port}`);
         this.startConsoleWatcher();
+        this.startCommandPoller();
+        this.startAutoDropTimer();
+        this.startRewardTimer();
         resolve();
       });
     });
   }
 
+  private handleRatingLeaderboard(res: http.ServerResponse): void {
+    if (!this.ratingManager) { this.sendJson(res, { error: 'Rating not initialized' }, 500); return; }
+    const blacklist = this.pluginsConfig.ratingBlacklist || [];
+    const leaderboard = this.ratingManager.getLeaderboard().filter(e => !blacklist.includes(e.steamId));
+    const totalOnline = this.ratingManager.getTotalOnlineSeconds();
+    this.sendJson(res, { leaderboard, totalOnlineSeconds: totalOnline });
+  }
+
+  private handleRatingPlayer(steamId: string, res: http.ServerResponse): void {
+    if (!this.ratingManager) { this.sendJson(res, { error: 'Rating not initialized' }, 500); return; }
+    const blacklist = this.pluginsConfig.ratingBlacklist || [];
+    if (blacklist.includes(steamId)) {
+      this.sendJson(res, { blacklisted: true, rank: 0, player: null });
+      return;
+    }
+    const { rank, entry } = this.ratingManager.getPlayerRank(steamId);
+    if (!entry) { this.sendJson(res, { error: 'Player not found in rating' }, 404); return; }
+    this.sendJson(res, { rank, player: entry });
+  }
+
   stop(): void {
     this.stopPlayersPoll();
     this.stopConsoleWatcher();
+    this.stopCommandPoller();
+    this.stopAutoDropTimer();
+    this.stopRewardTimer();
+    if (this.ratingManager) this.ratingManager.stop();
     this.sseClients.forEach((c) => c.res.end());
     this.sseClients = [];
     this.tokens.clear();
@@ -947,6 +1189,9 @@ export class WebPanel {
         case 'setAllSkills':
           await this.executeSetAllSkills(steamId, res);
           return;
+        case 'unstuck':
+          command = `Unstuck ${steamId}`;
+          break;
         default:
           this.sendJson(res, { error: 'Unknown action' }, 400);
           return;
@@ -1142,6 +1387,379 @@ export class WebPanel {
     }
   }
 
+  private async handleSetAirdrop(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      this.pluginsConfig.airdrop = cfg;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetChatSender(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const { sender } = JSON.parse(body);
+      this.pluginsConfig.chatSender = sender || 'AMUR bot';
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetRewards(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      this.pluginsConfig.rewards = cfg;
+      if (this.pluginsSaveCallback) this.pluginsSaveCallback(this.pluginsConfig);
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleRewardsData(res: http.ServerResponse): Promise<void> {
+    const now = Date.now();
+    const data: Record<string, { lastRewardTime: number; hoursPlayed: number }> = {};
+    for (const [steamId, lastReward] of Object.entries(this.lastHourlyReward)) {
+      const player = this.cachedPlayers.find(p => p.steamId === steamId);
+      const sessionStart = this.ratingManager?.getSessionStart(steamId);
+      let hoursPlayed = 0;
+      if (sessionStart) {
+        const sessionSec = (now - sessionStart) / 1000;
+        const totalSec = this.ratingManager?.getPlayerTotalSeconds(steamId) || 0;
+        hoursPlayed = Math.floor((totalSec + sessionSec) / 3600);
+      }
+      data[steamId] = { lastRewardTime: lastReward, hoursPlayed };
+    }
+    this.sendJson(res, data);
+  }
+
+  private async handleSetBlacklist(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const { blacklist } = JSON.parse(body);
+      this.pluginsConfig.ratingBlacklist = blacklist || [];
+      if (this.pluginsSaveCallback) this.pluginsSaveCallback(this.pluginsConfig);
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handleAppVersion(res: http.ServerResponse): void {
+    try {
+      const { app } = require('electron');
+      this.sendJson(res, { version: app.getVersion() });
+    } catch {
+      this.sendJson(res, { version: '2.1.0' });
+    }
+  }
+
+  private async handleCheckAppUpdate(res: http.ServerResponse): Promise<void> {
+    try {
+      const { autoUpdater } = require('electron-updater');
+      const result = await autoUpdater.checkForUpdates();
+      if (!result) { this.sendJson(res, { available: false }); return; }
+      this.sendJson(res, { available: true, version: result.updateInfo.version });
+    } catch {
+      this.sendJson(res, { available: false });
+    }
+  }
+
+  private loadRewardsData(): void {
+    if (!this.serverPath) return;
+    this.rewardsDataPath = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'rewards_data.json');
+    try {
+      if (fs.existsSync(this.rewardsDataPath)) {
+        const data = JSON.parse(fs.readFileSync(this.rewardsDataPath, 'utf-8'));
+        this.lastHourlyReward = data.lastHourlyReward || {};
+        this.lastTopRewardTime = data.lastTopRewardTime || 0;
+      }
+    } catch {}
+  }
+
+  private saveRewardsData(): void {
+    if (!this.rewardsDataPath) return;
+    try {
+      fs.writeFileSync(this.rewardsDataPath, JSON.stringify({
+        lastHourlyReward: this.lastHourlyReward,
+        lastTopRewardTime: this.lastTopRewardTime,
+      }, null, 2));
+    } catch {}
+  }
+
+  private startRewardTimer(): void {
+    if (this.rewardTimer) clearInterval(this.rewardTimer);
+    this.rewardTimer = setInterval(() => this.checkRewards(), 60000);
+  }
+
+  private async checkRewards(): Promise<void> {
+    if (!this.rconClient || !this.rconClient.isConnected()) return;
+    const cfg = this.pluginsConfig.rewards;
+    if (!cfg.enabled) return;
+    const now = Date.now();
+
+    // Hourly rewards
+    if (cfg.hourlyEnabled) {
+      for (const player of this.cachedPlayers) {
+        if (!player.steamId || !player.name) continue;
+        const lastReward = this.lastHourlyReward[player.steamId] || 0;
+        const sessionStart = this.ratingManager?.getSessionStart(player.steamId);
+        if (!sessionStart) continue;
+        const totalSec = this.ratingManager?.getPlayerTotalSeconds(player.steamId) || 0;
+        const elapsedHours = Math.floor(((now - sessionStart) / 1000 + totalSec) / 3600);
+        const rewardedHours = Math.floor(lastReward ? (lastReward - sessionStart) / 3600000 + (this.ratingManager?.getPlayerTotalSeconds(player.steamId) || 0) / 3600 : 0);
+        const hoursToReward = Math.max(0, elapsedHours - Math.floor(rewardedHours));
+        if (hoursToReward >= 1) {
+          const cmds: string[] = [];
+          if (cfg.hourlyGold > 0) cmds.push(`#AddGold ${cfg.hourlyGold * hoursToReward} ${player.steamId}`);
+          if (cfg.hourlyMoney > 0) cmds.push(`#AddMoney ${cfg.hourlyMoney * hoursToReward} ${player.steamId}`);
+          if (cfg.hourlyFame > 0) cmds.push(`#AddFame ${cfg.hourlyFame * hoursToReward} ${player.steamId}`);
+          for (const cmd of cmds) {
+            await this.rconClient.sendCommand(cmd);
+          }
+          this.lastHourlyReward[player.steamId] = now;
+          this.saveRewardsData();
+        }
+      }
+    }
+
+    // Top players reward
+    if (cfg.topEnabled && cfg.topCount > 0) {
+      const elapsedDays = (now - this.lastTopRewardTime) / 86400000;
+      if (this.lastTopRewardTime === 0 || elapsedDays >= cfg.topIntervalDays) {
+        const leaderboard = this.ratingManager?.getLeaderboard() || [];
+        const blacklist = this.pluginsConfig.ratingBlacklist || [];
+        const filtered = leaderboard.filter(e => !blacklist.includes(e.steamId));
+        const topPlayers = filtered.slice(0, cfg.topCount);
+        if (topPlayers.length > 0) {
+          for (let i = 0; i < topPlayers.length; i++) {
+            const p = topPlayers[i];
+            const multiplier = cfg.topCount - i;
+            const cmds: string[] = [];
+            if (cfg.topGold > 0) cmds.push(`#AddGold ${cfg.topGold * multiplier} ${p.steamId}`);
+            if (cfg.topMoney > 0) cmds.push(`#AddMoney ${cfg.topMoney * multiplier} ${p.steamId}`);
+            if (cfg.topFame > 0) cmds.push(`#AddFame ${cfg.topFame * multiplier} ${p.steamId}`);
+            for (const cmd of cmds) {
+              await this.rconClient.sendCommand(cmd);
+            }
+          }
+          const names = topPlayers.map(p => p.playerName).join(', ');
+          await this.rconClient.sendCommand(`SendChat 2 "🏆 Награда топ-${topPlayers.length}: ${names}"`);
+          this.lastTopRewardTime = now;
+          this.saveRewardsData();
+        }
+      }
+    }
+  }
+
+  private async handleAirdropDrop(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.rconClient || !this.rconClient.isConnected()) {
+        this.sendJson(res, { error: 'RCON not connected' }, 500);
+        return;
+      }
+      const body = await this.readBody(req);
+      const { x: inputX, y: inputY, z: inputZ, steamId } = JSON.parse(body);
+      const cfg = this.pluginsConfig.airdrop;
+      if (!cfg.enabled) {
+        this.sendJson(res, { error: 'Airdrop module disabled' }, 500);
+        return;
+      }
+
+      // If steamId provided, get player location
+      let dropX: number, dropY: number, dropZ: number;
+      if (steamId) {
+        const player = this.cachedPlayers.find(p => p.steamId === steamId);
+        if (!player || !player.location) {
+          this.sendJson(res, { error: 'Player not found or location unknown' }, 500);
+          return;
+        }
+        dropX = Math.round(player.location.x);
+        dropY = Math.round(player.location.y);
+        dropZ = Math.round(player.location.z);
+      } else {
+        dropX = Math.round(inputX);
+        dropY = Math.round(inputY);
+        dropZ = inputZ !== undefined && inputZ !== null ? Math.round(inputZ) :
+                this.findCalibrationZ(inputX, inputY) ?? 20000;
+      }
+
+      // Pick random items from itemsCache (iditem.txt)
+      const cache = this.itemsCache || [];
+      const count = cfg.minItems + Math.floor(Math.random() * (cfg.maxItems - cfg.minItems + 1));
+      const items: string[] = [];
+      for (let i = 0; i < count && cache.length > 0; i++) {
+        items.push(cache[Math.floor(Math.random() * cache.length)]);
+      }
+
+      // SpawnInventoryFullOf with keyed coords after items (SCUM-RCON v0.4.5+)
+      const cmd = `SpawnInventoryFullOf ${cfg.chestItem} 1 ${items.join(' ')} x=${dropX} y=${dropY} z=${dropZ}`;
+      console.log(`[Airdrop] ${cmd}`);
+      const result = await this.rconClient.sendCommand(cmd);
+      if (!result.success) {
+        this.sendJson(res, { error: result.error || 'Spawn failed' }, 500);
+        return;
+      }
+
+      // Calculate grid sector
+      const MIN_X = -905000, MAX_X = 619000, MIN_Y = -905000, MAX_Y = 619000;
+      const span = MAX_X - MIN_X;
+      const px = 4096 - ((dropX - MIN_X) / span) * 4096;
+      const py = ((MAX_Y - dropY) / span) * 4096;
+      const gridStep = 4096 / 5;
+      const col = Math.min(4, Math.floor(px / gridStep));
+      const row = Math.min(4, Math.floor(py / gridStep));
+      const rowLabels = ['D', 'C', 'B', 'A', 'Z'];
+      const colLabels = ['4', '3', '2', '1', '0'];
+      const sector = rowLabels[row] + colLabels[col];
+
+      // Notify
+      const randItem = items.length > 0 ? items[Math.floor(Math.random() * items.length)].replace(/_/g, ' ') : 'лутом';
+      const msgs = [
+        `🎁| ВНИМАНИЕ! В секторе ${sector} сброшен тайник с лутом! Бегом на поиски!`,
+        `🎁| ТРЕВОГА! В секторе ${sector} приземлился тайник с припасами! Кто первый найдёт?`,
+        `🎁| В секторе ${sector} сброшен тайник! Говорят, там есть ${randItem}!`,
+        `🎁| СЛУХ! В секторе ${sector} замечен тайник с ценным лутом! Проверьте свои карты!`,
+      ];
+      this.rconClient.sendCommand(`SendChat 2 "${msgs[Math.floor(Math.random() * msgs.length)]}"`).catch(() => {});
+
+      this.sendJson(res, { success: true, sector, items, count, x: dropX, y: dropY, z: dropZ });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  // ---- Airdrop calibration
+
+  private calibrateTeleportToPoint(idx: number): void {
+    const points = this.generateCalibrationPoints();
+    if (idx < 0 || idx >= points.length) return;
+    const p = points[idx];
+    const cmd = `Teleport ${p.x} ${p.y} 0 ${this.calibrationSteamId}`;
+    console.log(`[Airdrop] Calibrate ${idx + 1}/${points.length}: ${cmd}`);
+    this.rconClient!.sendCommand(cmd).catch(() => {});
+  }
+
+  private async handleCalibrateStart(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.rconClient || !this.rconClient.isConnected()) {
+        this.sendJson(res, { error: 'RCON not connected' }, 500); return;
+      }
+      const body = await this.readBody(req);
+      const { steamId } = JSON.parse(body);
+      if (!steamId || steamId.length < 10) {
+        this.sendJson(res, { error: 'Invalid SteamID' }, 500); return;
+      }
+      this.calibrationActive = true;
+      this.calibrationIndex = 0;
+      this.calibrationSteamId = steamId;
+      this.calibrateTeleportToPoint(0);
+      this.sendJson(res, { success: true, index: 0, total: this.CALIBRATION_POINTS_COUNT });
+    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+  }
+
+  private async handleCalibrateRecord(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.calibrationActive) {
+        this.sendJson(res, { error: 'Calibration not active' }, 500); return;
+      }
+      const points = this.generateCalibrationPoints();
+      const idx = this.calibrationIndex;
+      if (idx >= points.length) {
+        this.calibrationActive = false;
+        this.sendJson(res, { error: 'All points calibrated' }, 500); return;
+      }
+      const point = points[idx];
+      const player = this.cachedPlayers.find(p => p.steamId === this.calibrationSteamId);
+      if (!player || !player.location) {
+        this.sendJson(res, { error: 'Player not found or location unknown. Are you online?' }, 500); return;
+      }
+      const z = Math.round(player.location.z);
+      // Remove existing calibration for this point if any
+      this.calibrationData = this.calibrationData.filter(p => !(Math.abs(p.x - point.x) < 1000 && Math.abs(p.y - point.y) < 1000));
+      this.calibrationData.push({ x: point.x, y: point.y, z, sector: point.sector });
+      this.saveCalibrationData();
+
+      const nextIdx = idx + 1;
+      if (nextIdx >= points.length) {
+        this.calibrationActive = false;
+        this.sendJson(res, { success: true, done: true, index: nextIdx, total: points.length, z });
+        return;
+      }
+      this.calibrationIndex = nextIdx;
+      this.calibrateTeleportToPoint(nextIdx);
+      this.sendJson(res, { success: true, done: false, index: nextIdx, total: points.length, z });
+    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+  }
+
+  private async handleCalibrateSkip(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.calibrationActive) {
+        this.sendJson(res, { error: 'Calibration not active' }, 500); return;
+      }
+      const points = this.generateCalibrationPoints();
+      const nextIdx = this.calibrationIndex + 1;
+      if (nextIdx >= points.length) {
+        this.calibrationActive = false;
+        this.sendJson(res, { success: true, done: true, index: nextIdx, total: points.length });
+        return;
+      }
+      this.calibrationIndex = nextIdx;
+      this.calibrateTeleportToPoint(nextIdx);
+      this.sendJson(res, { success: true, done: false, index: nextIdx, total: points.length });
+    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+  }
+
+  private handleCalibrateStatus(res: http.ServerResponse): void {
+    try {
+      const points = this.generateCalibrationPoints();
+      const savedSet = new Set(this.calibrationData.map(p => `${Math.round(p.x / 1000)},${Math.round(p.y / 1000)}`));
+      let calibratedCount = 0;
+      for (const p of points) {
+        if (savedSet.has(`${Math.round(p.x / 1000)},${Math.round(p.y / 1000)}`)) calibratedCount++;
+      }
+      this.sendJson(res, {
+        active: this.calibrationActive,
+        currentIndex: this.calibrationIndex,
+        total: points.length,
+        calibratedCount,
+        totalSaved: this.calibrationData.length,
+        points: this.calibrationData,
+      });
+    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+  }
+
+  private async handleCalibrateCancel(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      this.calibrationActive = false;
+      this.calibrationIndex = 0;
+      this.calibrationSteamId = '';
+      this.sendJson(res, { success: true });
+    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+  }
+
+  private async handleCalibrateReset(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      this.calibrationData = [];
+      this.calibrationActive = false;
+      this.calibrationIndex = 0;
+      this.calibrationSteamId = '';
+      this.saveCalibrationData();
+      this.sendJson(res, { success: true });
+    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+  }
+
   private handleGetCooldowns(res: http.ServerResponse): void {
     try {
       if (!this.cooldownProvider) { this.sendJson(res, { cooldowns: {} }); return; }
@@ -1216,6 +1834,126 @@ export class WebPanel {
     } catch {}
   }
 
+  private handleChatSSE(req: http.IncomingMessage, res: http.ServerResponse): void {
+    if (this.config.username && this.config.password) {
+      const qIdx = (req.url || '').indexOf('?');
+      const params = new URLSearchParams(qIdx >= 0 ? (req.url || '').slice(qIdx + 1) : '');
+      const queryToken = params.get('token');
+      if (!queryToken || !this.tokens.has(queryToken)) {
+        res.writeHead(401);
+        res.end('Unauthorized');
+        return;
+      }
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    this.sendSSE(res, 'connected', 'Chat stream connected');
+
+    // Send initial history from chat logs
+    if (this.serverPath) {
+      const logsPath = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'Logs');
+      if (fs.existsSync(logsPath)) {
+        const files = fs.readdirSync(logsPath).filter(f => f.toLowerCase().startsWith('chat') && f.endsWith('.log'));
+        if (files.length > 0) {
+          const latest = files.map(f => ({ name: f, time: fs.statSync(path.join(logsPath, f)).mtimeMs }))
+            .sort((a, b) => b.time - a.time)[0].name;
+          const fp = path.join(logsPath, latest);
+          const stat = fs.statSync(fp);
+          if (stat.size > 0) {
+            const readSize = Math.min(stat.size, 16384);
+            const readOffset = Math.max(0, stat.size - readSize);
+            // Ensure even offset for UTF-16LE
+            const alignedOffset = readOffset % 2 === 0 ? readOffset : readOffset + 1;
+            const actualReadSize = Math.min(stat.size - alignedOffset, readSize);
+            const buf = Buffer.alloc(actualReadSize);
+            const fd = fs.openSync(fp, 'r');
+            fs.readSync(fd, buf, 0, actualReadSize, alignedOffset);
+            fs.closeSync(fd);
+            const enc = buf[1] === 0 ? 'utf16le' : 'utf-8';
+            let raw = buf.toString(enc);
+            if (raw.charCodeAt(0) === 0xFEFF || raw.charCodeAt(0) === 0xFFFE) raw = raw.slice(1);
+            raw = raw.replace(/\r/g, '');
+            const parsed = raw.split('\n').filter(Boolean).slice(-50).map(line => this.parseChatLine(line)).filter(Boolean);
+            this.sendSSE(res, 'init', JSON.stringify(parsed));
+          }
+        }
+      }
+    }
+
+    // Poll for new chat messages
+    const pollTimer = setInterval(() => {
+      if (!this.serverPath) return;
+      const logsPath = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'Logs');
+      if (!fs.existsSync(logsPath)) return;
+      const files = fs.readdirSync(logsPath).filter(f => f.toLowerCase().startsWith('chat') && f.endsWith('.log'));
+      if (files.length === 0) return;
+      const latest = files.map(f => ({ name: f, time: fs.statSync(path.join(logsPath, f)).mtimeMs }))
+        .sort((a, b) => b.time - a.time)[0].name;
+      const fp = path.join(logsPath, latest);
+      try {
+        const stat = fs.statSync(fp);
+        let offset: number = this.chatOffsets.get(fp) ?? -1;
+        const isNewFile = offset === -1;
+        if (isNewFile) offset = 0;
+        if (stat.size > offset) {
+          const buf = Buffer.alloc(stat.size - offset);
+          const fd = fs.openSync(fp, 'r');
+          fs.readSync(fd, buf, 0, buf.length, offset);
+          fs.closeSync(fd);
+          this.chatOffsets.set(fp, stat.size);
+          const enc = buf[1] === 0 ? 'utf16le' : 'utf-8';
+          let text = buf.toString(enc);
+          if (text.charCodeAt(0) === 0xFEFF || text.charCodeAt(0) === 0xFFFE) text = text.slice(1);
+          text = text.replace(/\r/g, '');
+          text.split('\n').filter(Boolean).forEach(line => {
+            const parsed = this.parseChatLine(line);
+            if (parsed) {
+              this.sendSSE(res, 'chat', JSON.stringify(parsed));
+              this.handleChatCommand(parsed);
+            } else this.sendSSE(res, 'raw', line);
+          });
+        }
+      } catch {}
+    }, 1000);
+
+    req.on('close', () => {
+      clearInterval(pollTimer);
+      this.chatOffsets.clear();
+    });
+  }
+
+  private handleChatCommand(parsed: any): void {
+    if (!parsed || !parsed.message || !this.ratingManager || !this.rconClient || !this.rconClient.isConnected()) return;
+    const msg = parsed.message.trim().toLowerCase();
+    const steamId = parsed.steamId;
+    if ((msg === '!rating' || msg === '!rank' || msg === '!рейтинг') && steamId) {
+      const blacklist = this.pluginsConfig.ratingBlacklist || [];
+      if (blacklist.includes(steamId)) {
+        this.rconClient.sendCommand(`SendChat 4 "Вы не участвуете в рейтинге." ${steamId}`);
+        return;
+      }
+      const { rank, entry } = this.ratingManager.getPlayerRank(steamId);
+      if (entry) {
+        const hours = this.ratingManager.formatPlayTime(entry.playTimeSeconds);
+        const totalPlayers = this.ratingManager.getLeaderboard().filter(e => !blacklist.includes(e.steamId)).length;
+        let reply = `[Рейтинг] #${rank}/${totalPlayers} | Онлайн: ${hours} | Деньги: ${entry.money} | Золото: ${entry.gold} | Слава: ${entry.fame}`;
+        if (rank === 1) reply = '🏆 ' + reply;
+        this.rconClient.sendCommand(`SendChat 4 "${reply}" ${steamId}`);
+      } else {
+        this.rconClient.sendCommand(`SendChat 4 "Вы ещё не в рейтинге. Подождите обновления данных." ${steamId}`);
+      }
+    }
+  }
+
+  private parseChatLine(line: string): any {
+    const m = line.match(/'(\d+):([^(]+)\(\d+\)'[^']*'([^:]+):\s*([^']+)/);
+    if (m) return { steamId: m[1], playerName: m[2].trim(), channel: m[3].trim(), message: m[4].trim(), timestamp: new Date().toISOString() };
+    return null;
+  }
+
   private startConsoleWatcher(): void {
     if (!this.serverPath) return;
     const logPath = path.join(this.serverPath, 'SCUM', 'Saved', 'Logs', 'SCUM.log');
@@ -1253,54 +1991,164 @@ export class WebPanel {
     }
   }
 
+  private startCommandPoller(): void {
+    this.commandPoller = setInterval(() => this.pollChatCommands(), 2000);
+  }
+
+  private stopCommandPoller(): void {
+    if (this.commandPoller) { clearInterval(this.commandPoller); this.commandPoller = null; }
+  }
+
+  private startAutoDropTimer(): void {
+    this.stopAutoDropTimer();
+    this.autoDropTimer = setInterval(() => this.checkAutoDrop(), 30000);
+  }
+
+  private stopAutoDropTimer(): void {
+    if (this.autoDropTimer) { clearInterval(this.autoDropTimer); this.autoDropTimer = null; }
+  }
+
+  private stopRewardTimer(): void {
+    if (this.rewardTimer) { clearInterval(this.rewardTimer); this.rewardTimer = null; }
+  }
+
+  private lastAutoDropTime = 0;
+
+  private async checkAutoDrop(): Promise<void> {
+    const cfg = this.pluginsConfig.airdrop;
+    if (!cfg.enabled || !cfg.autoDropEnabled || !this.rconClient || !this.rconClient.isConnected()) return;
+    const minPlayers = cfg.autoDropMinPlayers || 1;
+    if (this.cachedPlayers.length < minPlayers) return;
+    const intervalMs = (cfg.autoDropIntervalMinutes || 120) * 60 * 1000;
+    const now = Date.now();
+    if (now - this.lastAutoDropTime < intervalMs) return;
+    this.lastAutoDropTime = now;
+
+    try {
+      // Pick random calibration point, or random coords if none
+      let x: number, y: number;
+      if (this.calibrationData.length > 0) {
+        const p = this.calibrationData[Math.floor(Math.random() * this.calibrationData.length)];
+        x = p.x;
+        y = p.y;
+      } else {
+        const MIN_X = -905000, MAX_X = 619000, MIN_Y = -905000, MAX_Y = 619000;
+        x = MIN_X + Math.random() * (MAX_X - MIN_X);
+        y = MIN_Y + Math.random() * (MAX_Y - MIN_Y);
+      }
+
+      const cache = this.itemsCache || [];
+      const count = cfg.minItems + Math.floor(Math.random() * (cfg.maxItems - cfg.minItems + 1));
+      const items: string[] = [];
+      for (let i = 0; i < count && cache.length > 0; i++) {
+        items.push(cache[Math.floor(Math.random() * cache.length)]);
+      }
+
+      const calZ = this.findCalibrationZ(x, y);
+      const z = calZ !== null ? calZ : 20000;
+      const rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+      const cmd = `SpawnInventoryFullOf ${cfg.chestItem} 1 ${items.join(' ')} x=${rx} y=${ry} z=${rz}`;
+      console.log(`[Airdrop] Auto-drop: ${cmd}`);
+      const result = await this.rconClient.sendCommand(cmd);
+      if (result.success) {
+        // Calculate sector
+        const MIN_X = -905000, MAX_X = 619000, MIN_Y = -905000, MAX_Y = 619000;
+        const span = MAX_X - MIN_X;
+        const px = 4096 - ((rx - MIN_X) / span) * 4096;
+        const py = ((MAX_Y - ry) / span) * 4096;
+        const gridStep = 4096 / 5;
+        const col = Math.min(4, Math.floor(px / gridStep));
+        const row = Math.min(4, Math.floor(py / gridStep));
+        const sector = ['D', 'C', 'B', 'A', 'Z'][row] + ['4', '3', '2', '1', '0'][col];
+        const randItem = items.length > 0 ? items[Math.floor(Math.random() * items.length)].replace(/_/g, ' ') : 'лутом';
+        const autoMsgs = [
+          `🎁| ВНИМАНИЕ! В секторе ${sector} сброшен тайник с лутом! Бегом на поиски!`,
+          `🎁| ТРЕВОГА! В секторе ${sector} приземлился тайник с припасами! Кто первый найдёт?`,
+          `🎁| В секторе ${sector} сброшен тайник! Говорят, там есть ${randItem}!`,
+          `🎁| СЛУХ! В секторе ${sector} замечен тайник с ценным лутом! Проверьте свои карты!`,
+        ];
+        this.rconClient.sendCommand(`SendChat 2 "${autoMsgs[Math.floor(Math.random() * autoMsgs.length)]}"`).catch(() => {});
+        console.log(`[Airdrop] Auto-drop OK at ${rx},${ry},${rz} sector ${sector} (${items.length} items)`);
+      } else {
+        console.warn(`[Airdrop] Auto-drop failed: ${result.error}`);
+      }
+    } catch (e: any) {
+      console.error('[Airdrop] Auto-drop error:', e.message);
+    }
+  }
+
+  private pollChatCommands(): void {
+    if (!this.serverPath || !this.ratingManager || !this.rconClient || !this.rconClient.isConnected()) return;
+    try {
+      const logsPath = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'Logs');
+      if (!fs.existsSync(logsPath)) return;
+      const files = fs.readdirSync(logsPath).filter(f => f.toLowerCase().startsWith('chat') && f.endsWith('.log'));
+      if (files.length === 0) return;
+      const latest = files.map(f => ({ name: f, time: fs.statSync(path.join(logsPath, f)).mtimeMs }))
+        .sort((a, b) => b.time - a.time)[0].name;
+      const fp = path.join(logsPath, latest);
+      const stat = fs.statSync(fp);
+      let offset: number = this.chatOffsets.get(fp) ?? -1;
+      const isNewFile = offset === -1;
+      if (isNewFile) offset = 0;
+      if (stat.size > offset) {
+        const buf = Buffer.alloc(stat.size - offset);
+        const fd = fs.openSync(fp, 'r');
+        fs.readSync(fd, buf, 0, buf.length, offset);
+        fs.closeSync(fd);
+        this.chatOffsets.set(fp, stat.size);
+        const enc = buf[1] === 0 ? 'utf16le' : 'utf-8';
+        let text = buf.toString(enc);
+        if (text.charCodeAt(0) === 0xFEFF || text.charCodeAt(0) === 0xFFFE) text = text.slice(1);
+        text = text.replace(/\r/g, '');
+        text.split('\n').filter(Boolean).forEach(line => {
+          const parsed = this.parseChatLine(line);
+          if (parsed) this.handleChatCommand(parsed);
+        });
+      }
+    } catch {}
+  }
+
   private broadcastLine(line: string): void {
     for (const client of this.sseClients) this.sendSSE(client.res, 'line', line);
   }
 
   private parsePlayerEvents(line: string): void {
-    // Parse player login
-    const loginMatch = line.match(/HandlePossessedBy:\s*\d+,\s*\d+,\s*(.+)/);
+    // HandlePossessedBy: steamId, charId, playerName
+    const possessedMatch = line.match(/APrisoner::HandlePossessedBy:\s*(\d+),\s*\d+,\s*(.+)/);
+    if (possessedMatch) {
+      const steamId = possessedMatch[1];
+      const playerName = possessedMatch[2].trim();
+      this.onlinePlayers.set(steamId, { steamId, name: playerName, connectedAt: new Date() });
+      if (this.ratingManager) this.ratingManager.playerConnected(steamId, playerName);
+      return;
+    }
+
+    // 'IP SteamID:PlayerName(CharID)' logged in
+    const loginMatch = line.match(/LogSCUM:.+'[\d.]+ (\d+):([^(]+)\(\d+\)'.+logged in/);
     if (loginMatch) {
-      const playerName = loginMatch[1].trim();
-      // Extract SteamID from other patterns
-      const steamIdMatch = line.match(/(\d{17})/);
-      if (steamIdMatch) {
-        const steamId = steamIdMatch[1];
-        this.onlinePlayers.set(steamId, {
-          steamId,
-          name: playerName,
-          connectedAt: new Date(),
-        });
-      }
+      const steamId = loginMatch[1];
+      const name = loginMatch[2].trim();
+      this.onlinePlayers.set(steamId, { steamId, name, connectedAt: new Date() });
+      if (this.ratingManager) this.ratingManager.playerConnected(steamId, name);
       return;
     }
 
-    // Alternative login pattern
-    const altLogin = line.match(/LogSCUM:.+'\d+:([^(]+)\((\d{17})\)'.+logged in/);
-    if (altLogin) {
-      const name = altLogin[1].trim();
-      const steamId = altLogin[2];
-      this.onlinePlayers.set(steamId, {
-        steamId,
-        name,
-        connectedAt: new Date(),
-      });
-      return;
-    }
-
-    // Parse player logout
-    const logoutMatch = line.match(/LogSCUM:.+'\d+:([^(]+)\((\d{17})\)'.+logged out/);
+    // 'IP SteamID:PlayerName(CharID)' logged out
+    const logoutMatch = line.match(/LogSCUM:.+'[\d.]+ (\d+):([^(]+)\(\d+\)'.+logged out/);
     if (logoutMatch) {
-      const steamId = logoutMatch[2];
+      const steamId = logoutMatch[1];
       this.onlinePlayers.delete(steamId);
+      if (this.ratingManager) this.ratingManager.playerDisconnected(steamId);
       return;
     }
 
-    // Alternative logout pattern
-    const altLogout = line.match(/Prisoner logging out:\s*([^(]+)\s*\((\d{17})\)/);
+    // Prisoner logging out: PlayerName (SteamID) — may have Warning: prefix
+    const altLogout = line.match(/(?:Warning:\s*)?Prisoner logging out:\s*([^(]+)\s*\((\d+)\)/);
     if (altLogout) {
       const steamId = altLogout[2];
       this.onlinePlayers.delete(steamId);
+      if (this.ratingManager) this.ratingManager.playerDisconnected(steamId);
     }
   }
 
@@ -1324,7 +2172,19 @@ export class WebPanel {
       const result = await this.rconClient.sendCommand('ListPlayers');
       if (result.success && result.response) {
         this.cachedPlayers = this.parseListPlayersOutput(result.response);
-        console.log(`[WebPanel] pollPlayers: parsed ${this.cachedPlayers.length} players`);
+        if (this.ratingManager) {
+          const onlineIds = new Set(this.cachedPlayers.map(p => p.steamId).filter(Boolean));
+          for (const p of this.cachedPlayers) {
+            if (p.steamId) {
+              this.ratingManager.ensurePlayer(p.steamId, p.name);
+              this.ratingManager.updateEconomy(p.steamId, p.balance || 0, p.gold || 0, p.fame || 0);
+            }
+          }
+          // Close sessions for players no longer online
+          for (const [sid] of this.ratingManager.getActiveSessions()) {
+            if (!onlineIds.has(sid)) this.ratingManager.playerDisconnected(sid);
+          }
+        }
       } else {
         console.log('[WebPanel] pollPlayers: ListPlayers returned no response');
       }
@@ -1465,6 +2325,7 @@ export class WebPanel {
       path.join(process.cwd(), 'SCUM-Images', 'items', safe),
       path.join(process.cwd(), '..', 'SCUM-Images', 'items', safe),
       path.join(__dirname, '..', '..', 'SCUM-Images', 'items', safe),
+      path.join(process.cwd(), 'resources', 'SCUM-Images', 'items', safe),
     ];
     for (const p of candidates) {
       try {
@@ -1479,5 +2340,73 @@ export class WebPanel {
     }
     res.writeHead(404);
     res.end('Not found');
+  }
+
+  private serveMapImage(variant: string, res: http.ServerResponse): void {
+    const variantMap: Record<string, string> = {
+      'basic': 'islandmap.jpg',
+      'grey': 'islandmapgrey.jpg',
+      'orange': 'islandmaporange.jpg',
+    };
+    const filename = variantMap[variant];
+    if (!filename) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+    const candidates = [
+      path.join(process.cwd(), 'SCUM-Images', 'map', filename),
+      path.join(process.cwd(), '..', 'SCUM-Images', 'map', filename),
+      path.join(__dirname, '..', '..', 'SCUM-Images', 'map', filename),
+      path.join(process.cwd(), 'resources', 'SCUM-Images', 'map', filename),
+    ];
+    for (const p of candidates) {
+      try {
+        if (fs.existsSync(p)) {
+          const stat = fs.statSync(p);
+          res.writeHead(200, {
+            'Content-Type': 'image/jpeg',
+            'Content-Length': stat.size,
+            'Cache-Control': 'public, max-age=86400',
+          });
+          const stream = fs.createReadStream(p);
+          stream.pipe(res);
+          stream.on('error', () => { res.writeHead(500); res.end('Error'); });
+          return;
+        }
+      } catch {}
+    }
+    res.writeHead(404);
+    res.end('Not found');
+  }
+
+  private async handleVehicles(res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.serverPath) {
+        this.sendJson(res, { vehicles: [] });
+        return;
+      }
+      const scumDb = require('./scumDatabase');
+      const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
+      const rows = dbReader.getVehicles();
+      this.sendJson(res, { vehicles: rows || [] });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message, vehicles: [] }, 500);
+    }
+  }
+
+  private async handleFlags(res: http.ServerResponse): Promise<void> {
+    try {
+      if (!this.serverPath) {
+        this.sendJson(res, { flags: [] });
+        return;
+      }
+      const scumDb = require('./scumDatabase');
+      const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
+      const rows = dbReader.getFlags();
+      this.sendJson(res, { flags: rows || [] });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message, flags: [] }, 500);
+    }
   }
 }

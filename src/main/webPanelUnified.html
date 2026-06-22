@@ -148,6 +148,18 @@ tr:hover{background:rgba(88,166,255,0.05)}
       <span class="nav-icon">🛒</span>
       <span data-i18n="nav.wargm">WARGM</span>
     </div>
+    <div class="nav-item" data-tab="map" onclick="switchTab('map')">
+      <span class="nav-icon">🗺️</span>
+      <span data-i18n="nav.map">Карта</span>
+    </div>
+    <div class="nav-item" data-tab="chat" onclick="switchTab('chat');initChat()">
+      <span class="nav-icon">💬</span>
+      <span data-i18n="nav.chat">Чат</span>
+    </div>
+    <div class="nav-item" data-tab="rating" onclick="switchTab('rating');loadRating()">
+      <span class="nav-icon">🏆</span>
+      <span data-i18n="nav.rating">Рейтинг</span>
+    </div>
     <div class="nav-item" data-tab="settings" onclick="switchTab('settings')">
       <span class="nav-icon">⚙️</span>
       <span data-i18n="nav.settings">Настройки</span>
@@ -157,6 +169,11 @@ tr:hover{background:rgba(88,166,255,0.05)}
   <div class="main-content">
     <!-- Dashboard Tab -->
     <div class="tab-content active" id="tab-dashboard">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px">
+        <span><span style="color:var(--muted)" data-i18n="status.appVersion">Версия:</span> <span id="appVersion">—</span></span>
+        <span id="updateStatus" style="color:var(--muted)"></span>
+        <button class="btn" onclick="checkAppUpdate()" style="padding:4px 10px;font-size:11px" data-i18n="status.checkUpdate">Проверить обновления</button>
+      </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label" data-i18n="status.server">Статус сервера</div>
@@ -216,11 +233,26 @@ tr:hover{background:rgba(88,166,255,0.05)}
           <input type="text" id="rconCommand" data-i18n-placeholder="rcon.command" placeholder="Введите команду..." onkeydown="handleRconKey(event)">
           <button class="btn btn-primary" onclick="sendRconCommand()" data-i18n="rcon.send">Отправить</button>
         </div>
-        <div class="quick-commands" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-          <button class="btn" onclick="fillCommand('ListPlayers')" style="font-size:12px;padding:6px 10px">ListPlayers</button>
-          <button class="btn" onclick="fillCommand('SetTime')" style="font-size:12px;padding:6px 10px">SetTime</button>
-          <button class="btn" onclick="fillCommand('SetWeather')" style="font-size:12px;padding:6px 10px">SetWeather</button>
-          <button class="btn" onclick="fillCommand('ScheduleWorldEvent BP_CargoDropEvent')" style="font-size:12px;padding:6px 10px">ScheduleCargoDrop</button>
+        <div class="quick-commands" style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+          <span style="color:var(--accent);font-size:11px;padding:4px 0;width:100%">Игроки:</span>
+          <button class="btn" onclick="fillCommand('ListPlayers')" style="font-size:11px;padding:4px 8px" title="Список игроков онлайн">ListPlayers</button>
+          <button class="btn" onclick="fillCommand('ListFlags')" style="font-size:11px;padding:4px 8px" title="Список флагов игроков">ListFlags</button>
+          <button class="btn" onclick="fillCommand('Unstuck ')" style="font-size:11px;padding:4px 8px" title="Выдернуть игрока из текстур (v0.4.5)">Unstuck</button>
+          <button class="btn" onclick="fillCommand('TeleportPlayerToMe ')" style="font-size:11px;padding:4px 8px" title="Телепорт игрока к себе">TPToMe</button>
+          <span style="color:var(--accent);font-size:11px;padding:4px 0;width:100%;margin-top:4px">Сервер:</span>
+          <button class="btn" onclick="fillCommand('SetTime ')" style="font-size:11px;padding:4px 8px" title="Установить время">SetTime</button>
+          <button class="btn" onclick="fillCommand('SetWeather ')" style="font-size:11px;padding:4px 8px" title="Установить погоду">SetWeather</button>
+          <button class="btn" onclick="fillCommand('#Announce ')" style="font-size:11px;padding:4px 8px" title="Глобальное объявление">Announce</button>
+          <button class="btn" onclick="fillCommand('ShutdownServer ')" style="font-size:11px;padding:4px 8px" title="Выключить сервер">Shutdown</button>
+          <button class="btn" onclick="fillCommand('ScheduleWorldEvent BP_CargoDropEvent ')" style="font-size:11px;padding:4px 8px" title="Запланировать сброс карго">CargoDrop</button>
+          <span style="color:var(--accent);font-size:11px;padding:4px 0;width:100%;margin-top:4px">Квесты (v0.4.5):</span>
+          <button class="btn" onclick="fillCommand('FindQuestLockouts')" style="font-size:11px;padding:4px 8px;border-color:#58a6ff" title="Показать всех заблокированных квестами">FindQuestLockouts</button>
+          <button class="btn" onclick="fillCommand('RunQuestUnstick')" style="font-size:11px;padding:4px 8px;border-color:#58a6ff" title="Очистить всех заблокированных разом">RunQuestUnstick</button>
+          <button class="btn" onclick="fillCommand('DeleteActiveQuestsForUser ')" style="font-size:11px;padding:4px 8px;border-color:#58a6ff" title="Снять конкретного игрока с квеста">DeleteQuestsForUser</button>
+          <span style="color:var(--accent);font-size:11px;padding:4px 0;width:100%;margin-top:4px">Спавн:</span>
+          <button class="btn" onclick="fillCommand('SpawnItem ')" style="font-size:11px;padding:4px 8px" title="Заспавнить предмет">SpawnItem</button>
+          <button class="btn" onclick="fillCommand('#SpawnVehicle ')" style="font-size:11px;padding:4px 8px" title="Заспавнить транспорт">SpawnVehicle</button>
+          <button class="btn" onclick="fillCommand('SpawnBrenner {X= Y= Z=}')" style="font-size:11px;padding:4px 8px" title="Заспавнить бреннера по координатам">SpawnBrenner</button>
         </div>
       </div>
     </div>
@@ -261,6 +293,12 @@ tr:hover{background:rgba(88,166,255,0.05)}
         </button>
         <button class="btn packs-subtab" data-subtab="savehome" onclick="switchPacksSubtab('savehome'); loadSaveHomeConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
           🏠 <span data-i18n="savehome.subtabTitle">Дом</span>
+        </button>
+        <button class="btn packs-subtab" data-subtab="airdrop" onclick="switchPacksSubtab('airdrop'); loadAirdropConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          🎁 <span data-i18n="airdrop.subtabTitle">Сброс</span>
+        </button>
+        <button class="btn packs-subtab" data-subtab="rewards" onclick="switchPacksSubtab('rewards'); loadRewardsConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          ⭐ <span data-i18n="rewards.subtabTitle">Награды</span>
         </button>
       </div>
 
@@ -399,6 +437,146 @@ tr:hover{background:rgba(88,166,255,0.05)}
         </div>
       </div> <!-- end savehome -->
 
+      <!-- Airdrop -->
+      <div class="packs-subtab-content" id="subtab-airdrop">
+        <h3>🎁 Сброс тайников</h3>
+        <div class="card" style="max-width:800px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="airdropEnabled" onchange="saveAirdropConfig()"> <span data-i18n="airdrop.enabled">Модуль включен</span></label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="airdropAutoEnabled" onchange="saveAirdropConfig()"> <span data-i18n="airdrop.auto">Авто-сброс</span></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+            <div>
+              <label style="font-size:12px;color:var(--muted)" data-i18n="airdrop.chestItem">Тип ящика</label>
+              <input type="text" id="airdropChestItem" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="saveAirdropConfig()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)" data-i18n="airdrop.minItems">Мин. предметов</label>
+              <input type="number" id="airdropMinItems" min="1" max="50" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="saveAirdropConfig()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)" data-i18n="airdrop.maxItems">Макс. предметов</label>
+              <input type="number" id="airdropMaxItems" min="1" max="50" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="saveAirdropConfig()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)" data-i18n="airdrop.cooldown">Кулдаун (мин)</label>
+              <input type="number" id="airdropCooldown" min="1" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="saveAirdropConfig()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)" data-i18n="airdrop.autoInterval">Интервал авто (мин)</label>
+              <input type="number" id="airdropAutoInterval" min="1" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="saveAirdropConfig()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted)" data-i18n="airdrop.minPlayers">Мин. игроков</label>
+              <input type="number" id="airdropMinPlayers" min="1" max="100" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="saveAirdropConfig()">
+            </div>
+          </div>
+          <div style="padding:8px;background:var(--bg);border-radius:4px;margin-bottom:12px">
+            <p style="margin:0;font-size:12px;color:var(--muted)" data-i18n="airdrop.itemHint">Предметы выбираются случайно из iditem.txt (список всех доступных предметов на сервере). Количество — от Мин до Макс.</p>
+          </div>
+          <div style="margin-top:12px">
+            <h4 data-i18n="airdrop.manual">Ручной сброс</h4>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="airdropManualX" placeholder="X" style="width:120px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+              <input type="number" id="airdropManualY" placeholder="Y" style="width:120px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+              <input type="number" id="airdropManualZ" placeholder="Z (авто)" style="width:120px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+              <button class="btn btn-success" onclick="manualAirdropDrop()">🎁 <span data-i18n="airdrop.dropBtn">Сбросить</span></button>
+              <span id="airdropResult" style="color:var(--accent);font-size:12px"></span>
+            </div>
+          </div>
+
+          <!-- Calibration -->
+          <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+            <h4 data-i18n="airdrop.calibrateTitle">📏 Калибровка высот</h4>
+            <p style="font-size:12px;color:var(--muted);margin:4px 0 8px" data-i18n="airdrop.calibrateHint">
+              Телепортируйтесь в каждую точку, встаньте на землю (не в воду!) и нажмите "Записать". 
+              Это сохранит высоту Z для точного сброса тайников.
+            </p>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="calibrateSteamId" placeholder="SteamID" value="76561198156375337"
+                style="width:200px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+              <button class="btn btn-primary" onclick="startCalibration()" id="calibrateStartBtn" data-i18n="airdrop.calibrateStart">Начать калибровку</button>
+              <button class="btn btn-success" onclick="recordCalibration()" id="calibrateRecordBtn" style="display:none" data-i18n="airdrop.calibrateRecord">✅ Записать (я на земле)</button>
+              <button class="btn btn-warning" onclick="skipCalibration()" id="calibrateSkipBtn" style="display:none" data-i18n="airdrop.calibrateSkip">⏭ Пропустить (вода)</button>
+              <button class="btn" onclick="cancelCalibration()" id="calibrateCancelBtn" style="display:none" data-i18n="airdrop.calibrateCancel">Отмена</button>
+              <button class="btn btn-danger" onclick="resetCalibration()" id="calibrateResetBtn" data-i18n="airdrop.calibrateReset">🗑 Сбросить все</button>
+            </div>
+            <div id="calibrateStatus" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap" id="calibrateProgress"></div>
+          </div>
+        </div>
+      </div> <!-- end airdrop -->
+
+      <div class="packs-subtab-content" id="subtab-rewards">
+        <div class="card">
+          <h3 style="margin-bottom:12px" data-i18n="rewards.title">⭐ Награды за онлайн</h3>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="rewardsEnabled" onchange="saveRewardsConfig()">
+              <span data-i18n="rewards.enabled">Включить модуль наград</span>
+            </label>
+          </div>
+
+          <h4 style="margin:16px 0 8px" data-i18n="rewards.hourlyTitle">⏱ Почасовая награда</h4>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="hourlyEnabled" onchange="saveRewardsConfig()">
+              <span data-i18n="rewards.hourlyEnabled">Включить почасовую награду</span>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+            <div class="form-group">
+              <label data-i18n="rewards.hourlyGold">Золото в час</label>
+              <input type="number" id="hourlyGold" value="10" min="0" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+            <div class="form-group">
+              <label data-i18n="rewards.hourlyMoney">Деньги в час</label>
+              <input type="number" id="hourlyMoney" value="100" min="0" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+            <div class="form-group">
+              <label data-i18n="rewards.hourlyFame">Слава в час</label>
+              <input type="number" id="hourlyFame" value="5" min="0" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+          </div>
+
+          <h4 style="margin:16px 0 8px" data-i18n="rewards.topTitle">🏆 Награда топ-игрокам</h4>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="topEnabled" onchange="saveRewardsConfig()">
+              <span data-i18n="rewards.topEnabled">Включить награду топ-игрокам</span>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+            <div class="form-group">
+              <label data-i18n="rewards.topIntervalDays">Интервал (дней)</label>
+              <input type="number" id="topIntervalDays" value="10" min="1" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+            <div class="form-group">
+              <label data-i18n="rewards.topCount">Кол-во топ-игроков</label>
+              <input type="number" id="topCount" value="3" min="1" max="10" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+            <div class="form-group">
+              <label data-i18n="rewards.topGold">Золото (за 1-е место)</label>
+              <input type="number" id="topGold" value="100" min="0" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+            <div class="form-group">
+              <label data-i18n="rewards.topMoney">Деньги (за 1-е место)</label>
+              <input type="number" id="topMoney" value="1000" min="0" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+            <div class="form-group">
+              <label data-i18n="rewards.topFame">Слава (за 1-е место)</label>
+              <input type="number" id="topFame" value="50" min="0" class="form-input" onchange="saveRewardsConfig()">
+            </div>
+          </div>
+          <div style="margin-top:12px;font-size:11px;color:var(--muted)" data-i18n="rewards.topHint">Награда умножается на позицию: 1-е место ×N, 2-е ×(N-1), 3-е ×(N-2) и т.д.</div>
+
+          <div style="margin-top:16px" id="rewardsStatus"></div>
+          <button class="btn btn-primary" onclick="saveRewardsConfig()" style="margin-top:8px" data-i18n="rewards.saveBtn">💾 Сохранить настройки</button>
+        </div>
+      </div>
+
     </div> <!-- end tab-packs -->
     <div class="tab-content" id="tab-cooldowns">
       <div class="card">
@@ -506,6 +684,172 @@ tr:hover{background:rgba(88,166,255,0.05)}
             </table>
           </div>
         </div>
+      </div>
+    </div>
+    <!-- Map Tab -->
+    <div class="tab-content" id="tab-map">
+      <style>
+        .map-controls { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card-bg); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+        .map-body { display:flex; height:calc(100vh - 180px); min-height:400px; }
+        .map-wrapper { flex:1; position:relative; overflow:hidden; background:var(--card-bg); cursor:grab; }
+        .map-wrapper.dragging { cursor:grabbing; }
+        .map-content { position:absolute; top:0; left:0; transform-origin:0 0; }
+        .map-content img { width:4096px; height:4096px; display:block; user-select:none; -webkit-user-drag:none; }
+        .map-wrapper canvas { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; }
+        .map-wrapper canvas.map-marker-layer { pointer-events:auto; }
+        .map-zoom-btn { position:absolute; bottom:12px; left:12px; z-index:3; display:flex; flex-direction:column; gap:2px; }
+        .map-zoom-btn button { width:28px; height:28px; border:1px solid var(--border); background:var(--card-bg); color:var(--text); cursor:pointer; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; border-radius:4px; }
+        .map-zoom-btn button:hover { background:var(--hover); }
+        .map-sidebar { width:220px; min-width:220px; background:var(--card-bg); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .map-sidebar-header { padding:8px 12px; font-size:13px; font-weight:600; color:var(--text); border-bottom:1px solid var(--border); }
+        .map-player-list { flex:1; overflow-y:auto; padding:4px 0; }
+        .map-player-item { display:flex; align-items:center; gap:6px; padding:4px 12px; cursor:pointer; font-size:12px; color:var(--text); transition:background .15s; }
+        .map-player-item:hover { background:var(--hover); }
+        .map-player-item .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .map-player-item .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .map-player-item .coords { color:var(--text-dim); font-size:10px; font-family:'Consolas',monospace; }
+        .map-player-item.active { background:var(--accent); color:#fff; }
+        .map-player-item.active .coords { color:rgba(255,255,255,.7); }
+        .zoom-level { color:var(--text-dim); font-size:11px; margin-left:4px; }
+      </style>
+      <div class="map-controls">
+        <button class="btn" onclick="loadMapPlayers()" title="⟳ Refresh">⟳</button>
+        <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mapAutoRefresh" checked> <span data-i18n="map.autoRefresh">Авто</span>
+        </label>
+        <select id="mapVariant" class="input" onchange="changeMapVariant()" style="padding:4px 8px;font-size:12px">
+          <option value="basic" data-i18n="map.color">Цветная</option>
+          <option value="grey" data-i18n="map.grey">Серая</option>
+          <option value="orange" data-i18n="map.orange">Оранжевая</option>
+        </select>
+        <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mapShowLabels" checked> <span data-i18n="map.labels">Метки</span>
+        </label>
+        <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mapShowFlags" onchange="loadMapFlags();renderMapMarkers()"> <span data-i18n="map.flags">Флаги</span>
+        </label>
+        <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mapShowGrid" checked onchange="renderMapMarkers()"> <span data-i18n="map.grid">Сетка</span>
+        </label>
+        <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mapShowVehicles" onchange="loadMapVehicles()"> <span data-i18n="map.vehicles">Транспорт</span>
+        </label>
+        <input type="text" id="mapFilter" class="input" placeholder="Filter..." oninput="scheduleMapRefresh()" style="padding:4px 8px;font-size:12px;width:120px">
+        <span class="zoom-level" id="mapZoomLabel">100%</span>
+        <span id="mapPlayerCount" style="color:var(--text-dim);font-size:12px;margin-left:auto">0</span>
+      </div>
+      <div class="map-body">
+        <div class="map-wrapper" id="mapWrapper">
+          <div class="map-content" id="mapContent">
+            <img id="mapImage" src="/api/map-image/basic" alt="Map" crossorigin="anonymous" draggable="false">
+          </div>
+          <canvas id="mapCanvas" class="map-marker-layer"></canvas>
+          <div class="map-zoom-btn">
+            <button onclick="mapZoomIn()" title="+">+</button>
+            <button onclick="mapZoomOut()" title="-">−</button>
+            <button onclick="mapZoomReset()" title="Reset">⟲</button>
+          </div>
+        </div>
+        <div class="map-sidebar" id="mapSidebar">
+          <div class="map-sidebar-header" data-i18n="map.players">Игроки на карте</div>
+          <div id="mapPlayerList"></div>
+        </div>
+      </div>
+      <!-- Map context menu -->
+      <div id="mapContextMenu" style="display:none;position:fixed;z-index:100;background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:8px;min-width:200px;box-shadow:0 4px 16px rgba(0,0,0,.4)">
+        <div class="map-ctx-coords" style="color:var(--text);font-size:12px;font-family:'Consolas',monospace;margin-bottom:6px;padding:4px 6px;background:var(--bg);border-radius:4px"></div>
+        <select id="mapTeleportPlayer" class="input" style="width:100%;padding:4px 6px;font-size:12px;margin-bottom:6px"></select>
+        <button class="btn btn-success" onclick="mapTeleportHere()" style="width:100%;padding:6px;font-size:12px">📡 Teleport</button>
+        <button class="btn" onclick="mapCopyCoords()" style="width:100%;padding:6px;font-size:12px;margin-top:4px">📋 Copy coords</button>
+      </div>
+    </div>
+    <!-- Chat Tab -->
+    <div class="tab-content" id="tab-chat">
+      <style>
+        .chat-container { display:flex; flex-direction:column; height:calc(100vh - 180px); min-height:400px; }
+        .chat-messages { flex:1; overflow-y:auto; padding:8px 12px; background:var(--card-bg); border:1px solid var(--border); border-radius:4px; margin-bottom:8px; font-size:13px; font-family:'Consolas',monospace; }
+        .chat-msg { padding:3px 0; display:flex; gap:8px; align-items:flex-start; line-height:1.4; }
+        .chat-msg .time { color:var(--text-dim); font-size:11px; flex-shrink:0; width:60px; }
+        .chat-msg .channel { font-size:11px; padding:1px 5px; border-radius:3px; flex-shrink:0; font-weight:600; }
+        .chat-msg .channel.Admin { background:#d73a4a33; color:#f85149; }
+        .chat-msg .channel.Global { background:#58a6ff33; color:#58a6ff; }
+        .chat-msg .channel.Squad { background:#3fb95033; color:#3fb950; }
+        .chat-msg .channel.Local { background:#d2992233; color:#d29922; }
+        .chat-msg .name { color:var(--accent); flex-shrink:0; }
+        .chat-msg .text { color:var(--text); word-break:break-word; }
+        .chat-msg.admin-msg .text { color:#f85149; font-style:italic; }
+        .chat-input-area { display:flex; gap:8px; align-items:center; }
+        .chat-input-area select { padding:6px 8px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font-size:12px; }
+        .chat-input-area input { flex:1; padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:'Consolas',monospace; font-size:13px; }
+        .chat-input-area input:focus { border-color:var(--accent); outline:none; }
+        .chat-controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+        .chat-controls label { color:var(--text); font-size:12px; display:flex; align-items:center; gap:4px; }
+        .chat-status { font-size:11px; color:var(--text-dim); margin-left:auto; }
+      </style>
+      <div class="chat-container">
+        <div class="chat-controls">
+          <label><input type="checkbox" id="chatAutoScroll" checked> Автоскролл</label>
+          <select id="chatFilter" onchange="filterChatMessages()" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+            <option value="">Все каналы</option>
+            <option value="Global">Global</option>
+            <option value="Admin">Admin</option>
+            <option value="Squad">Squad</option>
+            <option value="Local">Local</option>
+          </select>
+          <button class="btn" onclick="clearChatMessages()" style="padding:4px 10px;font-size:12px">Очистить</button>
+          <span class="chat-status" id="chatStatus">○</span>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area">
+          <select id="chatChannel" style="width:100px">
+            <option value="4">Global (жёлтый)</option>
+            <option value="2">Admin (синий)</option>
+            <option value="0">White (белый)</option>
+            <option value="7">Red (красный)</option>
+            <option value="6">Orange</option>
+            <option value="3">Green</option>
+          </select>
+          <input type="text" id="chatSender" placeholder="Отправитель..." onchange="saveChatSender()" style="width:110px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;font-family:'Consolas',monospace">
+          <input type="text" id="chatInput" placeholder="Сообщение..." onkeydown="if(event.key==='Enter')sendChatMessage()" style="flex:1">
+          <button class="btn btn-success" onclick="sendChatMessage()">➤</button>
+        </div>
+      </div>
+    </div>
+    <!-- Rating Tab -->
+    <div class="tab-content" id="tab-rating">
+      <h3>🏆 Рейтинг игроков</h3>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span id="ratingStats"></span>
+          <input type="text" id="ratingSearch" placeholder="Поиск по нику SteamID..." style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);width:250px;font-size:12px;font-family:'Consolas',monospace" oninput="renderRatingTable()">
+        </div>
+        <div style="overflow-x:auto">
+          <table class="rating-table" id="ratingTable" style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="padding:8px 12px;border-bottom:2px solid var(--accent);text-align:center">#</th>
+                <th style="padding:8px 12px;border-bottom:2px solid var(--accent);text-align:left">Игрок</th>
+                <th style="padding:8px 12px;border-bottom:2px solid var(--accent);text-align:center">🏆 Онлайн</th>
+                <th style="padding:8px 12px;border-bottom:2px solid var(--accent);text-align:right">💰 Деньги</th>
+                <th style="padding:8px 12px;border-bottom:2px solid var(--accent);text-align:right">🥇 Золото</th>
+                <th style="padding:8px 12px;border-bottom:2px solid var(--accent);text-align:right">⭐ Слава</th>
+              </tr>
+            </thead>
+            <tbody id="ratingBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--muted)">
+          💡 В чате игры напишите <code>!рейтинг</code> или <code>!rating</code> чтобы узнать своё место
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h4 style="margin-bottom:8px">⛔ Чёрный список рейтинга</h4>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Администраторы и другие игроки в чёрном списке не участвуют в рейтинге и не получают награды.</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input type="text" id="blacklistInput" placeholder="76561198..." style="flex:1;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+          <button class="btn btn-warning" onclick="addToBlacklist()" data-i18n="rating.addToBlacklist">⛔ Добавить</button>
+        </div>
+        <div id="blacklistContainer"></div>
       </div>
     </div>
     <!-- Settings Tab -->
@@ -760,7 +1104,8 @@ const SCUM_VEHICLES = [
   'BPC_Dinghy',
   'BPC_Cruiser',
   'BPC_Tractor',
-  'BPC_SidecarBike'
+  'BPC_SidecarBike',
+  'BPC_Rager'
 ];
 
 // ====== Translation System ======
@@ -831,6 +1176,7 @@ const translations = {
     'playerCard.announce': '📢 Объявление',
     'playerCard.notify': '🔔 Уведомление',
     'playerCard.chatMessage': '💬 Сообщение в чат',
+    'playerCard.airdropAt': '🎁 Сброс тайника',
     'playerCard.scheduleCargoDrop': '📦 Сброс карго',
     'playerCard.maxSkills': '🎯 Навыки макс',
     'playerCard.giveStarterPack': '🎒 Выдать стартовый набор',
@@ -922,7 +1268,19 @@ const translations = {
     'packs.actions': 'Действия',
     'nav.cooldowns': 'Кулдауны',
     'nav.wargm': 'WARGM',
+    'nav.chat': 'Чат',
+    'nav.rating': 'Рейтинг',
+    'nav.map': 'Карта',
     'nav.settings': 'Настройки',
+    'map.autoRefresh': 'Авто',
+    'map.color': 'Цветная',
+    'map.grey': 'Серая',
+    'map.orange': 'Оранжевая',
+    'map.labels': 'Метки',
+    'map.flags': 'Флаги',
+    'map.grid': 'Сетка',
+    'map.vehicles': 'Транспорт',
+    'map.players': 'Игроки на карте',
     'settings.title': '⚙️ Настройки сервера',
     'settings.steamCmdPath': 'Путь к SteamCMD',
     'settings.serverPath': 'Путь к серверу',
@@ -995,6 +1353,7 @@ const translations = {
     'playerCard.teleportTo': '📍 Телепортировать',
     'playerCard.teleportCoords': 'Координаты (X Y Z)',
     'playerCard.teleportBtn': '📍 Телепорт',
+    'playerCard.unstuck': '🆘 Unstuck (выдернуть из текстур)',
     'vip.subtabTitle': 'VIP',
     'vip.title': '👑 VIP игроки',
     'vip.enabled': 'VIP включен',
@@ -1017,6 +1376,43 @@ const translations = {
     'savehome.teleportPrice': 'Цена телепорта ($)',
     'savehome.save': '💾 Сохранить',
     'savehome.help': 'Игроки используют !сохранитьдом для сохранения текущей позиции и !дом для телепорта к сохранённой точке. !дома — список сохранений.',
+    'rewards.subtabTitle': 'Награды',
+    'rewards.title': '⭐ Награды за онлайн',
+    'rewards.enabled': 'Включить модуль наград',
+    'rewards.hourlyTitle': '⏱ Почасовая награда',
+    'rewards.hourlyEnabled': 'Включить почасовую награду',
+    'rewards.hourlyGold': 'Золото в час',
+    'rewards.hourlyMoney': 'Деньги в час',
+    'rewards.hourlyFame': 'Слава в час',
+    'rewards.topTitle': '🏆 Награда топ-игрокам',
+    'rewards.topEnabled': 'Включить награду топ-игрокам',
+    'rewards.topIntervalDays': 'Интервал (дней)',
+    'rewards.topCount': 'Кол-во топ-игроков',
+    'rewards.topGold': 'Золото (за 1-е место)',
+    'rewards.topMoney': 'Деньги (за 1-е место)',
+    'rewards.topFame': 'Слава (за 1-е место)',
+    'rewards.topHint': 'Награда умножается на позицию: 1-е место ×N, 2-е ×(N-1), 3-е ×(N-2) и т.д.',
+    'rewards.saveBtn': '💾 Сохранить настройки',
+    'rating.addToBlacklist': '⛔ Добавить в чёрный список',
+    'airdrop.subtabTitle': 'Сброс',
+    'airdrop.enabled': 'Модуль включен',
+    'airdrop.auto': 'Авто-сброс',
+    'airdrop.chestItem': 'Тип ящика',
+    'airdrop.minItems': 'Мин. предметов',
+    'airdrop.maxItems': 'Макс. предметов',
+    'airdrop.cooldown': 'Кулдаун (мин)',
+    'airdrop.autoInterval': 'Интервал авто (мин)',
+    'airdrop.minPlayers': 'Мин. игроков',
+    'airdrop.itemHint': 'Предметы выбираются случайно из iditem.txt (список всех доступных предметов на сервере). Количество — от Мин до Макс.',
+    'airdrop.manual': 'Ручной сброс',
+    'airdrop.dropBtn': 'Сбросить',
+    'airdrop.calibrateTitle': '📏 Калибровка высот',
+    'airdrop.calibrateHint': 'Телепортируйтесь в каждую точку, встаньте на землю (не в воду!) и нажмите "Записать". Это сохранит высоту Z для точного сброса тайников.',
+    'airdrop.calibrateStart': 'Начать калибровку',
+    'airdrop.calibrateRecord': '✅ Записать (я на земле)',
+    'airdrop.calibrateSkip': '⏭ Пропустить (вода)',
+    'airdrop.calibrateCancel': 'Отмена',
+    'airdrop.calibrateReset': '🗑 Сбросить все',
   },
   en: {
     'nav.dashboard': 'Dashboard',
@@ -1084,6 +1480,7 @@ const translations = {
     'playerCard.announce': '📢 Announce',
     'playerCard.notify': '🔔 Notify',
     'playerCard.chatMessage': '💬 Chat Message',
+    'playerCard.airdropAt': '🎁 Drop Loot Cache',
     'playerCard.scheduleCargoDrop': '📦 Cargo Drop',
     'playerCard.maxSkills': '🎯 Max Skills',
     'playerCard.giveStarterPack': '🎒 Give Starter Pack',
@@ -1175,7 +1572,19 @@ const translations = {
     'packs.actions': 'Actions',
     'nav.cooldowns': 'Cooldowns',
     'nav.wargm': 'WARGM',
+    'nav.chat': 'Chat',
+    'nav.rating': 'Rating',
+    'nav.map': 'Map',
     'nav.settings': 'Settings',
+    'map.autoRefresh': 'Auto',
+    'map.color': 'Color',
+    'map.grey': 'Grey',
+    'map.orange': 'Orange',
+    'map.labels': 'Labels',
+    'map.flags': 'Flags',
+    'map.grid': 'Grid',
+    'map.vehicles': 'Vehicles',
+    'map.players': 'Players on Map',
     'settings.title': '⚙️ Server Settings',
     'settings.steamCmdPath': 'SteamCMD Path',
     'settings.serverPath': 'Server Path',
@@ -1247,10 +1656,29 @@ const translations = {
     'playerCard.teleportTo': '📍 Teleport To',
     'playerCard.teleportCoords': 'Coordinates (X Y Z)',
     'playerCard.teleportBtn': '📍 Teleport',
+    'playerCard.unstuck': '🆘 Unstuck (lift from terrain)',
     'vip.subtabTitle': 'VIP',
     'vip.title': '👑 VIP Players',
     'vip.enabled': 'VIP Enabled',
     'vip.addPlayer': 'Add Player',
+    'rewards.subtabTitle': 'Rewards',
+    'rewards.title': '⭐ Online Rewards',
+    'rewards.enabled': 'Enable rewards module',
+    'rewards.hourlyTitle': '⏱ Hourly Reward',
+    'rewards.hourlyEnabled': 'Enable hourly reward',
+    'rewards.hourlyGold': 'Gold per hour',
+    'rewards.hourlyMoney': 'Money per hour',
+    'rewards.hourlyFame': 'Fame per hour',
+    'rewards.topTitle': '🏆 Top Players Reward',
+    'rewards.topEnabled': 'Enable top players reward',
+    'rewards.topIntervalDays': 'Interval (days)',
+    'rewards.topCount': 'Top players count',
+    'rewards.topGold': 'Gold (for 1st place)',
+    'rewards.topMoney': 'Money (for 1st place)',
+    'rewards.topFame': 'Fame (for 1st place)',
+    'rewards.topHint': 'Reward is multiplied by position: 1st ×N, 2nd ×(N-1), 3rd ×(N-2) etc.',
+    'rewards.saveBtn': '💾 Save Settings',
+    'rating.addToBlacklist': '⛔ Add to blacklist',
     'vip.noPlayers': 'No VIP players',
     'vip.expires': 'Expires',
     'vip.permanent': 'Permanent',
@@ -1269,6 +1697,25 @@ const translations = {
     'savehome.teleportPrice': 'Teleport price ($)',
     'savehome.save': '💾 Save',
     'savehome.help': 'Players use !сохранитьдом to save current position, !дом to teleport home, !дома to list saved locations.',
+    'airdrop.subtabTitle': 'Airdrop',
+    'airdrop.enabled': 'Module enabled',
+    'airdrop.auto': 'Auto-drop',
+    'airdrop.chestItem': 'Chest type',
+    'airdrop.minItems': 'Min items',
+    'airdrop.maxItems': 'Max items',
+    'airdrop.cooldown': 'Cooldown (min)',
+    'airdrop.autoInterval': 'Auto interval (min)',
+    'airdrop.minPlayers': 'Min players',
+    'airdrop.itemHint': 'Items are randomly picked from iditem.txt (all available items on the server). Count ranges from Min to Max.',
+    'airdrop.manual': 'Manual drop',
+    'airdrop.dropBtn': 'Drop',
+    'airdrop.calibrateTitle': '📏 Height Calibration',
+    'airdrop.calibrateHint': 'Teleport to each point, stand on the ground (not in water!) and click "Record". This saves the Z height for accurate airdrop drops.',
+    'airdrop.calibrateStart': 'Start Calibration',
+    'airdrop.calibrateRecord': '✅ Record (on ground)',
+    'airdrop.calibrateSkip': '⏭ Skip (water)',
+    'airdrop.calibrateCancel': 'Cancel',
+    'airdrop.calibrateReset': '🗑 Reset All',
     'wargm.vipDays': 'VIP Days',
   }
 };
@@ -1344,6 +1791,37 @@ function initApp() {
   setInterval(loadPlayers, 5000);
   setupSSE();
   loadItems();
+  loadChatSender();
+  loadAppVersion();
+}
+
+async function loadAppVersion() {
+  try {
+    const res = await fetch('/api/app/version', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('appVersion').textContent = data.version || '—';
+  } catch {}
+}
+
+async function loadChatSender() {
+  try {
+    const res = await fetch('/api/plugins/chat-sender', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('chatSender').value = data.sender || 'AMUR bot';
+  } catch {}
+}
+
+async function saveChatSender() {
+  const sender = document.getElementById('chatSender').value.trim() || 'AMUR bot';
+  try {
+    await fetch('/api/plugins/chat-sender', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ sender })
+    });
+  } catch {}
 }
 
 // Tab switching
@@ -2161,6 +2639,9 @@ async function showPlayerCard(steamId, playerName) {
       <button class="action-btn danger" onclick="playerAction('${steamId}', 'suicide', {}); closePlayerCard()">
         ${t('playerCard.killPlayer')}
       </button>
+      <button class="action-btn" onclick="playerAction('${steamId}', 'unstuck', {}); closePlayerCard()">
+        ${t('playerCard.unstuck')}
+      </button>
       <button class="action-btn" onclick="playerAction('${steamId}', 'silence', {}); closePlayerCard()">
         ${t('playerCard.silence')}
       </button>
@@ -2175,6 +2656,9 @@ async function showPlayerCard(steamId, playerName) {
       </button>
       <button class="action-btn" onclick="showChatModal('${steamId}', '${escapeHtml(playerName)}')">
         ${t('playerCard.chatMessage')}
+      </button>
+      <button class="action-btn success" onclick="playerAirdropDrop('${steamId}', ${playerLoc ? playerLoc.x : 'null'}, ${playerLoc ? playerLoc.y : 'null'}, ${playerLoc ? playerLoc.z : 'null'})">
+        🎁 ${t('playerCard.airdropAt')}
       </button>
       ${playerLoc ? `<button class="action-btn success" onclick="scheduleCargoDrop('${steamId}', ${playerLoc.x}, ${playerLoc.y}, ${playerLoc.z})">
         ${t('playerCard.scheduleCargoDrop')}
@@ -2316,7 +2800,7 @@ function showInlineSuggestions(input, customSource) {
   const escR = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const isVehicle = input.dataset.vehicles;
   box.innerHTML = matches.map((it, i) =>
-    `<div class="inline-ac-item" style="padding:8px 12px;cursor:pointer;color:#e6edf3;font-family:'Consolas',monospace;font-size:13px;display:flex;align-items:center" data-value="${it}">${isVehicle ? '' : getItemIconHtml(it)}${it.replace(new RegExp('(' + escR(query) + ')', 'gi'), '<strong style="color:#58a6ff">$1</strong>')}</div>`
+    `<div class="inline-ac-item" style="padding:8px 12px;cursor:pointer;color:#e6edf3;font-family:'Consolas',monospace;font-size:13px;display:flex;align-items:center;gap:6px" data-value="${it}">${getItemIconHtml(it)}${it.replace(new RegExp('(' + escR(query) + ')', 'gi'), '<strong style="color:#58a6ff">$1</strong>')}</div>`
   ).join('');
   box.style.display = 'block';
 }
@@ -2444,7 +2928,8 @@ function showVehicleSuggestions() {
   // Build suggestions HTML
   selectedItemIndex = -1;
   suggestionsDiv.innerHTML = matches.map((vehicle, index) => `
-    <div class="suggestion-item" data-index="${index}" onclick="selectVehicle('${vehicle}')" onmouseenter="highlightVehicleSuggestion(${index})">
+    <div class="suggestion-item" data-index="${index}" onclick="selectVehicle('${vehicle}')" onmouseenter="highlightVehicleSuggestion(${index})" style="display:flex;align-items:center;gap:6px">
+      ${getItemIconHtml(vehicle)}
       ${highlightMatch(vehicle, query)}
     </div>
   `).join('');
@@ -2843,7 +3328,1060 @@ async function confirmAction() {
   closeModal();
 }
 
-// SSE for console
+// ====== Map Tab ======
+const MAP_SIZE = 4096;
+const WORLD_MIN_X = -905000;
+const WORLD_MAX_X = 619000;
+const WORLD_MIN_Y = -905000;
+const WORLD_MAX_Y = 619000;
+let mapPlayers = [];
+let mapFlags = [];
+let mapFlagsLoaded = false;
+let mapInitDone = false;
+let mapVehicles = [];
+let mapRefreshTimer = null;
+let mapZoom = 1;
+let mapPanX = 0;
+let mapPanY = 0;
+let mapIsDragging = false;
+let mapDragStartX = 0, mapDragStartY = 0;
+let mapPanStartX = 0, mapPanStartY = 0;
+let mapZoomCenterX = 0, mapZoomCenterY = 0;
+let mapCanvasEventsSetup = false;
+let mapSuppressClick = false;
+
+function initMap() {
+  if (!mapInitDone) {
+    mapInitDone = true;
+    document.addEventListener('mouseup', onMapMouseUp);
+    document.addEventListener('mousemove', onMapDocMouseMove);
+    const img = document.getElementById('mapImage');
+    const onReady = () => { fitMapToWrapper(); loadMapPlayers(); };
+    if (img.complete) { onReady(); } else { img.onload = onReady; }
+    window.addEventListener('resize', () => {
+      if (document.getElementById('tab-map').classList.contains('active')) {
+        fitMapToWrapper();
+      }
+    });
+  }
+  loadMapPlayers();
+  startMapAutoRefresh();
+}
+
+function fitMapToWrapper() {
+  const wrapper = document.getElementById('mapWrapper');
+  const w = wrapper.clientWidth;
+  const h = wrapper.clientHeight;
+  const scaleX = w / MAP_SIZE;
+  const scaleY = h / MAP_SIZE;
+  mapZoom = Math.min(scaleX, scaleY);
+  mapPanX = (w - MAP_SIZE * mapZoom) / 2;
+  mapPanY = (h - MAP_SIZE * mapZoom) / 2;
+  applyMapTransform();
+  setupCanvas();
+  renderMapMarkers();
+}
+
+function setupCanvas() {
+  const wrapper = document.getElementById('mapWrapper');
+  const canvas = document.getElementById('mapCanvas');
+  canvas.width = wrapper.clientWidth;
+  canvas.height = wrapper.clientHeight;
+  if (!mapCanvasEventsSetup) {
+    mapCanvasEventsSetup = true;
+    canvas.addEventListener('mousemove', onMapMouseMove);
+    canvas.addEventListener('click', onMapClick);
+    canvas.addEventListener('wheel', onMapWheel, { passive: false });
+    canvas.addEventListener('mousedown', onMapMouseDown);
+    canvas.addEventListener('contextmenu', onMapContextMenu);
+  }
+}
+
+function applyMapTransform() {
+  const content = document.getElementById('mapContent');
+  content.style.transform = `translate(${mapPanX}px, ${mapPanY}px) scale(${mapZoom})`;
+  document.getElementById('mapZoomLabel').textContent = Math.round(mapZoom * 100) + '%';
+}
+
+function changeMapVariant() {
+  const v = document.getElementById('mapVariant').value;
+  const img = document.getElementById('mapImage');
+  img.src = '/api/map-image/' + v;
+  img.onload = renderMapMarkers;
+}
+
+function worldToPixel(wx, wy) {
+  const px = MAP_SIZE - ((wx - WORLD_MIN_X) / (WORLD_MAX_X - WORLD_MIN_X)) * MAP_SIZE;
+  const py = ((WORLD_MAX_Y - wy) / (WORLD_MAX_Y - WORLD_MIN_Y)) * MAP_SIZE;
+  return { px, py };
+}
+
+function pixelToWorld(px, py) {
+  const wx = WORLD_MIN_X + ((MAP_SIZE - px) / MAP_SIZE) * (WORLD_MAX_X - WORLD_MIN_X);
+  const wy = WORLD_MAX_Y - (py / MAP_SIZE) * (WORLD_MAX_Y - WORLD_MIN_Y);
+  return { wx, wy };
+}
+
+function screenToContent(sx, sy) {
+  return {
+    x: (sx - mapPanX) / mapZoom,
+    y: (sy - mapPanY) / mapZoom,
+  };
+}
+
+function renderMapMarkers() {
+  const canvas = document.getElementById('mapCanvas');
+  if (!canvas || !canvas.parentNode) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.restore();
+
+  // Set transform for drawing in content coordinates (0-4096)
+  ctx.setTransform(mapZoom, 0, 0, mapZoom, mapPanX, mapPanY);
+  ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+  const showLabels = document.getElementById('mapShowLabels').checked;
+  const filter = document.getElementById('mapFilter').value.toLowerCase().trim();
+  const listEl = document.getElementById('mapPlayerList');
+  listEl.innerHTML = '';
+  let count = 0;
+
+  // Marker size scales with zoom but has minimum screen size
+  const markerR = Math.max(5, 5 / mapZoom);
+  const labelMinZoom = 0.5;
+
+  for (const p of mapPlayers) {
+    if (!p.location) continue;
+    if (filter && !p.name.toLowerCase().includes(filter)) continue;
+
+    const { x, y } = p.location;
+    const c = worldToPixel(x, y);
+
+    ctx.beginPath();
+    ctx.arc(c.px, c.py, markerR, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff4444';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1, 1.5 / mapZoom);
+    ctx.stroke();
+
+    if (showLabels && mapZoom >= labelMinZoom) {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.font = `${Math.max(10, 11 / mapZoom)}px Consolas, monospace`;
+      ctx.textAlign = 'center';
+      const tw = ctx.measureText(p.name).width;
+      roundRect(ctx, c.px - tw / 2 - 4, c.py - markerR - 16, tw + 8, 14, 3);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(p.name, c.px, c.py - markerR - 5);
+    }
+
+    const item = document.createElement('div');
+    item.className = 'map-player-item';
+    item.dataset.steamId = p.steamId;
+    item.innerHTML = '<span class="dot" style="background:#ff4444"></span>' +
+      '<span class="name">' + escHtml(p.name) + '</span>' +
+      '<span class="coords">' + Math.round(x) + ', ' + Math.round(y) + '</span>';
+    item.onclick = () => { showPlayerOnMap(p.steamId); };
+    item.onmouseenter = () => { highlightPlayer(p.steamId, true); };
+    item.onmouseleave = () => { highlightPlayer(p.steamId, false); };
+    listEl.appendChild(item);
+    count++;
+  }
+
+  // Draw flags
+  if (document.getElementById('mapShowFlags').checked && mapFlags.length) {
+    const flagSize = Math.max(4, 4 / mapZoom);
+    for (const f of mapFlags) {
+      if (f.x == null || f.y == null) continue;
+      const c = worldToPixel(f.x, f.y);
+      // Draw flag pole
+      ctx.beginPath();
+      ctx.moveTo(c.px, c.py);
+      ctx.lineTo(c.px, c.py - flagSize * 4);
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = Math.max(1, 1.5 / mapZoom);
+      ctx.stroke();
+      // Draw flag triangle
+      ctx.beginPath();
+      ctx.moveTo(c.px, c.py - flagSize * 4);
+      ctx.lineTo(c.px + flagSize * 3, c.py - flagSize * 3);
+      ctx.lineTo(c.px, c.py - flagSize * 2);
+      ctx.closePath();
+      ctx.fillStyle = f.ownerName ? '#ffcc00' : '#666';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(0.5, 1 / mapZoom);
+      ctx.stroke();
+    }
+  }
+
+  // Draw sector grid
+  if (document.getElementById('mapShowGrid').checked) {
+    const gridStep = MAP_SIZE / 5;
+    const rowLabels = ['D', 'C', 'B', 'A', 'Z'];
+    const colLabels = ['4', '3', '2', '1', '0'];
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = Math.max(1, 1.5 / mapZoom);
+    ctx.setLineDash([6 / mapZoom, 6 / mapZoom]);
+    for (let i = 0; i <= 5; i++) {
+      const gx = i * gridStep;
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, MAP_SIZE); ctx.stroke();
+      const gy = i * gridStep;
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(MAP_SIZE, gy); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.font = `${Math.max(10, 13 / mapZoom)}px Consolas, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillText(rowLabels[row] + colLabels[col], (col + 0.5) * gridStep, (row + 0.5) * gridStep);
+      }
+    }
+    ctx.restore();
+  }
+
+  // Draw vehicles
+  if (document.getElementById('mapShowVehicles').checked && mapVehicles.length) {
+    const vR = Math.max(4, 4 / mapZoom);
+    for (const v of mapVehicles) {
+      if (v.x == null || v.y == null) continue;
+      const c = worldToPixel(v.x, v.y);
+      ctx.fillStyle = '#44aaff';
+      const vs = vR * 2;
+      ctx.fillRect(c.px - vs / 2, c.py - vs / 2, vs, vs);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(0.5, 1 / mapZoom);
+      ctx.strokeRect(c.px - vs / 2, c.py - vs / 2, vs, vs);
+      if (showLabels && mapZoom >= labelMinZoom) {
+        const label = v.alias || v.asset || '';
+        if (label) {
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.font = `${Math.max(9, 10 / mapZoom)}px Consolas, monospace`;
+          ctx.textAlign = 'center';
+          roundRect(ctx, c.px - ctx.measureText(label).width / 2 - 3, c.py + vs / 2 + 1, ctx.measureText(label).width + 6, 12, 2);
+          ctx.fill();
+          ctx.fillStyle = '#aaddff';
+          ctx.fillText(label, c.px, c.py + vs / 2 + 10);
+        }
+      }
+    }
+  }
+
+  document.getElementById('mapPlayerCount').textContent = count;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function highlightPlayer(steamId, show) {
+  renderMapMarkers();
+  if (!show) return;
+  const canvas = document.getElementById('mapCanvas');
+  const ctx = canvas.getContext('2d');
+  const p = mapPlayers.find(x => x.steamId === steamId);
+  if (!p || !p.location) return;
+  const c = worldToPixel(p.location.x, p.location.y);
+  ctx.setTransform(mapZoom, 0, 0, mapZoom, mapPanX, mapPanY);
+  ctx.beginPath();
+  ctx.arc(c.px, c.py, 10, 0, Math.PI * 2);
+  ctx.strokeStyle = '#ffff00';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  document.querySelectorAll('.map-player-item').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector('.map-player-item[data-steam-id="' + steamId + '"]');
+  if (el) el.classList.add('active');
+}
+
+function showPlayerOnMap(steamId) {
+  highlightPlayer(steamId, true);
+}
+
+function screenToContentCoords(canvas, clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = clientX - rect.left;
+  const sy = clientY - rect.top;
+  return screenToContent(sx, sy);
+}
+
+function onMapWheel(e) {
+  e.preventDefault();
+  const canvas = document.getElementById('mapCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const factor = e.deltaY > 0 ? 0.85 : 1.18;
+  const newZoom = Math.max(0.1, Math.min(20, mapZoom * factor));
+  const cp = screenToContent(mx, my);
+  mapPanX = mx - cp.x * newZoom;
+  mapPanY = my - cp.y * newZoom;
+  mapZoom = newZoom;
+  applyMapTransform();
+  renderMapMarkers();
+}
+
+function onMapMouseDown(e) {
+  if (e.button !== 0) return;
+  const canvas = document.getElementById('mapCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const hitR2 = Math.pow(Math.max(5, 5 / mapZoom) + 4, 2);
+  let onPlayer = false;
+  for (const p of mapPlayers) {
+    if (!p.location) continue;
+    const c = worldToPixel(p.location.x, p.location.y);
+    const sc = screenToContent(mx, my);
+    const dx = sc.x - c.px, dy = sc.y - c.py;
+    if (dx * dx + dy * dy < hitR2) { onPlayer = true; break; }
+  }
+  if (onPlayer) { mapSuppressClick = false; return; }
+  mapIsDragging = true;
+  mapSuppressClick = true;
+  mapDragStartX = e.clientX;
+  mapDragStartY = e.clientY;
+  mapPanStartX = mapPanX;
+  mapPanStartY = mapPanY;
+  document.getElementById('mapWrapper').classList.add('dragging');
+}
+
+function onMapMouseUp(e) {
+  if (!mapIsDragging) return;
+  mapIsDragging = false;
+  document.getElementById('mapWrapper').classList.remove('dragging');
+}
+
+function onMapDocMouseMove(e) {
+  if (!mapIsDragging) return;
+  mapPanX = mapPanStartX + (e.clientX - mapDragStartX);
+  mapPanY = mapPanStartY + (e.clientY - mapDragStartY);
+  applyMapTransform();
+  renderMapMarkers();
+}
+
+function onMapMouseMove(e) {
+  const canvas = document.getElementById('mapCanvas');
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const cp = screenToContent(mx, my);
+  const hitR2 = Math.pow(Math.max(5, 5 / mapZoom) + 4, 2);
+  let found = null;
+  for (const p of mapPlayers) {
+    if (!p.location) continue;
+    const c = worldToPixel(p.location.x, p.location.y);
+    const dx = cp.x - c.px, dy = cp.y - c.py;
+    if (dx * dx + dy * dy < hitR2) { found = p; break; }
+  }
+  canvas.style.cursor = found ? 'pointer' : '';
+  if (found) {
+    canvas.title = found.name + ' [' + Math.round(found.location.x) + ', ' + Math.round(found.location.y) + ']';
+  } else {
+    canvas.title = '';
+  }
+}
+
+function onMapClick(e) {
+  if (mapSuppressClick) { mapSuppressClick = false; return; }
+  const canvas = document.getElementById('mapCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const cp = screenToContent(mx, my);
+  const hitR2 = Math.pow(Math.max(5, 5 / mapZoom) + 4, 2);
+  for (const p of mapPlayers) {
+    if (!p.location) continue;
+    const c = worldToPixel(p.location.x, p.location.y);
+    const dx = cp.x - c.px, dy = cp.y - c.py;
+    if (dx * dx + dy * dy < hitR2) {
+      showPlayerOnMap(p.steamId);
+      if (typeof showPlayerCard === 'function') showPlayerCard(p.steamId, p.name);
+      return;
+    }
+  }
+}
+
+function mapZoomIn() {
+  const canvas = document.getElementById('mapCanvas');
+  const w = canvas.width;
+  const h = canvas.height;
+  const factor = 1.3;
+  const newZoom = Math.min(20, mapZoom * factor);
+  const cp = screenToContent(w / 2, h / 2);
+  mapPanX = w / 2 - cp.x * newZoom;
+  mapPanY = h / 2 - cp.y * newZoom;
+  mapZoom = newZoom;
+  applyMapTransform();
+  renderMapMarkers();
+}
+
+function mapZoomOut() {
+  const canvas = document.getElementById('mapCanvas');
+  const w = canvas.width;
+  const h = canvas.height;
+  const factor = 0.77;
+  const newZoom = Math.max(0.1, mapZoom * factor);
+  const cp = screenToContent(w / 2, h / 2);
+  mapPanX = w / 2 - cp.x * newZoom;
+  mapPanY = h / 2 - cp.y * newZoom;
+  mapZoom = newZoom;
+  applyMapTransform();
+  renderMapMarkers();
+}
+
+function mapZoomReset() {
+  fitMapToWrapper();
+}
+
+async function loadMapFlags() {
+  if (!document.getElementById('mapShowFlags').checked) { renderMapMarkers(); return; }
+  try {
+    const res = await fetch('/api/flags', {
+      headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
+    });
+    const data = await res.json();
+    mapFlags = (data.flags || []).filter(f => f.x != null && f.y != null);
+    mapFlagsLoaded = true;
+  } catch (e) {
+    console.error('Map flags error:', e);
+    mapFlags = [];
+  }
+  renderMapMarkers();
+}
+
+async function loadMapPlayers() {
+  try {
+    const res = await fetch('/api/players', {
+      headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
+    });
+    const data = await res.json();
+    mapPlayers = (data.players || []).filter(p => p.location);
+    renderMapMarkers();
+  } catch (e) {
+    console.error('Map load error:', e);
+  }
+}
+
+function scheduleMapRefresh() {
+  clearTimeout(mapRefreshTimer);
+  mapRefreshTimer = setTimeout(loadMapPlayers, 300);
+}
+
+function startMapAutoRefresh() {
+  setInterval(() => {
+    if (document.getElementById('mapAutoRefresh').checked) {
+      loadMapPlayers();
+      if (document.getElementById('mapShowFlags').checked && mapFlagsLoaded) loadMapFlags();
+      if (document.getElementById('mapShowVehicles').checked) loadMapVehicles();
+    }
+  }, 5000);
+}
+
+async function loadMapVehicles() {
+  if (!document.getElementById('mapShowVehicles').checked) { renderMapMarkers(); return; }
+  try {
+    const res = await fetch('/api/vehicles', {
+      headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
+    });
+    const data = await res.json();
+    mapVehicles = (data.vehicles || []).filter(v => v.x != null && v.y != null);
+  } catch (e) {
+    console.error('Map vehicles error:', e);
+    mapVehicles = [];
+  }
+  renderMapMarkers();
+}
+
+// Map context menu (right-click teleport)
+function onMapContextMenu(e) {
+  e.preventDefault();
+  const canvas = document.getElementById('mapCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const cp = screenToContent(mx, my);
+  const world = pixelToWorld(cp.x, cp.y);
+  mapContextMenuCoords = world;
+
+  const menu = document.getElementById('mapContextMenu');
+  const label = Math.round(world.wx) + ', ' + Math.round(world.wy);
+  menu.querySelector('.map-ctx-coords').textContent = '📍 ' + label;
+
+  const select = document.getElementById('mapTeleportPlayer');
+  select.innerHTML = '';
+  for (const p of mapPlayers) {
+    const opt = document.createElement('option');
+    opt.value = p.steamId;
+    opt.textContent = p.name + ' [' + Math.round(p.location?.x || 0) + ', ' + Math.round(p.location?.y || 0) + ']';
+    select.appendChild(opt);
+  }
+
+  menu.style.display = 'block';
+  menu.style.left = (e.clientX + 8) + 'px';
+  menu.style.top = (e.clientY + 8) + 'px';
+  document.addEventListener('click', hideMapContextMenuOnce, true);
+}
+
+let mapContextMenuCoords = null;
+
+function hideMapContextMenuOnce(e) {
+  const menu = document.getElementById('mapContextMenu');
+  if (menu && !menu.contains(e.target)) {
+    menu.style.display = 'none';
+    document.removeEventListener('click', hideMapContextMenuOnce, true);
+  }
+}
+
+function hideMapContextMenu() {
+  document.getElementById('mapContextMenu').style.display = 'none';
+  document.removeEventListener('click', hideMapContextMenuOnce, true);
+}
+
+async function mapTeleportHere() {
+  if (!mapContextMenuCoords) return;
+  const select = document.getElementById('mapTeleportPlayer');
+  const steamId = select.value;
+  if (!steamId) { showNotification('Select a player first', 'error'); return; }
+  const { wx, wy } = mapContextMenuCoords;
+  const res = await fetch('/api/rcon/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    body: JSON.stringify({ command: `Teleport ${Math.round(wx)} ${Math.round(wy)} 0 ${steamId}` })
+  });
+  const data = await res.json();
+  if (data.success) {
+    showNotification('Teleported to ' + Math.round(wx) + ', ' + Math.round(wy), 'success');
+  } else {
+    showNotification('Teleport failed: ' + (data.error || 'Unknown error'), 'error');
+  }
+  hideMapContextMenu();
+}
+
+function mapCopyCoords() {
+  if (!mapContextMenuCoords) return;
+  const { wx, wy } = mapContextMenuCoords;
+  navigator.clipboard.writeText(`${Math.round(wx)}, ${Math.round(wy)}`).catch(() => {});
+  hideMapContextMenu();
+}
+
+
+
+// ====== Chat tab
+let chatInitDone = false;
+let chatMessages = [];
+let chatEventSource = null;
+
+function initChat() {
+  if (chatInitDone) return;
+  chatInitDone = true;
+  const url = authToken ? '/api/chat/stream?token=' + authToken : '/api/chat/stream';
+  chatEventSource = new EventSource(url);
+  chatEventSource.addEventListener('connected', () => {
+    document.getElementById('chatStatus').textContent = '● Connected';
+    document.getElementById('chatStatus').style.color = '#3fb950';
+  });
+  chatEventSource.addEventListener('init', (e) => {
+    const msgs = JSON.parse(e.data);
+    chatMessages = msgs;
+    renderChatMessages();
+  });
+  chatEventSource.addEventListener('chat', (e) => {
+    const msg = JSON.parse(e.data);
+    chatMessages.push(msg);
+    renderChatMessages();
+  });
+  chatEventSource.onerror = () => {
+    document.getElementById('chatStatus').textContent = '○ Disconnected';
+    document.getElementById('chatStatus').style.color = '#f85149';
+    chatInitDone = false;
+  };
+  document.getElementById('chatInput').focus();
+}
+
+function renderChatMessages() {
+  const filter = document.getElementById('chatFilter').value;
+  const container = document.getElementById('chatMessages');
+  const autoScroll = document.getElementById('chatAutoScroll').checked;
+  const atBottom = autoScroll && (container.scrollTop >= container.scrollHeight - container.clientHeight - 50);
+  container.innerHTML = chatMessages.filter(m => !filter || m.channel === filter).map(m => {
+    const time = new Date(m.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const channelClass = m.channel === 'Admin' ? 'admin-msg' : '';
+    return `<div class="chat-msg ${channelClass}">
+      <span class="time">${time}</span>
+      <span class="channel ${m.channel}">${m.channel}</span>
+      <span class="name">${escHtml(m.playerName)}:</span>
+      <span class="text">${escHtml(m.message)}</span>
+    </div>`;
+  }).join('');
+  if (atBottom) container.scrollTop = container.scrollHeight;
+}
+
+function filterChatMessages() { renderChatMessages(); }
+
+function clearChatMessages() {
+  chatMessages = [];
+  document.getElementById('chatMessages').innerHTML = '';
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const channelNum = document.getElementById('chatChannel').value;
+  const sender = document.getElementById('chatSender').value.trim() || 'Server';
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const msg = sender + ': ' + text;
+  const res = await fetch('/api/rcon/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    body: JSON.stringify({ command: `SendChat ${channelNum} "${msg}"` })
+  });
+  const data = await res.json();
+  if (data.success) {
+    const channelNames = { '7':'Red','6':'Orange','5':'Trade','4':'Global','3':'Green','2':'Admin','1':'Whisper','0':'White' };
+    chatMessages.push({ timestamp: new Date().toISOString(), channel: channelNames[channelNum] || 'Global', playerName: sender, message: text });
+    renderChatMessages();
+  } else {
+    showNotification('Chat error: ' + (data.error || 'Unknown'), 'error');
+  }
+}
+
+// ====== Rating
+let ratingData = [];
+
+async function loadRating() {
+  try {
+    const res = await fetch('/api/rating/leaderboard', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    const data = await res.json();
+    if (data.leaderboard) {
+      ratingData = data.leaderboard;
+      const totalOnline = data.totalOnlineSeconds || 0;
+      const hours = Math.floor(totalOnline / 3600);
+      document.getElementById('ratingStats').textContent = `Всего наиграно: ${hours} часов | Игроков в рейтинге: ${ratingData.length}`;
+      renderRatingTable();
+    }
+  } catch {}
+}
+
+function renderRatingTable() {
+  const search = (document.getElementById('ratingSearch').value || '').toLowerCase();
+  const tbody = document.getElementById('ratingBody');
+  const filtered = search ? ratingData.filter(p => p.playerName.toLowerCase().includes(search) || p.steamId.includes(search)) : ratingData;
+  tbody.innerHTML = filtered.map((p, i) => {
+    const hours = Math.floor(p.playTimeSeconds / 3600);
+    const mins = Math.floor((p.playTimeSeconds % 3600) / 60);
+    const timeStr = hours > 0 ? `${hours}ч ${mins}м` : `${mins}м`;
+    const rank = i + 1;
+    return `<tr ${rank <= 3 ? 'style="background:var(--dark)"' : ''}>
+      <td style="padding:6px 12px;text-align:center;font-weight:bold">${rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : rank}</td>
+      <td style="padding:6px 12px">${escHtml(p.playerName)}</td>
+      <td style="padding:6px 12px;text-align:center;font-weight:bold;color:var(--accent)">${timeStr}</td>
+      <td style="padding:6px 12px;text-align:right">${p.money.toLocaleString('ru-RU')}</td>
+      <td style="padding:6px 12px;text-align:right">${p.gold.toLocaleString('ru-RU')}</td>
+      <td style="padding:6px 12px;text-align:right">${p.fame.toLocaleString('ru-RU')}</td>
+    </tr>`;
+  }).join('');
+  if (filtered.length === 0) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Нет данных</td></tr>';
+}
+
+// ====== Airdrop
+let airdropConfig = null;
+
+async function loadAirdropConfig() {
+  try {
+    const res = await fetch('/api/plugins/airdrop', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    const cfg = await res.json();
+    airdropConfig = cfg;
+    document.getElementById('airdropEnabled').checked = cfg.enabled;
+    document.getElementById('airdropAutoEnabled').checked = cfg.autoDropEnabled;
+    document.getElementById('airdropChestItem').value = cfg.chestItem || 'Improvised_Metal_Chest';
+    document.getElementById('airdropMinItems').value = cfg.minItems || 3;
+    document.getElementById('airdropMaxItems').value = cfg.maxItems || 8;
+    document.getElementById('airdropCooldown').value = cfg.cooldownMinutes || 60;
+    document.getElementById('airdropAutoInterval').value = cfg.autoDropIntervalMinutes || 120;
+    document.getElementById('airdropMinPlayers').value = cfg.autoDropMinPlayers || 5;
+  } catch {}
+}
+
+async function saveAirdropConfig() {
+  if (!airdropConfig) return;
+  airdropConfig.enabled = document.getElementById('airdropEnabled').checked;
+  airdropConfig.autoDropEnabled = document.getElementById('airdropAutoEnabled').checked;
+  airdropConfig.chestItem = document.getElementById('airdropChestItem').value;
+  airdropConfig.minItems = parseInt(document.getElementById('airdropMinItems').value) || 3;
+  airdropConfig.maxItems = parseInt(document.getElementById('airdropMaxItems').value) || 8;
+  airdropConfig.cooldownMinutes = parseInt(document.getElementById('airdropCooldown').value) || 60;
+  airdropConfig.autoDropIntervalMinutes = parseInt(document.getElementById('airdropAutoInterval').value) || 120;
+  airdropConfig.autoDropMinPlayers = parseInt(document.getElementById('airdropMinPlayers').value) || 5;
+  try {
+    await fetch('/api/plugins/airdrop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify(airdropConfig)
+    });
+  } catch {}
+}
+
+async function manualAirdropDrop() {
+  let x = parseFloat(document.getElementById('airdropManualX').value);
+  let y = parseFloat(document.getElementById('airdropManualY').value);
+  if (isNaN(x) || isNaN(y)) { showNotification('Введите координаты X и Y', 'error'); return; }
+  let z = document.getElementById('airdropManualZ').value;
+  const body = { x, y };
+  if (z !== '') body.z = parseFloat(z);
+  document.getElementById('airdropResult').textContent = 'Сброс...';
+  try {
+    const res = await fetch('/api/plugins/airdrop/drop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('airdropResult').textContent = `✅ Сброшено в ${data.sector} (${data.count} предметов, Z=${data.z})`;
+      showNotification(`🎁 Тайник сброшен в секторе ${data.sector}!`, 'success');
+    } else {
+      document.getElementById('airdropResult').textContent = '❌ ' + (data.error || 'Ошибка');
+      showNotification('❌ ' + (data.error || 'Ошибка'), 'error');
+    }
+  } catch {
+    document.getElementById('airdropResult').textContent = '❌ Ошибка запроса';
+  }
+}
+
+async function playerAirdropDrop(steamId) {
+  try {
+    const res = await fetch('/api/plugins/airdrop/drop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ steamId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closePlayerCard();
+      showNotification(`🎁 Тайник сброшен у игрока (${data.sector}, Z=${data.z})!`, 'success');
+    } else {
+      showNotification('❌ ' + (data.error || 'Ошибка'), 'error');
+    }
+  } catch { showNotification('❌ Ошибка запроса', 'error'); }
+}
+
+// ====== Airdrop Calibration
+let calibrationActive = false;
+
+async function startCalibration() {
+  const steamId = document.getElementById('calibrateSteamId').value.trim();
+  if (!steamId) { showNotification('Введите SteamID', 'error'); return; }
+  document.getElementById('calibrateStartBtn').disabled = true;
+  document.getElementById('calibrateStatus').textContent = 'Телепортирую в точку 1/125...';
+  try {
+    const res = await fetch('/api/plugins/airdrop/calibrate/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ steamId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      calibrationActive = true;
+      document.getElementById('calibrateStartBtn').style.display = 'none';
+      document.getElementById('calibrateResetBtn').style.display = 'none';
+      document.getElementById('calibrateRecordBtn').style.display = '';
+      document.getElementById('calibrateSkipBtn').style.display = '';
+      document.getElementById('calibrateCancelBtn').style.display = '';
+      document.getElementById('calibrateSteamId').disabled = true;
+      updateCalibrationStatus(data);
+    } else {
+      showNotification('❌ ' + (data.error || 'Ошибка'), 'error');
+      document.getElementById('calibrateStartBtn').disabled = false;
+    }
+  } catch { showNotification('❌ Ошибка запроса', 'error'); document.getElementById('calibrateStartBtn').disabled = false; }
+}
+
+async function recordCalibration() {
+  document.getElementById('calibrateRecordBtn').disabled = true;
+  document.getElementById('calibrateStatus').textContent = 'Записываю...';
+  try {
+    const res = await fetch('/api/plugins/airdrop/calibrate/record', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    const data = await res.json();
+    document.getElementById('calibrateRecordBtn').disabled = false;
+    if (data.success) {
+      if (data.done) {
+        finishCalibration();
+      } else {
+        document.getElementById('calibrateStatus').textContent =
+          `✅ Записано (Z=${data.z}). Точка ${data.index + 1}/${data.total}. Телепортирую...`;
+      }
+      updateCalibrationStatus(data);
+    } else {
+      showNotification('❌ ' + (data.error || 'Ошибка'), 'error');
+      document.getElementById('calibrateStatus').textContent = '❌ ' + (data.error || 'Ошибка');
+    }
+  } catch { showNotification('❌ Ошибка запроса', 'error'); document.getElementById('calibrateRecordBtn').disabled = false; }
+}
+
+async function skipCalibration() {
+  try {
+    const res = await fetch('/api/plugins/airdrop/calibrate/skip', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (data.done) {
+        finishCalibration();
+      } else {
+        document.getElementById('calibrateStatus').textContent =
+          `⏭ Пропущено. Точка ${data.index + 1}/${data.total}. Телепортирую...`;
+      }
+    } else {
+      showNotification('❌ ' + (data.error || 'Ошибка'), 'error');
+    }
+  } catch { showNotification('❌ Ошибка запроса', 'error'); }
+}
+
+async function cancelCalibration() {
+  try {
+    await fetch('/api/plugins/airdrop/calibrate/cancel', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+  } catch {}
+  calibrationActive = false;
+  resetCalibrationUI();
+  showNotification('Калибровка отменена', 'warning');
+}
+
+async function resetCalibration() {
+  if (!confirm('Сбросить все калибровочные данные? Это удалит сохранённые Z для всех точек.')) return;
+  try {
+    await fetch('/api/plugins/airdrop/calibrate/reset', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    showNotification('Калибровочные данные сброшены', 'success');
+    await refreshCalibrationStatus();
+  } catch { showNotification('❌ Ошибка', 'error'); }
+}
+
+function finishCalibration() {
+  calibrationActive = false;
+  resetCalibrationUI();
+  document.getElementById('calibrateStatus').textContent = '🎉 Калибровка завершена! Все 125 точек сохранены.';
+  showNotification('🎉 Калибровка высот завершена!', 'success');
+}
+
+function resetCalibrationUI() {
+  document.getElementById('calibrateStartBtn').style.display = '';
+  document.getElementById('calibrateStartBtn').disabled = false;
+  document.getElementById('calibrateResetBtn').style.display = '';
+  document.getElementById('calibrateRecordBtn').style.display = 'none';
+  document.getElementById('calibrateSkipBtn').style.display = 'none';
+  document.getElementById('calibrateCancelBtn').style.display = 'none';
+  document.getElementById('calibrateSteamId').disabled = false;
+}
+
+function updateCalibrationStatus(data) {
+  if (!data.total) return;
+  const el = document.getElementById('calibrateStatus');
+  const pct = data.index ? Math.round((data.index / data.total) * 100) : 0;
+  const idxTxt = `Точка ${(data.index || 0) + 1}/${data.total} [${pct}%]`;
+  if (el.textContent.indexOf('[') === -1) el.textContent = el.textContent + ' ' + idxTxt;
+  // Update progress dots
+  const progressEl = document.getElementById('calibrateProgress');
+  if (!progressEl.hasChildNodes()) {
+    progressEl.innerHTML = '';
+    for (let i = 0; i < data.total; i++) {
+      const dot = document.createElement('span');
+      dot.style.cssText = 'width:14px;height:14px;border-radius:2px;background:var(--bg);border:1px solid var(--border);font-size:7px;display:flex;align-items:center;justify-content:center';
+      dot.title = `Точка ${i + 1}`;
+      dot.id = 'calDot_' + i;
+      progressEl.appendChild(dot);
+    }
+  }
+  // Mark current dot
+  const idx = data.index || 0;
+  for (let i = 0; i < data.total; i++) {
+    const dot = document.getElementById('calDot_' + i);
+    if (dot) {
+      if (i < idx) dot.style.background = '#3fb950';
+      else if (i === idx) dot.style.background = '#58a6ff';
+      else dot.style.background = 'var(--bg)';
+    }
+  }
+}
+
+async function refreshCalibrationStatus() {
+  try {
+    const res = await fetch('/api/plugins/airdrop/calibrate/status', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    const data = await res.json();
+    if (data.totalSaved > 0) {
+      document.getElementById('calibrateStatus').textContent =
+        `Сохранено ${data.calibratedCount} из ${data.total} точек калибровки.`;
+    }
+  } catch {}
+}
+
+// Load calibration status after a delay
+setTimeout(refreshCalibrationStatus, 2000);
+
+// ====== Rewards
+let rewardsConfig = {};
+
+async function loadRewardsConfig() {
+  try {
+    const res = await fetch('/api/plugins/rewards', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (!res.ok) return;
+    const cfg = await res.json();
+    rewardsConfig = cfg;
+    document.getElementById('rewardsEnabled').checked = cfg.enabled || false;
+    document.getElementById('hourlyEnabled').checked = cfg.hourlyEnabled !== false;
+    document.getElementById('hourlyGold').value = cfg.hourlyGold || 0;
+    document.getElementById('hourlyMoney').value = cfg.hourlyMoney || 0;
+    document.getElementById('hourlyFame').value = cfg.hourlyFame || 0;
+    document.getElementById('topEnabled').checked = cfg.topEnabled || false;
+    document.getElementById('topIntervalDays').value = cfg.topIntervalDays || 10;
+    document.getElementById('topCount').value = cfg.topCount || 3;
+    document.getElementById('topGold').value = cfg.topGold || 0;
+    document.getElementById('topMoney').value = cfg.topMoney || 0;
+    document.getElementById('topFame').value = cfg.topFame || 0;
+  } catch {}
+}
+
+async function saveRewardsConfig() {
+  const cfg = {
+    enabled: document.getElementById('rewardsEnabled').checked,
+    hourlyEnabled: document.getElementById('hourlyEnabled').checked,
+    hourlyGold: parseInt(document.getElementById('hourlyGold').value) || 0,
+    hourlyMoney: parseInt(document.getElementById('hourlyMoney').value) || 0,
+    hourlyFame: parseInt(document.getElementById('hourlyFame').value) || 0,
+    topEnabled: document.getElementById('topEnabled').checked,
+    topIntervalDays: parseInt(document.getElementById('topIntervalDays').value) || 10,
+    topCount: parseInt(document.getElementById('topCount').value) || 3,
+    topGold: parseInt(document.getElementById('topGold').value) || 0,
+    topMoney: parseInt(document.getElementById('topMoney').value) || 0,
+    topFame: parseInt(document.getElementById('topFame').value) || 0,
+  };
+  rewardsConfig = cfg;
+  try {
+    await fetch('/api/plugins/rewards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify(cfg),
+    });
+    showNotification('Настройки наград сохранены', 'success');
+    loadRewardsStatus();
+  } catch {}
+}
+
+async function loadRewardsStatus() {
+  try {
+    const res = await fetch('/api/plugins/rewards/data', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    const statusRes = await fetch('/api/plugins/rewards/status', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (!res.ok || !statusRes.ok) return;
+    const data = await res.json();
+    const status = await statusRes.json();
+    const el = document.getElementById('rewardsStatus');
+    if (!el) return;
+    const playerCount = Object.keys(data).length;
+    const lastTop = status.lastTopRewardTime ? new Date(status.lastTopRewardTime).toLocaleString('ru-RU') : 'Никогда';
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted)">📊 Игроков с прогрессом: ${playerCount} | Последняя топ-награда: ${lastTop}</div>`;
+  } catch {}
+}
+
+// ====== Blacklist
+async function loadBlacklist() {
+  try {
+    const res = await fetch('/api/plugins/rating/blacklist', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderBlacklist(data.blacklist || []);
+  } catch {}
+}
+
+function renderBlacklist(list) {
+  const el = document.getElementById('blacklistContainer');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted)">Чёрный список пуст</div>';
+    return;
+  }
+  el.innerHTML = list.map(sid => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;margin-bottom:4px;font-size:12px;font-family:'Consolas',monospace">
+      <span>${sid}</span>
+      <button class="btn btn-danger" onclick="removeFromBlacklist('${sid}')" style="padding:2px 8px;font-size:11px">✕</button>
+    </div>
+  `).join('');
+}
+
+async function addToBlacklist() {
+  const input = document.getElementById('blacklistInput');
+  const sid = input.value.trim();
+  if (!sid) return;
+  const res = await fetch('/api/plugins/rating/blacklist', { headers: { 'Authorization': 'Bearer ' + authToken } });
+  if (!res.ok) return;
+  const data = await res.json();
+  const list = data.blacklist || [];
+  if (list.includes(sid)) { showNotification('Уже в списке', 'warning'); return; }
+  list.push(sid);
+  const postRes = await fetch('/api/plugins/rating/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    body: JSON.stringify({ blacklist: list }),
+  });
+  if (!postRes.ok) { showNotification('Ошибка сохранения', 'error'); return; }
+  input.value = '';
+  renderBlacklist(list);
+  showNotification('Добавлен в чёрный список', 'success');
+}
+
+async function removeFromBlacklist(sid) {
+  const res = await fetch('/api/plugins/rating/blacklist', { headers: { 'Authorization': 'Bearer ' + authToken } });
+  if (!res.ok) return;
+  const data = await res.json();
+  const list = (data.blacklist || []).filter(s => s !== sid);
+  const postRes = await fetch('/api/plugins/rating/blacklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    body: JSON.stringify({ blacklist: list }),
+  });
+  if (!postRes.ok) { showNotification('Ошибка сохранения', 'error'); return; }
+  renderBlacklist(list);
+  showNotification('Удалён из чёрного списка', 'success');
+}
+
+// Load blacklist on page load
+if (authToken) {
+  setTimeout(loadBlacklist, 1000);
+  setInterval(loadRewardsStatus, 30000);
+}
+
+// ====== SSE for console
 function setupSSE() {
   const url = authToken ? '/api/console/stream?token=' + authToken : '/api/console/stream';
   const evtSource = new EventSource(url);
@@ -3079,6 +4617,7 @@ function wargmAddItem(prefill) {
         <option value="attributes">🛡️ Атрибуты</option>
         <option value="money">💵 Деньги</option>
         <option value="gold">🪙 Золото</option>
+        <option value="fame">🏆 Слава</option>
         <option value="cargo_drop">🪂 Карго-дроп</option>
         <option value="vip">👑 VIP</option>
       </select>
@@ -3119,7 +4658,10 @@ function wargmChangeItemType(idx, prefill) {
         <div style="display:grid;grid-template-columns:1fr;gap:8px">
           <div class="form-group" style="position:relative">
             <label data-i18n="wargm.vehicleName" style="font-size:11px">Название ТС</label>
-            <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.vehicleName || d.shortname || '')}" placeholder="Offroader_01" oninput="showInlineSuggestions(this)" data-vehicles="1">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div id="wargmItem_icon_${idx}" style="flex-shrink:0;width:24px;height:24px;display:flex;align-items:center"></div>
+              <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.vehicleName || d.shortname || '')}" placeholder="Offroader_01" oninput="showInlineSuggestions(this);updateWargmItemIcon(${idx})" data-vehicles="1" style="flex:1">
+            </div>
             <div class="wargm-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
           </div>
         </div>
@@ -3172,6 +4714,14 @@ function wargmChangeItemType(idx, prefill) {
             <input type="text" id="wargmItem_message_${idx}" value="${escHtml(d.message || '')}" placeholder="You received N gold"></div>
         </div>`;
       break;
+    case 'fame':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr;gap:8px">
+          <div class="form-group"><label data-i18n="wargm.amount" style="font-size:11px">Количество</label>
+            <input type="number" id="wargmItem_amount_${idx}" value="${d.amount || 100}" min="0" max="999999999"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)" data-i18n="wargm.fameHint">Добавляется к текущим очкам славы (#SetFamePoints)</div>`;
+      break;
     case 'cargo_drop':
       html = `<div style="font-size:11px;color:var(--muted)" data-i18n="wargm.cargoHintAuto">Дроп по координатам игрока (авто)</div>`;
       break;
@@ -3187,8 +4737,8 @@ function wargmChangeItemType(idx, prefill) {
   fields.innerHTML = html;
   // Re-apply translations
   if (typeof applyTranslations === 'function') applyTranslations(fields);
-  // Update icon if editing existing item
-  if (type === 'item' && prefill) updateWargmItemIcon(idx);
+  // Update icon if editing existing item or vehicle
+  if (prefill && (type === 'item' || type === 'vehicle')) updateWargmItemIcon(idx);
 }
 
 function wargmCollectItemData(idx) {
@@ -3213,6 +4763,9 @@ function wargmCollectItemData(idx) {
     case 'gold':
       data.amount = parseInt(document.getElementById(`wargmItem_amount_${idx}`)?.value) || 0;
       data.message = document.getElementById(`wargmItem_message_${idx}`)?.value || '';
+      break;
+    case 'fame':
+      data.amount = parseInt(document.getElementById(`wargmItem_amount_${idx}`)?.value) || 0;
       break;
     case 'attributes':
       data.strength = parseInt(document.getElementById(`wargmItem_str_${idx}`)?.value) || 5;
@@ -3370,6 +4923,25 @@ async function authFetch(url, opts = {}) {
 }
 
 // Settings
+async function checkAppUpdate() {
+  const el = document.getElementById('updateStatus');
+  el.textContent = t('status.checking', 'Проверка...');
+  el.style.color = 'var(--muted)';
+  try {
+    const res = await fetch('/api/app/check-update', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (!res.ok) { el.textContent = t('status.checkError', 'Ошибка проверки'); return; }
+    const data = await res.json();
+    if (data.available) {
+      el.innerHTML = '<span style="color:var(--green)">Доступна версия ' + data.version + '</span>';
+    } else {
+      el.textContent = t('status.upToDate', 'У вас актуальная версия');
+      el.style.color = 'var(--green)';
+    }
+  } catch {
+    el.textContent = t('status.checkError', 'Ошибка проверки');
+  }
+}
+
 async function loadSettings() {
   try {
     const res = await authFetch('/api/config');
@@ -3431,6 +5003,8 @@ window.switchTab = function(tab) {
   } else if (tab === 'wargm') {
     wargmLoadSettings();
     wargmLoadCards();
+  } else if (tab === 'map') {
+    initMap();
   }
 };
 

@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:get-version'),
+    checkUpdate: () => ipcRenderer.invoke('app:check-update'),
+  },
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     set: (config: any) => ipcRenderer.invoke('config:set', config),

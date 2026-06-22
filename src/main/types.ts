@@ -122,6 +122,38 @@ export interface SaveHomeConfig {
   teleportPrice: number;
 }
 
+export interface RewardsConfig {
+  enabled: boolean;
+  hourlyEnabled: boolean;
+  hourlyGold: number;
+  hourlyMoney: number;
+  hourlyFame: number;
+  topEnabled: boolean;
+  topIntervalDays: number;
+  topCount: number;
+  topGold: number;
+  topMoney: number;
+  topFame: number;
+}
+
+export interface AirdropConfig {
+  enabled: boolean;
+  chestItem: string;
+  minItems: number;
+  maxItems: number;
+  cooldownMinutes: number;
+  autoDropEnabled: boolean;
+  autoDropIntervalMinutes: number;
+  autoDropMinPlayers: number;
+}
+
+export interface AirdropCalibrationPoint {
+  x: number;
+  y: number;
+  z: number;
+  sector: string;
+}
+
 export interface PluginsConfig {
   teleport: {
     enabled: boolean;
@@ -129,6 +161,10 @@ export interface PluginsConfig {
   };
   vip: VipConfig;
   saveHome: SaveHomeConfig;
+  airdrop: AirdropConfig;
+  rewards: RewardsConfig;
+  chatSender: string;
+  ratingBlacklist: string[];
 }
 
 export interface AppConfig {
@@ -186,7 +222,7 @@ export interface WargmSettings {
 
 export interface WargmCardItem {
   id?: number;
-  type: 'item' | 'vehicle' | 'skill' | 'attributes' | 'money' | 'gold' | 'cargo_drop' | 'vip';
+  type: 'item' | 'vehicle' | 'skill' | 'attributes' | 'money' | 'gold' | 'fame' | 'cargo_drop' | 'vip';
   data: Record<string, any>;
   sortOrder?: number;
 }

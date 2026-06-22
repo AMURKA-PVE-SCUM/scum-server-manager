@@ -40,6 +40,20 @@ export class WargmManager {
     fs.ensureDirSync(path.dirname(this.dbPath));
   }
 
+  setServerPath(serverPath: string): void {
+    const newPath = path.join(serverPath, 'SCUM', 'Saved', 'SaveFiles', 'wargm.db');
+    if (newPath !== this.dbPath) {
+      // Migrate old db if exists
+      if (fs.existsSync(this.dbPath) && !fs.existsSync(newPath)) {
+        fs.ensureDirSync(path.dirname(newPath));
+        fs.copyFileSync(this.dbPath, newPath);
+        console.log(`[Wargm] Migrated DB to ${newPath}`);
+      }
+      this.dbPath = newPath;
+      fs.ensureDirSync(path.dirname(this.dbPath));
+    }
+  }
+
   setRconClient(client: RconClient): void {
     this.rconClient = client;
   }
@@ -498,16 +512,16 @@ export class WargmManager {
     return null;
   }
 
-  private async getPlayerBalance(steamId: string): Promise<{ normal: number; gold: number; found: boolean }> {
-    if (!this.rconClient) return { normal: 0, gold: 0, found: false };
+  private async getPlayerBalance(steamId: string): Promise<{ normal: number; gold: number; fame: number; found: boolean }> {
+    if (!this.rconClient) return { normal: 0, gold: 0, fame: 0, found: false };
     const r = await this.rconClient.sendCommand('ListPlayers');
-    if (!r.success || !r.response) return { normal: 0, gold: 0, found: false };
+    if (!r.success || !r.response) return { normal: 0, gold: 0, fame: 0, found: false };
     const lines = r.response.split('\n');
     for (let i = 0; i < lines.length; i++) {
       const trimmed = lines[i].trim();
       const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
       if (steamMatch && steamMatch[1] === steamId) {
-        let normal = 0, gold = 0;
+        let normal = 0, gold = 0, fame = 0;
         for (let j = i + 1; j < lines.length; j++) {
           const t = lines[j].trim();
           if (t.match(/^\d+\.\s+\S/)) break;
@@ -515,11 +529,13 @@ export class WargmManager {
           if (bm) normal = parseFloat(bm[1]);
           const gm = t.match(/^Gold balance:\s*([\d.+-]+)/);
           if (gm) gold = parseFloat(gm[1]);
+          const fm = t.match(/^Fame:\s*([\d.+-]+)/);
+          if (fm) fame = parseFloat(fm[1]);
         }
-        return { normal, gold, found: true };
+        return { normal, gold, fame, found: true };
       }
     }
-    return { normal: 0, gold: 0, found: false };
+    return { normal: 0, gold: 0, fame: 0, found: false };
   }
 
   private async executeItem(item: WargmCardItem, steamId: string): Promise<{ success: boolean; message: string }> {
@@ -599,6 +615,17 @@ export class WargmManager {
         const cmd = `#SetCurrencyBalance Gold ${newGold} ${steamId}`;
         const r = await this.rconClient.sendCommand(cmd);
         return { success: r.success, message: r.success ? `Золото +${amount} (${bal.gold}→${newGold})` : `Золото: ${r.response || 'ОШИБКА'}` };
+      }
+
+      case 'fame': {
+        const amount = parseInt(d.amount) || 0;
+        if (amount <= 0) return { success: false, message: 'Слава: неверное количество' };
+        const bal = await this.getPlayerBalance(steamId);
+        if (!bal.found) return { success: false, message: 'Игрок офлайн — слава не начислена' };
+        const newFame = Math.round((bal.fame || 0) + amount);
+        const cmd = `#SetFamePoints ${newFame} ${steamId}`;
+        const r = await this.rconClient.sendCommand(cmd);
+        return { success: r.success, message: r.success ? `Слава +${amount} (${bal.fame}→${newFame})` : `Слава: ${r.response || 'ОШИБКА'}` };
       }
 
       case 'cargo_drop': {

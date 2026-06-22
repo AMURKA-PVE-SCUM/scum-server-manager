@@ -18,9 +18,8 @@
 **Репозиторий**: [github.com/herbie96x/SCUM-RCON](https://github.com/herbie96x/SCUM-RCON)
 
 Установка:
-1. Скачайте **UE4SS** (Unreal Engine 4 Scripting System) — [github.com/UE4SS-RE/RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS)
-2. Скачайте **scum_rcon** из репозитория выше
-3. Установите в папку сервера:
+1. Скачайте **scum_rcon** из репозитория выше
+2. Установите в папку сервера:
    ```
    SCUM/SCUM/Binaries/Win64/
      ├── ue4ss.dll

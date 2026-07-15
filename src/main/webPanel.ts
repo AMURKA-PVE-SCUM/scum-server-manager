@@ -1258,20 +1258,35 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Use incremental commands instead of reading current + setting new
-      let command = '';
-      if (type === 'fame') command = `#AddFame ${amount} ${steamId}`;
-      else if (type === 'gold') command = `#AddGold ${amount} ${steamId}`;
-      else command = `#AddMoney ${amount} ${steamId}`;
-
-      console.log('[WebPanel] GiveCurrency:', { type, amount, steamId, command });
-      const result = await this.rconClient.sendCommand(command);
-      console.log('[WebPanel] GiveCurrency result:', JSON.stringify(result));
-      if (result.success) {
-        this.sendJson(res, { success: true, response: `+${amount}` });
-      } else {
-        this.sendJson(res, { error: result.response || 'Command failed' }, 500);
+      // For fame: use incremental (new format doesn't have fame=)
+      if (type === 'fame') {
+        const cmd = `#AddFame ${amount} ${steamId}`;
+        const r = await this.rconClient.sendCommand(cmd);
+        if (r.success) return this.sendJson(res, { success: true, response: `+${amount}` });
+        return this.sendJson(res, { error: r.response || 'AddFame failed' }, 500);
       }
+
+      // For money/gold: read current from ListPlayers (new format), then set absolute
+      const listRes = await this.rconClient.sendCommand('ListPlayers');
+      if (!listRes.success || !listRes.response) {
+        return this.sendJson(res, { error: 'Failed to query player data' }, 500);
+      }
+
+      let currentValue = 0;
+      const line = listRes.response.split('\n').find(l => l.includes(`steam=${steamId}`));
+      if (line) {
+        const mm = line.match(type === 'gold' ? /gold=([\d.+-]+)/ : /money=([\d.+-]+)/);
+        if (mm) currentValue = parseFloat(mm[1]);
+      }
+
+      const newValue = Math.round(currentValue + amount);
+      const currencyType = type === 'gold' ? 'Gold' : 'Normal';
+      const cmd = `#SetCurrencyBalance ${currencyType} ${newValue} ${steamId}`;
+      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, newValue, cmd });
+      const r = await this.rconClient.sendCommand(cmd);
+      console.log('[WebPanel] GiveCurrency result:', JSON.stringify(r));
+      if (r.success) return this.sendJson(res, { success: true, response: `${currentValue} → ${newValue}` });
+      this.sendJson(res, { error: r.response || 'Command failed' }, 500);
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);
     }

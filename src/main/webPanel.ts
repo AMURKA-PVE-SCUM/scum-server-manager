@@ -29,7 +29,6 @@ export class WebPanel {
   private onlinePlayers = new Map<string, OnlinePlayer>();
   private playersPollInterval: NodeJS.Timeout | null = null;
   private cachedPlayers: OnlinePlayer[] = [];
-  private trackedCurrency = new Map<string, { money: number; gold: number; fame: number }>();
   private cachedRconVehicles: any[] = [];
   private rconCredentials: { host: string; port: number; password: string } | null = null;
   private readonly PLAYERS_POLL_INTERVAL = 3000;
@@ -1267,49 +1266,41 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Initialize local tracking from Whois if first time for this player
-      if (!this.trackedCurrency.has(steamId)) {
-        const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
-        if (!whoisRes.success || !whoisRes.response) {
-          return this.sendJson(res, { error: 'Whois command failed' }, 500);
-        }
-        const text = whoisRes.response;
-        const gm = text.match(/\bgold[:\s]\s*([\d.]+)/i);
-        const mm = text.match(/\bmoney[:\s]\s*([\d.]+)/i);
-        const fm = text.match(/\bfame[:\s]\s*([\d.]+)/i);
-        this.trackedCurrency.set(steamId, {
-          money: mm ? parseFloat(mm[1]) : 0,
-          gold: gm ? parseFloat(gm[1]) : 0,
-          fame: fm ? parseFloat(fm[1]) : 0,
-        });
+      // Read current values from ListPlayers (has money/gold, no fame in v0.4.6)
+      const listRes = await this.rconClient.sendCommand('ListPlayers');
+      if (!listRes.success || !listRes.response) {
+        return this.sendJson(res, { error: 'ListPlayers failed' }, 500);
+      }
+      const players = this.parseListPlayersOutput(listRes.response);
+      const player = players.find(p => p.steamId === steamId);
+      if (!player) {
+        return this.sendJson(res, { error: 'Player not found online' }, 400);
       }
 
-      const tracked = this.trackedCurrency.get(steamId)!;
       let currentValue: number;
-      let newValue: number;
       let cmd: string;
 
       if (type === 'gold') {
-        currentValue = tracked.gold;
-        newValue = currentValue + amount;
-        cmd = `#SetCurrencyBalance Gold ${newValue} ${steamId}`;
-        tracked.gold = newValue;
+        currentValue = player.gold || 0;
+        cmd = `#SetCurrencyBalance Gold ${Math.round(currentValue + amount)} ${steamId}`;
       } else if (type === 'fame') {
-        currentValue = tracked.fame;
-        newValue = currentValue + amount;
-        cmd = `#SetFamePoints ${newValue} ${steamId}`;
-        tracked.fame = newValue;
+        // Fame not in ListPlayers — read from Whois
+        const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
+        if (!whoisRes.success || !whoisRes.response) {
+          return this.sendJson(res, { error: 'Whois failed' }, 500);
+        }
+        const fm = whoisRes.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+        currentValue = fm ? parseFloat(fm[1]) : 0;
+        cmd = `#SetFamePoints ${Math.round(currentValue + amount)} ${steamId}`;
       } else {
-        currentValue = tracked.money;
-        newValue = currentValue + amount;
-        cmd = `#SetCurrencyBalance Normal ${newValue} ${steamId}`;
-        tracked.money = newValue;
+        currentValue = player.balance || 0;
+        cmd = `#SetCurrencyBalance Normal ${Math.round(currentValue + amount)} ${steamId}`;
       }
 
-      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, newValue, cmd });
+      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, cmd });
       const r = await this.rconClient.sendCommand(cmd);
       console.log('[WebPanel] GiveCurrency result:', JSON.stringify(r));
-      if (r.success) return this.sendJson(res, { success: true, response: `${currentValue} + ${amount} = ${newValue}` });
+      if (r.success) return this.sendJson(res, { success: true, response: `${currentValue} + ${amount}` });
       this.sendJson(res, { error: r.response || 'Command failed' }, 500);
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);

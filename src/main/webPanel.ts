@@ -954,98 +954,67 @@ export class WebPanel {
   }
 
   private parseListPlayersOutput(output: string): OnlinePlayer[] {
-    console.log('[WebPanel] Parsing output:', output);
     const players: OnlinePlayer[] = [];
     const lines = output.split('\n');
     
-    console.log(`[WebPanel] Total lines: ${lines.length}`);
-    
-    let currentPlayer: Partial<OnlinePlayer> | null = null;
-    
     for (const line of lines) {
-      const trimmedLine = line.trim();
-      console.log(`[WebPanel] Processing line: "${trimmedLine}"`);
+      const trimmed = line.trim();
       
-      // Match player name line: "1. Domo" or "1. PlayerName"
-      const nameMatch = trimmedLine.match(/^\d+\.\s+(.+)$/);
+      // New format (v0.4.6): "PLAYER | Name | steam=765611... | upid=N | money=N | gold=N | (x, y, z)"
+      const pipeMatch = trimmed.match(/^PLAYER\s*\|\s*(.+?)\s*\|\s*steam=(\d{17})\s*\|/i);
+      if (pipeMatch) {
+        const steamId = pipeMatch[2];
+        const name = pipeMatch[1].trim();
+        
+        const moneyM = trimmed.match(/money=([\d.+-]+)/);
+        const goldM = trimmed.match(/gold=([\d.+-]+)/);
+        const posM = trimmed.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
+        
+        players.push({
+          steamId,
+          name,
+          connectedAt: new Date(),
+          balance: moneyM ? parseFloat(moneyM[1]) : 0,
+          gold: goldM ? parseFloat(goldM[1]) : 0,
+          location: posM ? {
+            x: parseFloat(posM[1]),
+            y: parseFloat(posM[2]),
+            z: parseFloat(posM[3]),
+          } : undefined,
+        });
+        continue;
+      }
+      
+      // Old format (legacy): "1. Name\nSteam: ..."
+      const nameMatch = trimmed.match(/^\d+\.\s+(.+)$/);
       if (nameMatch) {
-        console.log(`[WebPanel] Found player name: ${nameMatch[1]}`);
-        // Save previous player if exists
-        if (currentPlayer && currentPlayer.steamId && currentPlayer.name) {
-          console.log(`[WebPanel] Saving player: ${currentPlayer.name} (${currentPlayer.steamId})`);
-          players.push({
-            steamId: currentPlayer.steamId,
-            name: currentPlayer.name,
-            connectedAt: new Date(),
-            location: currentPlayer.location,
-            fame: currentPlayer.fame,
-            balance: currentPlayer.balance,
-            gold: currentPlayer.gold,
-          });
-        }
-        // Start new player
-        currentPlayer = { name: nameMatch[1].trim() };
+        // For old format we push a placeholder and will enrich
+        players.push({
+          steamId: '',
+          name: nameMatch[1].trim(),
+          connectedAt: new Date(),
+        });
         continue;
       }
-      
-      // Match Steam ID line: "Steam: Domo (76561198156375337)"
-      const steamMatch = trimmedLine.match(/Steam:\s*.+?\((\d{17})\)/);
-      if (steamMatch && currentPlayer) {
-        console.log(`[WebPanel] Found Steam ID: ${steamMatch[1]}`);
-        currentPlayer.steamId = steamMatch[1];
-        continue;
-      }
-
-      // Match Location line: "Location: X=416015.906 Y=398587.781 Z=14909.489"
-      const locMatch = trimmedLine.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
-      if (locMatch && currentPlayer) {
-        console.log(`[WebPanel] Found Location: X=${locMatch[1]} Y=${locMatch[2]} Z=${locMatch[3]}`);
-        currentPlayer.location = {
-          x: parseFloat(locMatch[1]),
-          y: parseFloat(locMatch[2]),
-          z: parseFloat(locMatch[3]),
-        };
-        continue;
-      }
-
-      // Match Fame line: "Fame: 1002"
-      const fameMatch = trimmedLine.match(/^Fame:\s*([\d.+-]+)/);
-      if (fameMatch && currentPlayer) {
-        currentPlayer.fame = parseFloat(fameMatch[1]);
-        continue;
-      }
-
-      // Match Account balance line: "Account balance: 10001"
-      const balanceMatch = trimmedLine.match(/^Account balance:\s*([\d.+-]+)/);
-      if (balanceMatch && currentPlayer) {
-        currentPlayer.balance = parseFloat(balanceMatch[1]);
-        continue;
-      }
-
-      // Match Gold balance line: "Gold balance: 1001"
-      const goldMatch = trimmedLine.match(/^Gold balance:\s*([\d.+-]+)/);
-      if (goldMatch && currentPlayer) {
-        currentPlayer.gold = parseFloat(goldMatch[1]);
-        continue;
+      if (players.length > 0) {
+        const last = players[players.length - 1];
+        const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
+        if (steamMatch) { last.steamId = steamMatch[1]; continue; }
+        const locMatch = trimmed.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
+        if (locMatch) { last.location = { x: parseFloat(locMatch[1]), y: parseFloat(locMatch[2]), z: parseFloat(locMatch[3]) }; continue; }
+        const fameMatch = trimmed.match(/^Fame:\s*([\d.+-]+)/);
+        if (fameMatch) { last.fame = parseFloat(fameMatch[1]); continue; }
+        const balanceMatch = trimmed.match(/^Account balance:\s*([\d.+-]+)/);
+        if (balanceMatch) { last.balance = parseFloat(balanceMatch[1]); continue; }
+        const goldMatch = trimmed.match(/^Gold balance:\s*([\d.+-]+)/);
+        if (goldMatch) { last.gold = parseFloat(goldMatch[1]); continue; }
       }
     }
     
-    // Don't forget the last player
-    if (currentPlayer && currentPlayer.steamId && currentPlayer.name) {
-      console.log(`[WebPanel] Saving last player: ${currentPlayer.name} (${currentPlayer.steamId})`);
-      players.push({
-        steamId: currentPlayer.steamId,
-        name: currentPlayer.name,
-        connectedAt: new Date(),
-        location: currentPlayer.location,
-        fame: currentPlayer.fame,
-        balance: currentPlayer.balance,
-        gold: currentPlayer.gold,
-      });
-    }
-    
-    console.log(`[WebPanel] Total parsed players: ${players.length}`);
-    return players;
+    // Filter out old-format entries that never got a steamId
+    const filtered = players.filter(p => p.steamId);
+    console.log(`[WebPanel] ListPlayers parsed: ${filtered.length}/${players.length}`);
+    return filtered;
   }
 
   private async handlePlayerDetails(steamId: string, res: http.ServerResponse): Promise<void> {

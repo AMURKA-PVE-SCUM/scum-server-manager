@@ -15,7 +15,7 @@ export function PlayersPage() {
   const [editFlags, setEditFlags] = useState<string[]>([]);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
 
-  useEffect(() => { loadAll(); const iv = setInterval(loadAll, 10000); return () => clearInterval(iv); }, []);
+  useEffect(() => { loadAll(); }, []);
 
   const getAdminPath = async () => {
     if (config) return `${config.server.serverPath}/SCUM/Saved/Config/WindowsServer/AdminUsers.ini`;
@@ -25,17 +25,11 @@ export function PlayersPage() {
 
   const loadAll = async () => {
     try {
-      const { players: onlinePlayers } = await window.electronAPI.rcon.listPlayers();
-      if (onlinePlayers && onlinePlayers.length > 0) {
-        setPlayers(onlinePlayers);
-      } else {
-        // Fallback: try DB for all-time players
-        const initRes = await window.electronAPI.db.init();
-        if (initRes && initRes.error) { setSnack({ open: true, message: initRes.error, severity: 'error' }); return; }
-        const dbPlayers = await window.electronAPI.db.getPlayers();
-        setPlayers(dbPlayers || []);
-        if (!dbPlayers || dbPlayers.length === 0) setSnack({ open: true, message: t('players', 'noPlayers'), severity: 'warning' });
-      }
+      const initRes = await window.electronAPI.db.init();
+      if (initRes && initRes.error) { setSnack({ open: true, message: initRes.error, severity: 'error' }); return; }
+      const p = await window.electronAPI.db.getPlayers();
+      setPlayers(p || []);
+      if (!p || p.length === 0) setSnack({ open: true, message: t('players', 'noPlayers'), severity: 'warning' });
     } catch (e: any) { setSnack({ open: true, message: e.message, severity: 'error' }); }
     try { await loadAdmins(); } catch {}
   };
@@ -106,16 +100,16 @@ export function PlayersPage() {
       <TextField fullWidth placeholder={`${t('common', 'search')}...`} value={search} onChange={(e) => setSearch(e.target.value)} size="small" sx={{ mb: 2, maxWidth: 400 }} />
       <Card><CardContent sx={{ p: 0 }}>
         <Table size="small">
-          <TableHead><TableRow><TableCell>{t('common', 'name')}</TableCell><TableCell>{t('players', 'steamId')}</TableCell><TableCell>{t('players', 'fame')}</TableCell><TableCell>{t('players', 'money')}</TableCell><TableCell>{t('players', 'location')}</TableCell><TableCell>{t('players', 'admin')}</TableCell></TableRow></TableHead>
+          <TableHead><TableRow><TableCell>{t('common', 'name')}</TableCell><TableCell>{t('players', 'steamId')}</TableCell><TableCell>{t('players', 'fame')}</TableCell><TableCell>{t('players', 'money')}</TableCell><TableCell>{t('players', 'lastLogin')}</TableCell><TableCell>{t('players', 'admin')}</TableCell></TableRow></TableHead>
           <TableBody>
             {filtered.length === 0 && <TableRow><TableCell colSpan={6} align="center">{t('players', 'noPlayers')}</TableCell></TableRow>}
             {filtered.map((p: any) => (
               <TableRow key={p.steamId} hover sx={{ cursor: 'pointer' }} onClick={() => handleSelect(p)}>
                 <TableCell>{p.name}</TableCell>
                 <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{p.steamId}</TableCell>
-                <TableCell>{p.fame ?? '-'}</TableCell>
-                <TableCell>{p.balance ?? '-'}</TableCell>
-                <TableCell>{p.location ? `X:${Math.round(p.location.x)} Y:${Math.round(p.location.y)}` : '-'}</TableCell>
+                <TableCell>{p.famePoints}</TableCell>
+                <TableCell>{p.walletBalance}</TableCell>
+                <TableCell>{p.lastLogin ? new Date(p.lastLogin * 1000).toLocaleString() : '-'}</TableCell>
                 <TableCell>
                   {isAdmin(p.steamId) ? (
                     <Chip label={t('players', 'admin')} size="small" color="primary" variant="outlined" />

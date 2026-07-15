@@ -86,6 +86,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     sendCommand: (command: string) => ipcRenderer.invoke('rcon:sendCommand', command),
     status: () => ipcRenderer.invoke('rcon:status'),
     saveConfig: (config: any) => ipcRenderer.invoke('rcon:saveConfig', config),
-    listPlayers: () => ipcRenderer.invoke('rcon:listPlayers'),
   },
 });

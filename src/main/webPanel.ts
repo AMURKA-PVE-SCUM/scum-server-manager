@@ -1258,8 +1258,9 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Get current values from Whois (works in v0.4.6 for money/gold/fame)
+      // Get current values from Whois
       const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
+      console.log('[WebPanel] GiveCurrency Whois raw:', whoisRes.response);
       if (!whoisRes.success || !whoisRes.response) {
         return this.sendJson(res, { error: 'Whois command failed' }, 500);
       }
@@ -1271,6 +1272,7 @@ export class WebPanel {
         if (!kv) continue;
         const key = kv[1].trim().toLowerCase();
         const val = kv[2].trim();
+        console.log('[WebPanel] GiveCurrency Whois kv:', key, '=', val);
         if ((type === 'gold' && key === 'gold') ||
             (type === 'fame' && key === 'fame') ||
             (type === 'money' && key === 'money')) {

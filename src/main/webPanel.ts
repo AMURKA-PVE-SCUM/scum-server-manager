@@ -1264,7 +1264,9 @@ export class WebPanel {
       else if (type === 'gold') command = `#AddGold ${amount} ${steamId}`;
       else command = `#AddMoney ${amount} ${steamId}`;
 
+      console.log('[WebPanel] GiveCurrency:', { type, amount, steamId, command });
       const result = await this.rconClient.sendCommand(command);
+      console.log('[WebPanel] GiveCurrency result:', JSON.stringify(result));
       if (result.success) {
         this.sendJson(res, { success: true, response: `+${amount}` });
       } else {

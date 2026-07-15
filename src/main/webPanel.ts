@@ -2455,24 +2455,29 @@ export class WebPanel {
             console.log('[WebPanel] ListSpawnedVehicles raw:', rconRes.response);
             this.cachedRconVehicles = this.parseListSpawnedVehicles(rconRes.response);
             console.log('[WebPanel] Parsed RCON vehicles:', JSON.stringify(this.cachedRconVehicles));
-            // Build a lookup: try matching by entityId, then by asset+position
-            const rconLookup = new Map<string, any>();
+            // Enrich DB vehicles with owner info from RCON
+            // Build lookup by entityId (most reliable)
+            const rconById = new Map<number, any>();
             for (const rv of this.cachedRconVehicles) {
-              if (rv.entityId) rconLookup.set(String(rv.entityId), rv);
+              if (rv.entityId) rconById.set(rv.entityId, rv);
             }
-            // Enrich DB vehicles with owner info
             rows = rows.map((v: any) => {
-              let rv = rconLookup.get(String(v.entityId));
-              // Fallback: try matching by asset name if entityId not found
-              if (!rv && v.asset && this.cachedRconVehicles.length > 0) {
-                const assetKey = v.asset.replace(/^Vehicle:/, '').toLowerCase();
-                rv = this.cachedRconVehicles.find((r: any) => r.asset && r.asset.toLowerCase() === assetKey);
+              let rv: any = null;
+              if (v.entityId != null) rv = rconById.get(Number(v.entityId)) || null;
+              // Fallback: match by asset type + position proximity
+              if (!rv && v.x != null && v.y != null) {
+                rv = this.cachedRconVehicles.find((r: any) => {
+                  if (r.x == null || r.y == null) return false;
+                  const dx = Math.abs(r.x - Number(v.x));
+                  const dy = Math.abs(r.y - Number(v.y));
+                  return (dx < 5000 && dy < 5000 &&
+                    r.asset && v.asset &&
+                    r.asset.toLowerCase() === String(v.asset).toLowerCase());
+                }) || null;
               }
-              if (rv) {
-                v.ownerName = rv.ownerName || null;
-                v.ownerSteamId = rv.ownerSteamId || null;
+              if (rv && rv.ownerName) {
+                v.ownerName = rv.ownerName;
                 v.customName = rv.customName || null;
-                v.rconAsset = rv.asset || null;
               }
               return v;
             });
@@ -2499,63 +2504,47 @@ export class WebPanel {
       let entityId: number | null = null;
       let asset: string | null = null;
       let ownerName: string | null = null;
-      let ownerSteamId: string | null = null;
+      let ownerDbId: number | null = null;
       let x: number | null = null;
       let y: number | null = null;
       let customName: string | null = null;
 
-      // Try format: "ID=123 | Asset=Vehicle:Car | Pos=(x,y,z) | Owner=Name(id)"
-      const m = line.match(/ID[=:]\s*(\d+)/i);
-      if (m) entityId = parseInt(m[1]);
+      // Format: "ID 12345678 | BPC_Asset | name: CustomName | (x, y, z) | owner: PlayerName (db id 999)"
+      const idM = line.match(/ID\s+(\d+)/i);
+      if (idM) entityId = parseInt(idM[1]);
 
-      const assetM = line.match(/Asset[=:]\s*(?:Vehicle:)?([^\s|()]+)/i);
+      // Asset is the first token after "ID xxx |" before " | name:"
+      const assetM = line.match(/\|\s+([A-Z][A-Za-z_0-9]+)\s+\|/);
       if (assetM) asset = assetM[1];
 
-      const ownerM = line.match(/Owner[=:]\s*(.+?)(?:\((\d{17}|\d+)\))?(?:\s*$|\||$)/i);
+      // Custom name: "name: something |"
+      const nameM = line.match(/\|\s*name:\s*([^|]+?)\s*\|/i);
+      if (nameM) customName = nameM[1].trim();
+
+      // Position: (x, y, z)
+      const posM = line.match(/\(?([\d.-]+),\s*([\d.-]+),\s*([\d.-]+)\)?/);
+      if (posM) { x = parseFloat(posM[1]); y = parseFloat(posM[2]); }
+
+      // Owner: "owner: PlayerName (db id 999)" or "owner: -"
+      const ownerM = line.match(/\|\s*owner:\s*(.+?)(?:\s*\(db id (\d+)\))?\s*$/i);
       if (ownerM) {
         const raw = ownerM[1].trim();
         ownerName = (raw === '-' || raw === 'None' || raw === '') ? null : raw;
-        ownerSteamId = ownerM[2] || null;
+        if (ownerM[2]) ownerDbId = parseInt(ownerM[2]);
       }
 
-      const posM = line.match(/Pos[=:]\s*\(?([\d.-]+),\s*([\d.-]+)/i);
-      if (posM) { x = parseFloat(posM[1]); y = parseFloat(posM[2]); }
-
-      const nameM = line.match(/Name[=:]\s*(.+?)(?:\s*$|\|)/i);
-      if (nameM) customName = nameM[1].trim();
-
-      // Format: "123: Vehicle_Car at (x,y,z) owner PlayerName(76561198...)"
-      if (!entityId) {
-        const m2 = line.match(/^(\d+)[:.\s]\s*(.+?)(?:\s+at\s+|,)/i);
-        if (m2) { entityId = parseInt(m2[1]); if (!asset) asset = m2[2].trim(); }
-      }
-      if (!posM) {
-        const p2 = line.match(/\(([\d.-]+),\s*([\d.-]+)/);
-        if (p2) { x = parseFloat(p2[1]); y = parseFloat(p2[2]); }
-      }
+      // Fallback: "| OwnerName (db id ...)" without "owner:" prefix
       if (!ownerM) {
-        const o2 = line.match(/owner\s+(.+?)(?:\((\d{17}|\d+)\))?\s*$/i);
-        if (o2) { const r = o2[1].trim(); ownerName = (r === '-' || r === 'None' || r === '') ? null : r; ownerSteamId = o2[2] || null; }
-      }
-      // Format: "Num | Asset | Pos | Owner" (table)
-      if (!entityId && !assetM) {
-        const parts = line.split('|').map(p => p.trim());
-        if (parts.length >= 2) {
-          if (!entityId) { const idn = parseInt(parts[0]); if (!isNaN(idn)) entityId = idn; }
-          if (!asset && parts[1]) asset = parts[1].replace(/^Vehicle:/, '');
-          if (!x && parts.length >= 3) {
-            const c3 = parts[2].match(/([\d.-]+),\s*([\d.-]+)/);
-            if (c3) { x = parseFloat(c3[1]); y = parseFloat(c3[2]); }
-          }
-          if (!ownerName && parts.length >= 4) {
-            const o4 = parts[3].match(/(.+?)(?:\((\d{17}|\d+)\))?\s*$/);
-            if (o4) { const r = o4[1].trim(); ownerName = (r === '-' || r === 'None' || r === '') ? null : r; ownerSteamId = o4[2] || null; }
-          }
+        const o2 = line.match(/\|\s*(.+?)\s*\(db id (\d+)\)\s*$/i);
+        if (o2) {
+          const r = o2[1].trim();
+          ownerName = (r === '-' || r === 'None' || r === '') ? null : r;
+          ownerDbId = parseInt(o2[2]);
         }
       }
 
       if (entityId || asset) {
-        vehicles.push({ entityId, asset, ownerName, ownerSteamId, x, y, customName });
+        vehicles.push({ entityId, asset, ownerName, ownerDbId, x, y, customName });
       }
     }
     return vehicles;

@@ -2513,7 +2513,8 @@ export class WebPanel {
 
       const ownerM = line.match(/Owner[=:]\s*(.+?)(?:\((\d{17}|\d+)\))?(?:\s*$|\||$)/i);
       if (ownerM) {
-        ownerName = ownerM[1].trim();
+        const raw = ownerM[1].trim();
+        ownerName = (raw === '-' || raw === 'None' || raw === '') ? null : raw;
         ownerSteamId = ownerM[2] || null;
       }
 
@@ -2534,7 +2535,7 @@ export class WebPanel {
       }
       if (!ownerM) {
         const o2 = line.match(/owner\s+(.+?)(?:\((\d{17}|\d+)\))?\s*$/i);
-        if (o2) { ownerName = o2[1].trim(); ownerSteamId = o2[2] || null; }
+        if (o2) { const r = o2[1].trim(); ownerName = (r === '-' || r === 'None' || r === '') ? null : r; ownerSteamId = o2[2] || null; }
       }
       // Format: "Num | Asset | Pos | Owner" (table)
       if (!entityId && !assetM) {
@@ -2548,7 +2549,7 @@ export class WebPanel {
           }
           if (!ownerName && parts.length >= 4) {
             const o4 = parts[3].match(/(.+?)(?:\((\d{17}|\d+)\))?\s*$/);
-            if (o4) { ownerName = o4[1].trim(); ownerSteamId = o4[2] || null; }
+            if (o4) { const r = o4[1].trim(); ownerName = (r === '-' || r === 'None' || r === '') ? null : r; ownerSteamId = o4[2] || null; }
           }
         }
       }

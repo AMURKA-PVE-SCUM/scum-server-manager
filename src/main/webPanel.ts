@@ -1082,13 +1082,21 @@ export class WebPanel {
       const whois: Record<string, any> = {};
       const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
       for (const line of lines) {
+        // Try old format: each key:value on its own line
         const kv = line.match(/^([^:]+):\s*(.+)$/);
         if (!kv) continue;
         const key = kv[1].trim().toLowerCase();
         const val = kv[2].trim();
         if (key === 'name') whois.name = val;
         else if (key === 'steam id' || key === 'steamid') whois.steamId = val;
-        else if (key === 'fame') whois.fame = parseFloat(val) || 0;
+        else if (key === 'fame') {
+          // v0.4.6 compact: "Fame: 7   Money: 1000   Gold: 100"
+          whois.fame = parseFloat(val) || 0;
+          const mMoney = val.match(/\bmoney[:\s]\s*([\d.]+)/i);
+          if (mMoney) whois.money = parseFloat(mMoney[1]);
+          const mGold = val.match(/\bgold[:\s]\s*([\d.]+)/i);
+          if (mGold) whois.gold = parseFloat(mGold[1]);
+        }
         else if (key === 'money') whois.money = parseFloat(val) || 0;
         else if (key === 'gold') whois.gold = parseFloat(val) || 0;
         else if (key === 'kills') whois.kills = parseInt(val) || 0;
@@ -1266,19 +1274,14 @@ export class WebPanel {
       }
 
       let currentValue = 0;
-      const lines = whoisRes.response.split('\n').map(l => l.trim()).filter(Boolean);
-      for (const line of lines) {
-        const kv = line.match(/^([^:]+):\s*(.+)$/);
-        if (!kv) continue;
-        const key = kv[1].trim().toLowerCase();
-        const val = kv[2].trim();
-        console.log('[WebPanel] GiveCurrency Whois kv:', key, '=', val);
-        if ((type === 'gold' && key === 'gold') ||
-            (type === 'fame' && key === 'fame') ||
-            (type === 'money' && key === 'money')) {
-          currentValue = parseFloat(val) || 0;
-        }
-      }
+      const text = whoisRes.response;
+      const mGold = text.match(/\bgold[:\s]\s*([\d.]+)/i);
+      const mMoney = text.match(/\bmoney[:\s]\s*([\d.]+)/i);
+      const mFame = text.match(/\bfame[:\s]\s*([\d.]+)/i);
+      console.log('[WebPanel] GiveCurrency Whois parsed:', { mGold, mMoney, mFame });
+      if (type === 'gold' && mGold) currentValue = parseFloat(mGold[1]);
+      else if (type === 'fame' && mFame) currentValue = parseFloat(mFame[1]);
+      else if (type === 'money' && mMoney) currentValue = parseFloat(mMoney[1]);
 
       const newValue = Math.round(currentValue + amount);
       let currencyType: string;

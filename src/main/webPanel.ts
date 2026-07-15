@@ -2445,9 +2445,8 @@ export class WebPanel {
         this.sendJson(res, { vehicles: [] });
         return;
       }
-      let rows = dbReader.getVehicles() || [];
 
-      // Try with RCON: get all spawned vehicles with their owners
+      // Use RCON as primary source when connected
       if (this.rconClient && this.rconClient.isConnected()) {
         try {
           const rconRes = await this.rconClient.sendCommand('ListSpawnedVehicles');
@@ -2455,63 +2454,28 @@ export class WebPanel {
             console.log('[WebPanel] ListSpawnedVehicles raw:', rconRes.response);
             this.cachedRconVehicles = this.parseListSpawnedVehicles(rconRes.response);
             console.log('[WebPanel] Parsed RCON vehicles:', JSON.stringify(this.cachedRconVehicles).slice(0, 3000));
-
-            // Build a set of matched DB entityIds to avoid duplicates
-            const matchedDbIds = new Set<number>();
-
-            // 1. Enrich DB vehicles that match RCON vehicles
-            const rconById = new Map<number, any>();
-            for (const rv of this.cachedRconVehicles) {
-              if (rv.entityId) rconById.set(rv.entityId, rv);
-            }
-            rows = rows.map((v: any) => {
-              let rv: any = null;
-              if (v.entityId != null) rv = rconById.get(Number(v.entityId)) || null;
-              if (!rv && v.x != null && v.y != null) {
-                rv = this.cachedRconVehicles.find((r: any) => {
-                  if (r.x == null || r.y == null) return false;
-                  return (Math.abs(r.x - Number(v.x)) < 5000 &&
-                    Math.abs(r.y - Number(v.y)) < 5000 &&
-                    r.asset && v.asset &&
-                    r.asset.toLowerCase() === String(v.asset).toLowerCase());
-                }) || null;
-              }
-              if (rv && rv.entityId) matchedDbIds.add(rv.entityId);
-              if (rv && rv.ownerName) {
-                v.ownerName = rv.ownerName;
-                v.customName = rv.customName || null;
-              }
-              return v;
-            });
-
-            // 2. Add RCON vehicles that have NO match in DB (player-spawned, etc.)
-            for (const rv of this.cachedRconVehicles) {
-              const isMatched = rv.entityId ? matchedDbIds.has(rv.entityId) : false;
-              if (!isMatched) {
-                rows.push({
-                  entityId: rv.entityId,
-                  asset: rv.asset,
-                  assetId: rv.asset ? `Vehicle:${rv.asset}` : null,
-                  alias: rv.customName || null,
-                  x: rv.x,
-                  y: rv.y,
-                  lastAccess: null,
-                  automatic: null,
-                  functional: true,
-                  forbiddenZoneSeconds: null,
-                  ownerName: rv.ownerName || null,
-                  customName: rv.customName || null,
-                });
-              }
-            }
+            const vehicles = this.cachedRconVehicles.map((rv: any) => ({
+              entityId: rv.entityId,
+              asset: rv.asset,
+              x: rv.x,
+              y: rv.y,
+              ownerName: rv.ownerName || null,
+              customName: (rv.customName && rv.customName !== '-') ? rv.customName : null,
+            }));
+            console.log('[WebPanel] Sending', vehicles.length, 'RCON vehicles to frontend');
+            this.sendJson(res, { vehicles });
+            return;
           } else {
-            console.log('[WebPanel] ListSpawnedVehicles: no response');
+            console.log('[WebPanel] ListSpawnedVehicles: no response, falling back to DB');
           }
         } catch (e: any) {
           console.error('[WebPanel] ListSpawnedVehicles error:', e.message);
         }
       }
-      
+
+      // Fallback: DB vehicles (no owner info)
+      let rows = dbReader.getVehicles() || [];
+      console.log('[WebPanel] Sending', rows.length, 'DB vehicles to frontend (RCON unavailable)');
       this.sendJson(res, { vehicles: rows || [] });
     } catch (e: any) {
       this.sendJson(res, { error: e.message, vehicles: [] }, 500);

@@ -29,6 +29,7 @@ export class WebPanel {
   private onlinePlayers = new Map<string, OnlinePlayer>();
   private playersPollInterval: NodeJS.Timeout | null = null;
   private cachedPlayers: OnlinePlayer[] = [];
+  private trackedCurrency = new Map<string, { money: number; gold: number; fame: number }>();
   private cachedRconVehicles: any[] = [];
   private rconCredentials: { host: string; port: number; password: string } | null = null;
   private readonly PLAYERS_POLL_INTERVAL = 3000;
@@ -1245,41 +1246,47 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Read current values from ListPlayers (has money/gold, no fame in v0.4.6)
-      const listRes = await this.rconClient.sendCommand('ListPlayers');
-      if (!listRes.success || !listRes.response) {
-        return this.sendJson(res, { error: 'ListPlayers failed' }, 500);
-      }
-      const players = this.parseListPlayersOutput(listRes.response);
-      const player = players.find(p => p.steamId === steamId);
-      if (!player) {
-        return this.sendJson(res, { error: 'Player not found online' }, 400);
+      // Init local tracking from ListPlayers (money/gold) or Whois (fame) on first call
+      if (!this.trackedCurrency.has(steamId)) {
+        let initMoney = 0, initGold = 0, initFame = 0;
+
+        const listRes = await this.rconClient.sendCommand('ListPlayers');
+        if (listRes.success && listRes.response) {
+          const pl = this.parseListPlayersOutput(listRes.response).find(p => p.steamId === steamId);
+          if (pl) { initMoney = pl.balance || 0; initGold = pl.gold || 0; }
+        }
+
+        const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
+        if (whoisRes.success && whoisRes.response) {
+          const fm = whoisRes.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+          if (fm) initFame = parseFloat(fm[1]);
+        }
+
+        this.trackedCurrency.set(steamId, { money: initMoney, gold: initGold, fame: initFame });
       }
 
+      const tracked = this.trackedCurrency.get(steamId)!;
       let currentValue: number;
       let cmd: string;
 
       if (type === 'gold') {
-        currentValue = player.gold || 0;
-        cmd = `#SetCurrencyBalance Gold ${Math.round(currentValue + amount)} ${steamId}`;
+        currentValue = tracked.gold;
+        tracked.gold = currentValue + amount;
+        cmd = `#SetCurrencyBalance Gold ${Math.round(tracked.gold)} ${steamId}`;
       } else if (type === 'fame') {
-        // Fame not in ListPlayers — read from Whois
-        const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
-        if (!whoisRes.success || !whoisRes.response) {
-          return this.sendJson(res, { error: 'Whois failed' }, 500);
-        }
-        const fm = whoisRes.response.match(/\bfame[:\s]\s*([\d.]+)/i);
-        currentValue = fm ? parseFloat(fm[1]) : 0;
-        cmd = `#SetFamePoints ${Math.round(currentValue + amount)} ${steamId}`;
+        currentValue = tracked.fame;
+        tracked.fame = currentValue + amount;
+        cmd = `#SetFamePoints ${Math.round(tracked.fame)} ${steamId}`;
       } else {
-        currentValue = player.balance || 0;
-        cmd = `#SetCurrencyBalance Normal ${Math.round(currentValue + amount)} ${steamId}`;
+        currentValue = tracked.money;
+        tracked.money = currentValue + amount;
+        cmd = `#SetCurrencyBalance Normal ${Math.round(tracked.money)} ${steamId}`;
       }
 
-      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, cmd });
+      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, newValue: type === 'gold' ? tracked.gold : type === 'fame' ? tracked.fame : tracked.money, cmd });
       const r = await this.rconClient.sendCommand(cmd);
       console.log('[WebPanel] GiveCurrency result:', JSON.stringify(r));
-      if (r.success) return this.sendJson(res, { success: true, response: `${currentValue} + ${amount}` });
+      if (r.success) return this.sendJson(res, { success: true, newValue: Math.round(type === 'gold' ? tracked.gold : type === 'fame' ? tracked.fame : tracked.money) });
       this.sendJson(res, { error: r.response || 'Command failed' }, 500);
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);

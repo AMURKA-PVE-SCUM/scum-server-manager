@@ -2718,6 +2718,10 @@ async function showPlayerCard(steamId, playerName) {
 
     // Show modal
     document.getElementById('playerCardModal').style.display = 'flex';
+
+    // Start periodic Whois refresh every 3s while card is open
+    if (window._playerCardWhoisTimer) clearInterval(window._playerCardWhoisTimer);
+    window._playerCardWhoisTimer = setInterval(refreshPlayerCard, 3000);
   } catch (e) {
     console.error('Failed to load player card:', e);
     showNotification(t('notification.loadError'), 'error');
@@ -2726,6 +2730,44 @@ async function showPlayerCard(steamId, playerName) {
 
 function closePlayerCard() {
   document.getElementById('playerCardModal').style.display = 'none';
+  if (window._playerCardWhoisTimer) { clearInterval(window._playerCardWhoisTimer); window._playerCardWhoisTimer = null; }
+}
+
+// Refresh player card Whois data after actions
+async function refreshPlayerCard() {
+  if (!selectedPlayer) return;
+  try {
+    const whoisRes = await fetch(`/api/players/whois/${selectedPlayer}`, {
+      headers: {'Authorization': 'Bearer ' + authToken}
+    });
+    const whoisData = await whoisRes.json();
+    if (!whoisData?.success || !whoisData.whois) return;
+    const w = whoisData.whois;
+
+    // Update stats grid
+    const statsGrid = document.getElementById('playerStatsGrid');
+    if (!statsGrid) return;
+    const fameEl = statsGrid.querySelector('.stat-box:nth-child(1) .stat-box-value');
+    const moneyEl = statsGrid.querySelector('.stat-box:nth-child(2) .stat-box-value');
+    const goldEl = statsGrid.querySelector('.stat-box:nth-child(3) .stat-box-value');
+    if (fameEl && w.fame != null) fameEl.textContent = '⭐ ' + w.fame.toLocaleString();
+    if (moneyEl && w.money != null) moneyEl.textContent = '💵 $' + w.money.toLocaleString();
+    if (goldEl && w.gold != null) goldEl.textContent = '🏆 ' + w.gold.toLocaleString();
+  } catch (e) {
+    // silent
+  }
+}
+
+// Update balance display in player card after dispense
+function updateBalanceDisplay(type, value) {
+  const statsGrid = document.getElementById('playerStatsGrid');
+  if (!statsGrid) return;
+  const idx = type === 'gold' ? 2 : type === 'fame' ? 0 : 1;
+  const el = statsGrid.querySelector(`.stat-box:nth-child(${idx + 1}) .stat-box-value`);
+  if (!el) return;
+  if (type === 'fame') el.textContent = '⭐ ' + value.toLocaleString();
+  else if (type === 'gold') el.textContent = '🏆 ' + value.toLocaleString();
+  else el.textContent = '💵 $' + value.toLocaleString();
 }
 
 function showGiveItemModal(steamId, playerName) {
@@ -3085,6 +3127,8 @@ async function executeGiveMoney() {
     if (data.success) {
       showNotification(t('notification.giveMoneySuccess'), 'success');
       closeGiveMoneyModal();
+      if (data.newValue != null) updateBalanceDisplay('money', data.newValue);
+      refreshPlayerCard();
     } else {
       showNotification(data.error || t('notification.failed'), 'error');
     }
@@ -3124,6 +3168,8 @@ async function executeGiveGold() {
     if (data.success) {
       showNotification(t('notification.giveGoldSuccess'), 'success');
       closeGiveGoldModal();
+      if (data.newValue != null) updateBalanceDisplay('gold', data.newValue);
+      refreshPlayerCard();
     } else {
       showNotification(data.error || t('notification.failed'), 'error');
     }
@@ -3163,6 +3209,8 @@ async function executeSetFame() {
     if (data.success) {
       showNotification(t('notification.fameSuccess'), 'success');
       closeSetFameModal();
+      if (data.newValue != null) updateBalanceDisplay('fame', data.newValue);
+      refreshPlayerCard();
     } else {
       showNotification(data.error || t('notification.failed'), 'error');
     }

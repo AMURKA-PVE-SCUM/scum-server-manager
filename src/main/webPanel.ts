@@ -1172,34 +1172,13 @@ export class WebPanel {
           const notSet = (v: any) => v === undefined || v === null || v === '' || v === false;
           let x = params.x, y = params.y, z = params.z;
           if (notSet(x) && notSet(y) && notSet(z)) {
-            // Check cached players first
-            const cached = this.cachedPlayers.find(p => p.steamId === steamId);
-            if (cached?.location && !notSet(cached.location.z)) {
-              x = cached.location.x;
-              y = cached.location.y;
-              z = cached.location.z;
-            } else {
-              // Fresh ListPlayers lookup
-              const listRes = await this.rconClient.sendCommand('ListPlayers');
-              if (listRes.success && listRes.response) {
-                const lines = listRes.response.split('\n');
-                for (const line of lines) {
-                  const trimmed = line.trim();
-                  // New format: "PLAYER | Name | steam=76561198... | ... | (x, y, z)"
-                  const pm = trimmed.match(new RegExp(`steam=${steamId}\\s*\\|[^|]*\\(([\\d.-]+),\\s*([\\d.-]+),\\s*([\\d.-]+)\\)`));
+            // Always get fresh position from ListPlayers
+            const freshRes = await this.rconClient.sendCommand('ListPlayers');
+            if (freshRes.success && freshRes.response) {
+              for (const line of freshRes.response.split('\n')) {
+                if (line.includes(`steam=${steamId}`)) {
+                  const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
                   if (pm) { x = parseFloat(pm[1]); y = parseFloat(pm[2]); z = parseFloat(pm[3]); break; }
-                  // Old format fallback
-                  const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
-                  if (steamMatch && steamMatch[1] === steamId) {
-                    for (let j = 0; j < lines.length; j++) {
-                      if (j === lines.indexOf(line)) continue;
-                      const t = lines[j].trim();
-                      if (t.match(/^\d+\.\s+\S/)) continue;
-                      const locMatch = t.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
-                      if (locMatch) { x = parseFloat(locMatch[1]); y = parseFloat(locMatch[2]); z = parseFloat(locMatch[3]); break; }
-                    }
-                    break;
-                  }
                 }
               }
             }

@@ -507,18 +507,10 @@ export class WargmManager {
     if (!this.rconClient) return null;
     const r = await this.rconClient.sendCommand('ListPlayers');
     if (!r.success || !r.response) return null;
-    const lines = r.response.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
-      const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
-      if (steamMatch && steamMatch[1] === steamId) {
-        for (let j = i + 1; j < lines.length; j++) {
-          const t = lines[j].trim();
-          if (t.match(/^\d+\.\s+\S/)) break;
-          const locMatch = t.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
-          if (locMatch) return { x: parseFloat(locMatch[1]), y: parseFloat(locMatch[2]), z: parseFloat(locMatch[3]) };
-        }
-        return null;
+    for (const line of r.response.split('\n')) {
+      if (line.includes(`steam=${steamId}`)) {
+        const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
+        if (pm) return { x: parseFloat(pm[1]), y: parseFloat(pm[2]), z: parseFloat(pm[3]) };
       }
     }
     return null;
@@ -528,26 +520,27 @@ export class WargmManager {
     if (!this.rconClient) return { normal: 0, gold: 0, fame: 0, found: false };
     const r = await this.rconClient.sendCommand('ListPlayers');
     if (!r.success || !r.response) return { normal: 0, gold: 0, fame: 0, found: false };
-    const lines = r.response.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
-      const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
-      if (steamMatch && steamMatch[1] === steamId) {
-        let normal = 0, gold = 0, fame = 0;
-        for (let j = i + 1; j < lines.length; j++) {
-          const t = lines[j].trim();
-          if (t.match(/^\d+\.\s+\S/)) break;
-          const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-          if (bm) normal = parseFloat(bm[1]);
-          const gm = t.match(/^Gold balance:\s*([\d.+-]+)/);
-          if (gm) gold = parseFloat(gm[1]);
-          const fm = t.match(/^Fame:\s*([\d.+-]+)/);
-          if (fm) fame = parseFloat(fm[1]);
-        }
-        return { normal, gold, fame, found: true };
+    let normal = 0, gold = 0, found = false;
+    for (const line of r.response.split('\n')) {
+      if (line.includes(`steam=${steamId}`)) {
+        found = true;
+        const mm = line.match(/\bmoney=([\d.+-]+)/);
+        if (mm) normal = parseFloat(mm[1]);
+        const gm = line.match(/\bgold=([\d.+-]+)/);
+        if (gm) gold = parseFloat(gm[1]);
+        break;
       }
     }
-    return { normal: 0, gold: 0, fame: 0, found: false };
+    // Fame not in ListPlayers v0.4.6 — read from Whois
+    let fame = 0;
+    if (found && this.rconClient) {
+      const w = await this.rconClient.sendCommand(`Whois ${steamId}`);
+      if (w.success && w.response) {
+        const fm = w.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+        if (fm) fame = parseFloat(fm[1]);
+      }
+    }
+    return { normal, gold, fame, found };
   }
 
   private async executeItem(item: WargmCardItem, steamId: string): Promise<{ success: boolean; message: string }> {

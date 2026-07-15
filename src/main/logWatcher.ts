@@ -241,25 +241,10 @@ export class LogWatcher {
         }
         const needsBalance = bonus.money > 0 || bonus.gold > 0 || bonus.fame > 0;
         if (needsBalance) {
-          const balR = await this.rconClient.sendCommand('ListPlayers');
           let norm = 0, gold = 0, fame = 0;
-          if (balR.success && balR.response) {
-            const lines = balR.response.split('\n');
-            let inSection = false;
-            for (const line of lines) {
-              const t = line.trim();
-              if (t.match(/^\d+\.\s+\S/)) inSection = false;
-              if (t.includes(steamId)) { inSection = true; continue; }
-              if (inSection) {
-                const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-                if (bm) norm = parseFloat(bm[1]);
-                const gm = t.match(/^Gold balance:\s*([\d.+-]+)/);
-                if (gm) gold = parseFloat(gm[1]);
-                const fm = t.match(/^Fame:\s*([\d.+-]+)/);
-                if (fm) fame = parseFloat(fm[1]);
-              }
-            }
-          }
+          const d = await this.getListPlayerData(steamId);
+          if (d) { norm = d.money; gold = d.gold; }
+          fame = await this.getPlayerFameFromWhois(steamId);
           if (bonus.money > 0) {
             await this.rconClient.sendCommand(`#SetCurrencyBalance Normal ${Math.round(norm + bonus.money)} ${steamId}`);
             succeeded.push(`Деньги +${bonus.money} (VIP)`);
@@ -320,21 +305,8 @@ export class LogWatcher {
       }
       const loc = this.teleportLocations[idx - 1];
       if (loc.price > 0) {
-        const balRes = await this.rconClient.sendCommand('ListPlayers');
-        let balance = 0;
-        if (balRes.success && balRes.response) {
-          const balLines = balRes.response.split('\n');
-          let inSection = false;
-          for (const line of balLines) {
-            const t = line.trim();
-            if (t.match(/^\d+\.\s+\S/)) inSection = false;
-            if (t.includes(steamId)) { inSection = true; continue; }
-            if (inSection) {
-              const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-              if (bm) balance = parseFloat(bm[1]);
-            }
-          }
-        }
+        const d = await this.getListPlayerData(steamId);
+        const balance = d ? d.money : 0;
         if (balance < loc.price) {
           await this.rconClient.sendCommand(`SendChat 4 "Недостаточно средств: нужно $${loc.price}, у вас $${Math.round(balance)}" ${steamId}`);
           return;
@@ -343,21 +315,8 @@ export class LogWatcher {
       await this.rconClient.sendCommand(`SendChat 4 "⏳ Не двигайтесь! Телепорт в ${loc.name} через 15 секунд..." ${steamId}`);
       await new Promise(resolve => setTimeout(resolve, 15000));
       if (loc.price > 0) {
-        const balRes2 = await this.rconClient.sendCommand('ListPlayers');
-        let balance2 = 0;
-        if (balRes2.success && balRes2.response) {
-          const balLines = balRes2.response.split('\n');
-          let inSection = false;
-          for (const line of balLines) {
-            const t = line.trim();
-            if (t.match(/^\d+\.\s+\S/)) inSection = false;
-            if (t.includes(steamId)) { inSection = true; continue; }
-            if (inSection) {
-              const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-              if (bm) balance2 = parseFloat(bm[1]);
-            }
-          }
-        }
+        const d2 = await this.getListPlayerData(steamId);
+        const balance2 = d2 ? d2.money : 0;
         if (balance2 < loc.price) {
           await this.rconClient.sendCommand(`SendChat 4 "Недостаточно средств: нужно $${loc.price}, у вас $${Math.round(balance2)}" ${steamId}`);
           return;
@@ -414,32 +373,16 @@ export class LogWatcher {
         await this.rconClient.sendCommand(`SendChat 4 "Достигнут лимит сохранений (${maxLocs}). Используйте !дома для просмотра" ${steamId}`);
         return;
       }
-      const balRes = await this.rconClient.sendCommand('ListPlayers');
-      if (!balRes.success || !balRes.response) {
-        await this.rconClient.sendCommand(`SendChat 4 "Не удалось получить данные о локации" ${steamId}`);
-        return;
-      }
-      const lines = balRes.response.split('\n');
-      let inSection = false;
-      let locX = 0, locY = 0, locZ = 0;
-      for (const line of lines) {
-        const t = line.trim();
-        if (t.match(/^\d+\.\s+\S/)) inSection = false;
-        if (t.includes(steamId)) { inSection = true; continue; }
-        if (inSection) {
-          const lm = t.match(/^Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
-          if (lm) { locX = parseFloat(lm[1]); locY = parseFloat(lm[2]); locZ = parseFloat(lm[3]); }
-        }
-      }
-      if (locX === 0 && locY === 0 && locZ === 0) {
+      const d = await this.getListPlayerData(steamId);
+      if (!d || (d.x === 0 && d.y === 0 && d.z === 0)) {
         await this.rconClient.sendCommand(`SendChat 4 "Не удалось определить вашу локацию" ${steamId}`);
         return;
       }
       const homeName = trimmedParts.length > 1 ? trimmed.slice(trimmedParts[0].length).trim() : `Дом ${this.homeLocations[steamId].length + 1}`;
-      this.homeLocations[steamId].push({ name: homeName, x: locX, y: locY, z: locZ });
+      this.homeLocations[steamId].push({ name: homeName, x: d.x, y: d.y, z: d.z });
       this.saveHomeLocations();
       const priceNote = this.saveHomeConfig.teleportPrice > 0 ? ` | Стоимость телепорта: $${this.saveHomeConfig.teleportPrice}` : '';
-      await this.rconClient.sendCommand(`SendChat 4 "✅ Локация сохранена: ${homeName} (X=${Math.round(locX)} Y=${Math.round(locY)} Z=${Math.round(locZ)})${priceNote}" ${steamId}`);
+      await this.rconClient.sendCommand(`SendChat 4 "✅ Локация сохранена: ${homeName} (X=${Math.round(d.x)} Y=${Math.round(d.y)} Z=${Math.round(d.z)})${priceNote}" ${steamId}`);
       return;
     }
 
@@ -474,21 +417,8 @@ export class LogWatcher {
       const home = locs[homeIdx];
       if (this.saveHomeConfig.teleportPrice > 0) {
         await this.rconClient.sendCommand(`SendChat 4 "💰 Стоимость телепорта: $${this.saveHomeConfig.teleportPrice}" ${steamId}`);
-        const balRes = await this.rconClient.sendCommand('ListPlayers');
-        let balance = 0;
-        if (balRes.success && balRes.response) {
-          const balLines = balRes.response.split('\n');
-          let inSection = false;
-          for (const line of balLines) {
-            const t = line.trim();
-            if (t.match(/^\d+\.\s+\S/)) inSection = false;
-            if (t.includes(steamId)) { inSection = true; continue; }
-            if (inSection) {
-              const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-              if (bm) balance = parseFloat(bm[1]);
-            }
-          }
-        }
+        const d1 = await this.getListPlayerData(steamId);
+        const balance = d1 ? d1.money : 0;
         const price = this.saveHomeConfig.teleportPrice;
         if (balance < price) {
           await this.rconClient.sendCommand(`SendChat 4 "Недостаточно средств: нужно $${price}, у вас $${Math.round(balance)}" ${steamId}`);
@@ -496,21 +426,8 @@ export class LogWatcher {
         }
         await this.rconClient.sendCommand(`SendChat 4 "⏳ Телепорт домой (${home.name}) через 15 секунд..." ${steamId}`);
         await new Promise(resolve => setTimeout(resolve, 15000));
-        const balRes2 = await this.rconClient.sendCommand('ListPlayers');
-        let balance2 = 0;
-        if (balRes2.success && balRes2.response) {
-          const balLines = balRes2.response.split('\n');
-          let inSection = false;
-          for (const line of balLines) {
-            const t = line.trim();
-            if (t.match(/^\d+\.\s+\S/)) inSection = false;
-            if (t.includes(steamId)) { inSection = true; continue; }
-            if (inSection) {
-              const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-              if (bm) balance2 = parseFloat(bm[1]);
-            }
-          }
-        }
+        const d2 = await this.getListPlayerData(steamId);
+        const balance2 = d2 ? d2.money : 0;
         if (balance2 < price) {
           await this.rconClient.sendCommand(`SendChat 4 "Недостаточно средств: нужно $${price}, у вас $${Math.round(balance2)}" ${steamId}`);
           return;
@@ -547,18 +464,32 @@ export class LogWatcher {
           console.log('[LogWatcher] Command result:', result.success ? 'success' : 'fail');
           if (result.success && result.response) {
             const lines = result.response.split('\n').filter(l => l.trim());
-            const playerSection = this.extractPlayerSection(lines, steamId, playerName);
             let reply = '';
             if (cmdKey === '!balance') {
-              const bal = playerSection.find(l => l.toLowerCase().includes('account balance')) || 'N/A';
-              const gold = playerSection.find(l => l.toLowerCase().includes('gold balance')) || 'N/A';
-              reply = `${playerName}: ${bal} | ${gold}`;
+              const plLine = lines.find(l => l.includes(`steam=${steamId}`));
+              if (plLine) {
+                const mm = plLine.match(/\bmoney=([\d.+-]+)/);
+                const gm = plLine.match(/\bgold=([\d.+-]+)/);
+                reply = `${playerName}: Account balance: ${mm ? parseFloat(mm[1]).toFixed(0) : 'N/A'} | Gold balance: ${gm ? parseFloat(gm[1]).toFixed(0) : 'N/A'}`;
+              } else {
+                const playerSection = this.extractPlayerSection(lines, steamId, playerName);
+                const bal = playerSection.find(l => l.toLowerCase().includes('account balance')) || 'N/A';
+                const gold = playerSection.find(l => l.toLowerCase().includes('gold balance')) || 'N/A';
+                reply = `${playerName}: ${bal} | ${gold}`;
+              }
             } else if (cmdKey === '!location') {
-              const loc = playerSection.find(l => l.toLowerCase().includes('location')) || 'N/A';
-              reply = `${playerName}: ${loc}`;
+              const plLine = lines.find(l => l.includes(`steam=${steamId}`));
+              if (plLine) {
+                const pm = plLine.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
+                reply = pm ? `${playerName}: Location: X=${parseFloat(pm[1]).toFixed(0)} Y=${parseFloat(pm[2]).toFixed(0)} Z=${parseFloat(pm[3]).toFixed(0)}` : `${playerName}: Location: N/A`;
+              } else {
+                const playerSection = this.extractPlayerSection(lines, steamId, playerName);
+                const loc = playerSection.find(l => l.toLowerCase().includes('location')) || 'N/A';
+                reply = `${playerName}: ${loc}`;
+              }
             } else if (cmdKey === '!online') {
-              const playerCount = lines.filter(l => /^\d+\.\s+\S/.test(l)).length;
-              const playerList = lines.filter(l => /^\d+\.\s+\S/.test(l)).join(', ');
+              const playerCount = lines.filter(l => /^\d+\.\s+\S/.test(l) || /^PLAYER\s*\|/i.test(l)).length;
+              const playerList = lines.filter(l => /^\d+\.\s+\S/.test(l) || /^PLAYER\s*\|/i.test(l)).join(', ');
               reply = playerCount > 0 ? `Онлайн (${playerCount}): ${playerList}` : 'Нет игроков онлайн';
             } else {
               reply = result.response.slice(0, 200);
@@ -583,6 +514,40 @@ export class LogWatcher {
       section.push(lines[i]);
     }
     return section;
+  }
+
+  // --- v0.4.6 ListPlayers helpers ---
+  private parseListPlayerLine(steamId: string, text: string): { money: number; gold: number; x: number; y: number; z: number } | null {
+    if (!text.includes(`steam=${steamId}`)) return null;
+    const mm = text.match(/\bmoney=([\d.+-]+)/);
+    const gm = text.match(/\bgold=([\d.+-]+)/);
+    const pm = text.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
+    return {
+      money: mm ? parseFloat(mm[1]) : 0,
+      gold: gm ? parseFloat(gm[1]) : 0,
+      x: pm ? parseFloat(pm[1]) : 0,
+      y: pm ? parseFloat(pm[2]) : 0,
+      z: pm ? parseFloat(pm[3]) : 0,
+    };
+  }
+
+  private async getListPlayerData(steamId: string): Promise<{ money: number; gold: number; x: number; y: number; z: number } | null> {
+    if (!this.rconClient) return null;
+    const r = await this.rconClient.sendCommand('ListPlayers');
+    if (!r.success || !r.response) return null;
+    for (const line of r.response.split('\n')) {
+      const d = this.parseListPlayerLine(steamId, line);
+      if (d) return d;
+    }
+    return null;
+  }
+
+  private async getPlayerFameFromWhois(steamId: string): Promise<number> {
+    if (!this.rconClient) return 0;
+    const r = await this.rconClient.sendCommand(`Whois ${steamId}`);
+    if (!r.success || !r.response) return 0;
+    const fm = r.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+    return fm ? parseFloat(fm[1]) : 0;
   }
 
   private startWatching(): void {

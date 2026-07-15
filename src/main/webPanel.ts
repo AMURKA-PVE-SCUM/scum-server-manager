@@ -1516,10 +1516,19 @@ export class WebPanel {
         const rewardedHours = Math.floor(lastReward ? (lastReward - sessionStart) / 3600000 + (this.ratingManager?.getPlayerTotalSeconds(player.steamId) || 0) / 3600 : 0);
         const hoursToReward = Math.max(0, elapsedHours - Math.floor(rewardedHours));
         if (hoursToReward >= 1) {
+          const sid = player.steamId;
+          let curMoney = player.balance || 0, curGold = player.gold || 0, curFame = 0;
+          if (cfg.hourlyFame > 0) {
+            const wr = await this.rconClient.sendCommand(`Whois ${sid}`);
+            if (wr.success && wr.response) {
+              const fm = wr.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+              if (fm) curFame = parseFloat(fm[1]);
+            }
+          }
           const cmds: string[] = [];
-          if (cfg.hourlyGold > 0) cmds.push(`#AddGold ${cfg.hourlyGold * hoursToReward} ${player.steamId}`);
-          if (cfg.hourlyMoney > 0) cmds.push(`#AddMoney ${cfg.hourlyMoney * hoursToReward} ${player.steamId}`);
-          if (cfg.hourlyFame > 0) cmds.push(`#AddFame ${cfg.hourlyFame * hoursToReward} ${player.steamId}`);
+          if (cfg.hourlyGold > 0) cmds.push(`#SetCurrencyBalance Gold ${Math.round(curGold + cfg.hourlyGold * hoursToReward)} ${sid}`);
+          if (cfg.hourlyMoney > 0) cmds.push(`#SetCurrencyBalance Normal ${Math.round(curMoney + cfg.hourlyMoney * hoursToReward)} ${sid}`);
+          if (cfg.hourlyFame > 0) cmds.push(`#SetFamePoints ${Math.round(curFame + cfg.hourlyFame * hoursToReward)} ${sid}`);
           for (const cmd of cmds) {
             await this.rconClient.sendCommand(cmd);
           }
@@ -1538,13 +1547,40 @@ export class WebPanel {
         const filtered = leaderboard.filter(e => !blacklist.includes(e.steamId));
         const topPlayers = filtered.slice(0, cfg.topCount);
         if (topPlayers.length > 0) {
+          // Fetch fresh ListPlayers data for all top players
+          const lpRes = await this.rconClient.sendCommand('ListPlayers');
+          const lpMap = new Map<string, { money: number; gold: number }>();
+          if (lpRes.success && lpRes.response) {
+            for (const line of lpRes.response.split('\n')) {
+              const sm = line.match(/steam=(\d{17})/);
+              if (sm) {
+                const mm = line.match(/\bmoney=([\d.+-]+)/);
+                const gm = line.match(/\bgold=([\d.+-]+)/);
+                lpMap.set(sm[1], {
+                  money: mm ? parseFloat(mm[1]) : 0,
+                  gold: gm ? parseFloat(gm[1]) : 0,
+                });
+              }
+            }
+          }
           for (let i = 0; i < topPlayers.length; i++) {
             const p = topPlayers[i];
+            const sid = p.steamId;
             const multiplier = cfg.topCount - i;
+            const bal = lpMap.get(sid) || { money: 0, gold: 0 };
+            let curFame = 0;
+            const needsFame = cfg.topFame > 0;
+            if (needsFame) {
+              const wr = await this.rconClient.sendCommand(`Whois ${sid}`);
+              if (wr.success && wr.response) {
+                const fm = wr.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+                if (fm) curFame = parseFloat(fm[1]);
+              }
+            }
             const cmds: string[] = [];
-            if (cfg.topGold > 0) cmds.push(`#AddGold ${cfg.topGold * multiplier} ${p.steamId}`);
-            if (cfg.topMoney > 0) cmds.push(`#AddMoney ${cfg.topMoney * multiplier} ${p.steamId}`);
-            if (cfg.topFame > 0) cmds.push(`#AddFame ${cfg.topFame * multiplier} ${p.steamId}`);
+            if (cfg.topGold > 0) cmds.push(`#SetCurrencyBalance Gold ${Math.round(bal.gold + cfg.topGold * multiplier)} ${sid}`);
+            if (cfg.topMoney > 0) cmds.push(`#SetCurrencyBalance Normal ${Math.round(bal.money + cfg.topMoney * multiplier)} ${sid}`);
+            if (cfg.topFame > 0) cmds.push(`#SetFamePoints ${Math.round(curFame + cfg.topFame * multiplier)} ${sid}`);
             for (const cmd of cmds) {
               await this.rconClient.sendCommand(cmd);
             }

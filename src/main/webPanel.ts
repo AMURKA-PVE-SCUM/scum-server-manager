@@ -1266,33 +1266,16 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Get current values from Whois
-      const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
-      console.log('[WebPanel] GiveCurrency Whois raw:', whoisRes.response);
-      if (!whoisRes.success || !whoisRes.response) {
-        return this.sendJson(res, { error: 'Whois command failed' }, 500);
-      }
+      // Use incremental commands — no need to read current balance
+      let cmd: string;
+      if (type === 'gold') cmd = `#AddGold ${amount} ${steamId}`;
+      else if (type === 'fame') cmd = `#AddFame ${amount} ${steamId}`;
+      else cmd = `#AddMoney ${amount} ${steamId}`;
 
-      let currentValue = 0;
-      const text = whoisRes.response;
-      const mGold = text.match(/\bgold[:\s]\s*([\d.]+)/i);
-      const mMoney = text.match(/\bmoney[:\s]\s*([\d.]+)/i);
-      const mFame = text.match(/\bfame[:\s]\s*([\d.]+)/i);
-      console.log('[WebPanel] GiveCurrency Whois parsed:', { mGold, mMoney, mFame });
-      if (type === 'gold' && mGold) currentValue = parseFloat(mGold[1]);
-      else if (type === 'fame' && mFame) currentValue = parseFloat(mFame[1]);
-      else if (type === 'money' && mMoney) currentValue = parseFloat(mMoney[1]);
-
-      const newValue = Math.round(currentValue + amount);
-      let currencyType: string;
-      if (type === 'gold') currencyType = 'Gold';
-      else if (type === 'fame') currencyType = 'Fame';
-      else currencyType = 'Normal';
-      const cmd = `#SetCurrencyBalance ${currencyType} ${newValue} ${steamId}`;
-      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, newValue, cmd });
+      console.log('[WebPanel] GiveCurrency:', { type, amount, cmd });
       const r = await this.rconClient.sendCommand(cmd);
       console.log('[WebPanel] GiveCurrency result:', JSON.stringify(r));
-      if (r.success) return this.sendJson(res, { success: true, response: `${currentValue} → ${newValue}` });
+      if (r.success) return this.sendJson(res, { success: true, response: `+${amount}` });
       this.sendJson(res, { error: r.response || 'Command failed' }, 500);
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);

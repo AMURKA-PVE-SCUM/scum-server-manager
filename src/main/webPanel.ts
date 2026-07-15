@@ -2462,7 +2462,7 @@ export class WebPanel {
               ownerName: rv.ownerName || null,
               customName: (rv.customName && rv.customName !== '-') ? rv.customName : null,
             }));
-            console.log('[WebPanel] Sending', vehicles.length, 'RCON vehicles to frontend');
+            console.log('[WebPanel] Sending', vehicles.length, 'RCON vehicles to frontend, first has ownerName:', vehicles[0]?.ownerName);
             this.sendJson(res, { vehicles });
             return;
           } else {

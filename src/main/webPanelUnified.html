@@ -3855,7 +3855,9 @@ async function loadMapVehicles() {
       headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
     });
     const data = await res.json();
+    console.log('[MapVehicles] API response:', JSON.stringify(data).slice(0, 500));
     mapVehicles = (data.vehicles || []).filter(v => v.x != null && v.y != null);
+    console.log('[MapVehicles] After filter:', mapVehicles.length, 'vehicles, first with owner:', mapVehicles.find(v => v.ownerName));
   } catch (e) {
     console.error('Map vehicles error:', e);
     mapVehicles = [];

@@ -2452,15 +2452,22 @@ export class WebPanel {
         try {
           const rconRes = await this.rconClient.sendCommand('ListSpawnedVehicles');
           if (rconRes.success && rconRes.response) {
+            console.log('[WebPanel] ListSpawnedVehicles raw:', rconRes.response);
             this.cachedRconVehicles = this.parseListSpawnedVehicles(rconRes.response);
-            // Build a lookup: entityId -> owner info from RCON
+            console.log('[WebPanel] Parsed RCON vehicles:', JSON.stringify(this.cachedRconVehicles));
+            // Build a lookup: try matching by entityId, then by asset+position
             const rconLookup = new Map<string, any>();
             for (const rv of this.cachedRconVehicles) {
               if (rv.entityId) rconLookup.set(String(rv.entityId), rv);
             }
             // Enrich DB vehicles with owner info
             rows = rows.map((v: any) => {
-              const rv = rconLookup.get(String(v.entityId));
+              let rv = rconLookup.get(String(v.entityId));
+              // Fallback: try matching by asset name if entityId not found
+              if (!rv && v.asset && this.cachedRconVehicles.length > 0) {
+                const assetKey = v.asset.replace(/^Vehicle:/, '').toLowerCase();
+                rv = this.cachedRconVehicles.find((r: any) => r.asset && r.asset.toLowerCase() === assetKey);
+              }
               if (rv) {
                 v.ownerName = rv.ownerName || null;
                 v.ownerSteamId = rv.ownerSteamId || null;
@@ -2469,8 +2476,12 @@ export class WebPanel {
               }
               return v;
             });
+          } else {
+            console.log('[WebPanel] ListSpawnedVehicles: no response');
           }
-        } catch {}
+        } catch (e: any) {
+          console.error('[WebPanel] ListSpawnedVehicles error:', e.message);
+        }
       }
       
       this.sendJson(res, { vehicles: rows || [] });
@@ -2485,23 +2496,65 @@ export class WebPanel {
     const vehicles: any[] = [];
     const lines = output.split('\n').map(l => l.trim()).filter(Boolean);
     for (const line of lines) {
-      // Try different output formats
-      // Format: "ID=123 | Asset=Vehicle:Car | Pos=(x,y,z) | Owner=Name(765611...)"
+      let entityId: number | null = null;
+      let asset: string | null = null;
+      let ownerName: string | null = null;
+      let ownerSteamId: string | null = null;
+      let x: number | null = null;
+      let y: number | null = null;
+      let customName: string | null = null;
+
+      // Try format: "ID=123 | Asset=Vehicle:Car | Pos=(x,y,z) | Owner=Name(id)"
       const m = line.match(/ID[=:]\s*(\d+)/i);
+      if (m) entityId = parseInt(m[1]);
+
       const assetM = line.match(/Asset[=:]\s*(?:Vehicle:)?([^\s|()]+)/i);
-      const ownerM = line.match(/Owner[=:]\s*(.+?)(?:\((\d{17})\))?(?:\s|$)/i);
+      if (assetM) asset = assetM[1];
+
+      const ownerM = line.match(/Owner[=:]\s*(.+?)(?:\((\d{17}|\d+)\))?(?:\s*$|\||$)/i);
+      if (ownerM) {
+        ownerName = ownerM[1].trim();
+        ownerSteamId = ownerM[2] || null;
+      }
+
       const posM = line.match(/Pos[=:]\s*\(?([\d.-]+),\s*([\d.-]+)/i);
-      const nameM = line.match(/Name[=:]\s*(.+?)(?:\s|$)/i);
-      if (m || assetM) {
-        vehicles.push({
-          entityId: m ? parseInt(m[1]) : null,
-          asset: assetM ? assetM[1] : null,
-          ownerName: ownerM ? ownerM[1].trim() : null,
-          ownerSteamId: ownerM ? (ownerM[2] || null) : null,
-          x: posM ? parseFloat(posM[1]) : null,
-          y: posM ? parseFloat(posM[2]) : null,
-          customName: nameM ? nameM[1].trim() : null,
-        });
+      if (posM) { x = parseFloat(posM[1]); y = parseFloat(posM[2]); }
+
+      const nameM = line.match(/Name[=:]\s*(.+?)(?:\s*$|\|)/i);
+      if (nameM) customName = nameM[1].trim();
+
+      // Format: "123: Vehicle_Car at (x,y,z) owner PlayerName(76561198...)"
+      if (!entityId) {
+        const m2 = line.match(/^(\d+)[:.\s]\s*(.+?)(?:\s+at\s+|,)/i);
+        if (m2) { entityId = parseInt(m2[1]); if (!asset) asset = m2[2].trim(); }
+      }
+      if (!posM) {
+        const p2 = line.match(/\(([\d.-]+),\s*([\d.-]+)/);
+        if (p2) { x = parseFloat(p2[1]); y = parseFloat(p2[2]); }
+      }
+      if (!ownerM) {
+        const o2 = line.match(/owner\s+(.+?)(?:\((\d{17}|\d+)\))?\s*$/i);
+        if (o2) { ownerName = o2[1].trim(); ownerSteamId = o2[2] || null; }
+      }
+      // Format: "Num | Asset | Pos | Owner" (table)
+      if (!entityId && !assetM) {
+        const parts = line.split('|').map(p => p.trim());
+        if (parts.length >= 2) {
+          if (!entityId) { const idn = parseInt(parts[0]); if (!isNaN(idn)) entityId = idn; }
+          if (!asset && parts[1]) asset = parts[1].replace(/^Vehicle:/, '');
+          if (!x && parts.length >= 3) {
+            const c3 = parts[2].match(/([\d.-]+),\s*([\d.-]+)/);
+            if (c3) { x = parseFloat(c3[1]); y = parseFloat(c3[2]); }
+          }
+          if (!ownerName && parts.length >= 4) {
+            const o4 = parts[3].match(/(.+?)(?:\((\d{17}|\d+)\))?\s*$/);
+            if (o4) { ownerName = o4[1].trim(); ownerSteamId = o4[2] || null; }
+          }
+        }
+      }
+
+      if (entityId || asset) {
+        vehicles.push({ entityId, asset, ownerName, ownerSteamId, x, y, customName });
       }
     }
     return vehicles;

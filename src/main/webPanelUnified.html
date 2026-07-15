@@ -1183,6 +1183,15 @@ const translations = {
     'playerCard.givingStarterPack': 'Выдаю стартовый набор...',
     'playerCard.skillsMaxed': 'Все навыки прокачаны!',
     'playerCard.location': 'Координаты',
+    'playerCard.whoisTitle': 'Досье (Whois)',
+    'playerCard.kills': 'Убийств',
+    'playerCard.deaths': 'Смертей',
+    'playerCard.kd': 'K/D',
+    'playerCard.puppetKills': 'Убито зомби',
+    'playerCard.headshotKills': 'Убито в голову',
+    'playerCard.playtime': 'Время онлайн',
+    'playerCard.squad': 'Отряд',
+    'playerCard.vehicles': 'Транспорт',
     'playerCard.cargoDropped': '📦 Карго сброшено!',
     'login.title': '🎮 SCUM Server Manager',
     'login.username': 'Имя пользователя',
@@ -1487,6 +1496,15 @@ const translations = {
     'playerCard.givingStarterPack': 'Giving starter pack...',
     'playerCard.skillsMaxed': 'All skills maxed!',
     'playerCard.location': 'Location',
+    'playerCard.whoisTitle': 'Dossier (Whois)',
+    'playerCard.kills': 'Kills',
+    'playerCard.deaths': 'Deaths',
+    'playerCard.kd': 'K/D',
+    'playerCard.puppetKills': 'Puppet Kills',
+    'playerCard.headshotKills': 'Headshot Kills',
+    'playerCard.playtime': 'Playtime',
+    'playerCard.squad': 'Squad',
+    'playerCard.vehicles': 'Vehicles',
     'playerCard.cargoDropped': '📦 Cargo dropped!',
     'login.title': '🎮 SCUM Server Manager',
     'login.username': 'Username',
@@ -2549,10 +2567,13 @@ async function loadPlayers() {
 async function showPlayerCard(steamId, playerName) {
   try {
     // Fetch player details from database
-    const res = await fetch(`/api/players/${steamId}`, {
-      headers: {'Authorization': 'Bearer ' + authToken}
-    });
-    const data = await res.json();
+    const [dbRes, whoisRes] = await Promise.all([
+      fetch(`/api/players/${steamId}`, { headers: {'Authorization': 'Bearer ' + authToken} }),
+      fetch(`/api/players/whois/${steamId}`, { headers: {'Authorization': 'Bearer ' + authToken} })
+    ]);
+    const data = await dbRes.json();
+    const whoisData = await whoisRes.json();
+    const whois = whoisData?.success ? whoisData.whois : null;
     
     // Use cached ListPlayers data (fresh every 10s) for balances
     const cachedPlayer = (cachedPlayersList || []).find(p => p.steamId === steamId);
@@ -2565,10 +2586,10 @@ async function showPlayerCard(steamId, playerName) {
     
     // Build stats grid
     const statsGrid = document.getElementById('playerStatsGrid');
-    if (cachedPlayer || data.player) {
-      const famePoints = cachedPlayer?.fame ?? data.player?.famePoints ?? 0;
-      const normalBalance = cachedPlayer?.balance ?? data.player?.normalBalance ?? data.player?.walletBalance ?? 0;
-      const goldBalance = cachedPlayer?.gold ?? data.player?.goldBalance ?? 0;
+    if (cachedPlayer || data.player || whois) {
+      const famePoints = cachedPlayer?.fame ?? data.player?.famePoints ?? whois?.fame ?? 0;
+      const normalBalance = cachedPlayer?.balance ?? data.player?.normalBalance ?? data.player?.walletBalance ?? whois?.money ?? 0;
+      const goldBalance = cachedPlayer?.gold ?? data.player?.goldBalance ?? whois?.gold ?? 0;
       
       const locHtml = playerLoc
         ? `<div class="stat-box" style="grid-column:1/-1">
@@ -2576,6 +2597,24 @@ async function showPlayerCard(steamId, playerName) {
             <div class="stat-box-value" style="font-size:13px">X=${Math.round(playerLoc.x)} Y=${Math.round(playerLoc.y)} Z=${Math.round(playerLoc.z)}</div>
           </div>`
         : '';
+
+      let whoisHtml = '';
+      if (whois) {
+        const whoisRows = [];
+        if (whois.kills != null) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.kills')}</div><div class="stat-box-value" style="color:#f85149">${whois.kills.toLocaleString()}</div></div>`);
+        if (whois.deaths != null) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.deaths')}</div><div class="stat-box-value">${whois.deaths.toLocaleString()}</div></div>`);
+        if (whois.kd != null) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.kd')}</div><div class="stat-box-value" style="color:${whois.kd >= 1 ? '#3fb950' : '#f85149'}">${whois.kd.toFixed(2)}</div></div>`);
+        if (whois.puppetKills != null) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.puppetKills')}</div><div class="stat-box-value">${whois.puppetKills.toLocaleString()}</div></div>`);
+        if (whois.headshotKills != null) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.headshotKills')}</div><div class="stat-box-value">${whois.headshotKills.toLocaleString()}</div></div>`);
+        if (whois.playtime) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.playtime')}</div><div class="stat-box-value" style="font-size:12px">${whois.playtime}</div></div>`);
+        if (whois.squad && whois.squad !== 'None' && whois.squad !== '') whoisRows.push(`<div class="stat-box" style="grid-column:1/-1"><div class="stat-box-label">${t('playerCard.squad')}</div><div class="stat-box-value" style="color:#58a6ff">${whois.squad}</div></div>`);
+        if (whois.vehicles && whois.vehicles.length > 0) {
+          whoisRows.push(`<div class="stat-box" style="grid-column:1/-1"><div class="stat-box-label">${t('playerCard.vehicles')}</div><div class="stat-box-value" style="font-size:11px;line-height:1.6">${whois.vehicles.map(v => '🚗 ' + v).join('<br>')}</div></div>`);
+        }
+        if (whoisRows.length > 0) {
+          whoisHtml = `<div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;margin-top:4px;font-size:13px;color:var(--muted);margin-bottom:4px">📋 ${t('playerCard.whoisTitle')}</div>${whoisRows.join('')}`;
+        }
+      }
 
       statsGrid.innerHTML = `
         <div class="stat-box">
@@ -2592,9 +2631,10 @@ async function showPlayerCard(steamId, playerName) {
         </div>
         <div class="stat-box">
           <div class="stat-box-label">${t('playerCard.lastLogin')}</div>
-          <div class="stat-box-value" style="font-size:12px">${data.player.lastLogin ? new Date(data.player.lastLogin * 1000).toLocaleString() : t('data.notAvailable')}</div>
+          <div class="stat-box-value" style="font-size:12px">${data.player?.lastLogin ? new Date(data.player.lastLogin * 1000).toLocaleString() : t('data.notAvailable')}</div>
         </div>
         ${locHtml}
+        ${whoisHtml}
       `;
     } else {
       statsGrid.innerHTML = '<p style="color:var(--muted);text-align:center;grid-column:1/-1">' + t('playerCard.noDbInfo') + '</p>';
@@ -3561,15 +3601,27 @@ function renderMapMarkers() {
       ctx.lineWidth = Math.max(0.5, 1 / mapZoom);
       ctx.strokeRect(c.px - vs / 2, c.py - vs / 2, vs, vs);
       if (showLabels && mapZoom >= labelMinZoom) {
-        const label = v.alias || v.asset || '';
-        if (label) {
-          ctx.fillStyle = 'rgba(0,0,0,0.6)';
-          ctx.font = `${Math.max(9, 10 / mapZoom)}px Consolas, monospace`;
+        const label = v.customName || v.alias || v.asset || v.rconAsset || '';
+        const ownerLabel = v.ownerName || '';
+        if (label || ownerLabel) {
           ctx.textAlign = 'center';
-          roundRect(ctx, c.px - ctx.measureText(label).width / 2 - 3, c.py + vs / 2 + 1, ctx.measureText(label).width + 6, 12, 2);
-          ctx.fill();
-          ctx.fillStyle = '#aaddff';
-          ctx.fillText(label, c.px, c.py + vs / 2 + 10);
+          if (label) {
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.font = `${Math.max(9, 10 / mapZoom)}px Consolas, monospace`;
+            roundRect(ctx, c.px - ctx.measureText(label).width / 2 - 3, c.py + vs / 2 + 1, ctx.measureText(label).width + 6, 12, 2);
+            ctx.fill();
+            ctx.fillStyle = '#aaddff';
+            ctx.fillText(label, c.px, c.py + vs / 2 + 10);
+          }
+          if (ownerLabel) {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            const ownerText = v.ownerSteamId ? ownerLabel + ' (' + v.ownerSteamId.slice(-4) + ')' : ownerLabel;
+            ctx.font = `${Math.max(8, 9 / mapZoom)}px Consolas, monospace`;
+            roundRect(ctx, c.px - ctx.measureText(ownerText).width / 2 - 2, c.py + vs / 2 + (label ? 13 : 1), ctx.measureText(ownerText).width + 4, 10, 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffd700';
+            ctx.fillText(ownerText, c.px, c.py + vs / 2 + (label ? 22 : 9));
+          }
         }
       }
     }

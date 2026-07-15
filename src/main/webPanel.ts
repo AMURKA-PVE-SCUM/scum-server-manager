@@ -29,6 +29,7 @@ export class WebPanel {
   private onlinePlayers = new Map<string, OnlinePlayer>();
   private playersPollInterval: NodeJS.Timeout | null = null;
   private cachedPlayers: OnlinePlayer[] = [];
+  private cachedRconVehicles: any[] = [];
   private rconCredentials: { host: string; port: number; password: string } | null = null;
   private readonly PLAYERS_POLL_INTERVAL = 3000;
   private packsConfig: PackConfig = {
@@ -472,6 +473,9 @@ export class WebPanel {
           this.handleRconStatus(res);
         } else if (url === '/api/players' && method === 'GET') {
           this.handleOnlinePlayers(res);
+        } else if (url.startsWith('/api/players/whois/') && method === 'GET') {
+          const steamId = url.split('/')[4];
+          this.handlePlayerWhois(steamId, res);
         } else if (url.startsWith('/api/players/') && method === 'GET') {
           // /api/players/:steamId - get player details
           const steamId = url.split('/')[3];
@@ -1091,6 +1095,48 @@ export class WebPanel {
       this.sendJson(res, { success: false, error: e.message }, 500);
     } finally {
       dbReader.close();
+    }
+  }
+
+  private async handlePlayerWhois(steamId: string, res: http.ServerResponse): Promise<void> {
+    if (!this.rconClient || !this.rconClient.isConnected()) {
+      this.sendJson(res, { success: false, error: 'RCON not connected' });
+      return;
+    }
+    try {
+      const result = await this.rconClient.sendCommand(`Whois ${steamId}`);
+      if (!result.success || !result.response) {
+        this.sendJson(res, { success: false, error: 'Whois command failed' });
+        return;
+      }
+      const text = result.response;
+      const whois: Record<string, any> = {};
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        const kv = line.match(/^([^:]+):\s*(.+)$/);
+        if (!kv) continue;
+        const key = kv[1].trim().toLowerCase();
+        const val = kv[2].trim();
+        if (key === 'name') whois.name = val;
+        else if (key === 'steam id' || key === 'steamid') whois.steamId = val;
+        else if (key === 'fame') whois.fame = parseFloat(val) || 0;
+        else if (key === 'money') whois.money = parseFloat(val) || 0;
+        else if (key === 'gold') whois.gold = parseFloat(val) || 0;
+        else if (key === 'kills') whois.kills = parseInt(val) || 0;
+        else if (key === 'deaths') whois.deaths = parseInt(val) || 0;
+        else if (key === 'k-d' || key === 'kd') whois.kd = parseFloat(val) || 0;
+        else if (key.includes('puppet') && key.includes('kill')) whois.puppetKills = parseInt(val) || 0;
+        else if (key.includes('headshot') || key.includes('head')) whois.headshotKills = parseInt(val) || 0;
+        else if (key === 'playtime' || key === 'time played') whois.playtime = val;
+        else if (key === 'squad') whois.squad = val;
+        else if (key.includes('vehicle')) {
+          if (!whois.vehicles) whois.vehicles = [];
+          whois.vehicles.push(val);
+        }
+      }
+      this.sendJson(res, { success: true, whois });
+    } catch (e: any) {
+      this.sendJson(res, { success: false, error: e.message });
     }
   }
 
@@ -2399,13 +2445,66 @@ export class WebPanel {
         this.sendJson(res, { vehicles: [] });
         return;
       }
-      const rows = dbReader.getVehicles();
+      let rows = dbReader.getVehicles() || [];
+      
+      // Try to enrich with RCON vehicle data (owner names)
+      if (this.rconClient && this.rconClient.isConnected()) {
+        try {
+          const rconRes = await this.rconClient.sendCommand('ListSpawnedVehicles');
+          if (rconRes.success && rconRes.response) {
+            this.cachedRconVehicles = this.parseListSpawnedVehicles(rconRes.response);
+            // Build a lookup: entityId -> owner info from RCON
+            const rconLookup = new Map<string, any>();
+            for (const rv of this.cachedRconVehicles) {
+              if (rv.entityId) rconLookup.set(String(rv.entityId), rv);
+            }
+            // Enrich DB vehicles with owner info
+            rows = rows.map((v: any) => {
+              const rv = rconLookup.get(String(v.entityId));
+              if (rv) {
+                v.ownerName = rv.ownerName || null;
+                v.ownerSteamId = rv.ownerSteamId || null;
+                v.customName = rv.customName || null;
+                v.rconAsset = rv.asset || null;
+              }
+              return v;
+            });
+          }
+        } catch {}
+      }
+      
       this.sendJson(res, { vehicles: rows || [] });
     } catch (e: any) {
       this.sendJson(res, { error: e.message, vehicles: [] }, 500);
     } finally {
       dbReader.close();
     }
+  }
+  
+  private parseListSpawnedVehicles(output: string): any[] {
+    const vehicles: any[] = [];
+    const lines = output.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      // Try different output formats
+      // Format: "ID=123 | Asset=Vehicle:Car | Pos=(x,y,z) | Owner=Name(765611...)"
+      const m = line.match(/ID[=:]\s*(\d+)/i);
+      const assetM = line.match(/Asset[=:]\s*(?:Vehicle:)?([^\s|()]+)/i);
+      const ownerM = line.match(/Owner[=:]\s*(.+?)(?:\((\d{17})\))?(?:\s|$)/i);
+      const posM = line.match(/Pos[=:]\s*\(?([\d.-]+),\s*([\d.-]+)/i);
+      const nameM = line.match(/Name[=:]\s*(.+?)(?:\s|$)/i);
+      if (m || assetM) {
+        vehicles.push({
+          entityId: m ? parseInt(m[1]) : null,
+          asset: assetM ? assetM[1] : null,
+          ownerName: ownerM ? ownerM[1].trim() : null,
+          ownerSteamId: ownerM ? (ownerM[2] || null) : null,
+          x: posM ? parseFloat(posM[1]) : null,
+          y: posM ? parseFloat(posM[2]) : null,
+          customName: nameM ? nameM[1].trim() : null,
+        });
+      }
+    }
+    return vehicles;
   }
   
   private async handleFlags(res: http.ServerResponse): Promise<void> {

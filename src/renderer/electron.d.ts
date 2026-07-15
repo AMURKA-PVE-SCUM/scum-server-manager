@@ -88,6 +88,7 @@ interface ElectronAPI {
     sendCommand: (command: string) => Promise<any>;
     status: () => Promise<any>;
     saveConfig: (config: any) => Promise<void>;
+    listPlayers: () => Promise<{ players: any[] }>;
   };
 }
 

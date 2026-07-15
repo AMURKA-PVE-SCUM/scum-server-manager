@@ -488,6 +488,64 @@ function registerIpcHandlers(): void {
   ipcMain.handle('rcon:sendCommand', async (_event, command) => {
     return await rconClient.sendCommand(command);
   });
+  ipcMain.handle('rcon:listPlayers', async () => {
+    if (!rconClient.isConnected()) return { players: [] };
+    try {
+      const result = await rconClient.sendCommand('ListPlayers');
+      if (!result.success || !result.response) return { players: [] };
+      const output = result.response;
+      const players: any[] = [];
+      const lines = output.split('\n');
+      let currentPlayer: any = null;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const nameMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+        if (nameMatch) {
+          if (currentPlayer && currentPlayer.steamId && currentPlayer.name) {
+            players.push({
+              steamId: currentPlayer.steamId,
+              name: currentPlayer.name,
+              connectedAt: currentPlayer.connectedAt.toISOString(),
+              duration: Math.floor((Date.now() - currentPlayer.connectedAt.getTime()) / 1000),
+              location: currentPlayer.location || null,
+              fame: currentPlayer.fame ?? null,
+              balance: currentPlayer.balance ?? null,
+              gold: currentPlayer.gold ?? null,
+            });
+          }
+          currentPlayer = { name: nameMatch[1].trim(), connectedAt: new Date() };
+          continue;
+        }
+        if (!currentPlayer) continue;
+        const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
+        if (steamMatch) { currentPlayer.steamId = steamMatch[1]; continue; }
+        const locMatch = trimmed.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
+        if (locMatch) { currentPlayer.location = { x: parseFloat(locMatch[1]), y: parseFloat(locMatch[2]), z: parseFloat(locMatch[3]) }; continue; }
+        const fameMatch = trimmed.match(/^Fame:\s*([\d.+-]+)/);
+        if (fameMatch) { currentPlayer.fame = parseFloat(fameMatch[1]); continue; }
+        const balanceMatch = trimmed.match(/^Account balance:\s*([\d.+-]+)/);
+        if (balanceMatch) { currentPlayer.balance = parseFloat(balanceMatch[1]); continue; }
+        const goldMatch = trimmed.match(/^Gold balance:\s*([\d.+-]+)/);
+        if (goldMatch) { currentPlayer.gold = parseFloat(goldMatch[1]); continue; }
+      }
+      if (currentPlayer && currentPlayer.steamId && currentPlayer.name) {
+        players.push({
+          steamId: currentPlayer.steamId,
+          name: currentPlayer.name,
+          connectedAt: currentPlayer.connectedAt.toISOString(),
+          duration: Math.floor((Date.now() - currentPlayer.connectedAt.getTime()) / 1000),
+          location: currentPlayer.location || null,
+          fame: currentPlayer.fame ?? null,
+          balance: currentPlayer.balance ?? null,
+          gold: currentPlayer.gold ?? null,
+        });
+      }
+      return { players };
+    } catch (e: any) {
+      console.error('[RCON] listPlayers error:', e.message);
+      return { players: [] };
+    }
+  });
   ipcMain.handle('rcon:status', () => ({
     connected: rconClient.isConnected(),
     config: rconClient.getConfig(),

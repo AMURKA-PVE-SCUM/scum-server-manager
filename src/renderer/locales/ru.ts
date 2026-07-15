@@ -153,7 +153,7 @@ const ru = {
     steamId: 'Steam ID',
     fame: 'Фама',
     money: 'Деньги',
-    lastLogin: 'Последний вход',
+    location: 'Локация',
     noPlayers: 'Нет игроков',
     wallet: 'Кошелёк',
     gold: 'Золото',

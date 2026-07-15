@@ -153,7 +153,7 @@ const en = {
     steamId: 'Steam ID',
     fame: 'Fame',
     money: 'Money',
-    lastLogin: 'Last Login',
+    location: 'Location',
     noPlayers: 'No players',
     wallet: 'Wallet',
     gold: 'Gold',

@@ -29,6 +29,7 @@ export class WebPanel {
   private onlinePlayers = new Map<string, OnlinePlayer>();
   private playersPollInterval: NodeJS.Timeout | null = null;
   private cachedPlayers: OnlinePlayer[] = [];
+  private trackedCurrency = new Map<string, { money: number; gold: number; fame: number }>();
   private cachedRconVehicles: any[] = [];
   private rconCredentials: { host: string; port: number; password: string } | null = null;
   private readonly PLAYERS_POLL_INTERVAL = 3000;
@@ -1266,16 +1267,49 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Use incremental commands — no need to read current balance
-      let cmd: string;
-      if (type === 'gold') cmd = `#AddGold ${amount} ${steamId}`;
-      else if (type === 'fame') cmd = `#AddFame ${amount} ${steamId}`;
-      else cmd = `#AddMoney ${amount} ${steamId}`;
+      // Initialize local tracking from Whois if first time for this player
+      if (!this.trackedCurrency.has(steamId)) {
+        const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
+        if (!whoisRes.success || !whoisRes.response) {
+          return this.sendJson(res, { error: 'Whois command failed' }, 500);
+        }
+        const text = whoisRes.response;
+        const gm = text.match(/\bgold[:\s]\s*([\d.]+)/i);
+        const mm = text.match(/\bmoney[:\s]\s*([\d.]+)/i);
+        const fm = text.match(/\bfame[:\s]\s*([\d.]+)/i);
+        this.trackedCurrency.set(steamId, {
+          money: mm ? parseFloat(mm[1]) : 0,
+          gold: gm ? parseFloat(gm[1]) : 0,
+          fame: fm ? parseFloat(fm[1]) : 0,
+        });
+      }
 
-      console.log('[WebPanel] GiveCurrency:', { type, amount, cmd });
+      const tracked = this.trackedCurrency.get(steamId)!;
+      let currentValue: number;
+      let newValue: number;
+      let cmd: string;
+
+      if (type === 'gold') {
+        currentValue = tracked.gold;
+        newValue = currentValue + amount;
+        cmd = `#SetCurrencyBalance Gold ${newValue} ${steamId}`;
+        tracked.gold = newValue;
+      } else if (type === 'fame') {
+        currentValue = tracked.fame;
+        newValue = currentValue + amount;
+        cmd = `#SetFamePoints ${newValue} ${steamId}`;
+        tracked.fame = newValue;
+      } else {
+        currentValue = tracked.money;
+        newValue = currentValue + amount;
+        cmd = `#SetCurrencyBalance Normal ${newValue} ${steamId}`;
+        tracked.money = newValue;
+      }
+
+      console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, newValue, cmd });
       const r = await this.rconClient.sendCommand(cmd);
       console.log('[WebPanel] GiveCurrency result:', JSON.stringify(r));
-      if (r.success) return this.sendJson(res, { success: true, response: `+${amount}` });
+      if (r.success) return this.sendJson(res, { success: true, response: `${currentValue} + ${amount} = ${newValue}` });
       this.sendJson(res, { error: r.response || 'Command failed' }, 500);
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);

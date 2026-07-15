@@ -1258,29 +1258,31 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // For fame: use incremental (new format doesn't have fame=)
-      if (type === 'fame') {
-        const cmd = `#AddFame ${amount} ${steamId}`;
-        const r = await this.rconClient.sendCommand(cmd);
-        if (r.success) return this.sendJson(res, { success: true, response: `+${amount}` });
-        return this.sendJson(res, { error: r.response || 'AddFame failed' }, 500);
-      }
-
-      // For money/gold: read current from ListPlayers (new format), then set absolute
-      const listRes = await this.rconClient.sendCommand('ListPlayers');
-      if (!listRes.success || !listRes.response) {
-        return this.sendJson(res, { error: 'Failed to query player data' }, 500);
+      // Get current values from Whois (works in v0.4.6 for money/gold/fame)
+      const whoisRes = await this.rconClient.sendCommand(`Whois ${steamId}`);
+      if (!whoisRes.success || !whoisRes.response) {
+        return this.sendJson(res, { error: 'Whois command failed' }, 500);
       }
 
       let currentValue = 0;
-      const line = listRes.response.split('\n').find(l => l.includes(`steam=${steamId}`));
-      if (line) {
-        const mm = line.match(type === 'gold' ? /gold=([\d.+-]+)/ : /money=([\d.+-]+)/);
-        if (mm) currentValue = parseFloat(mm[1]);
+      const lines = whoisRes.response.split('\n').map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        const kv = line.match(/^([^:]+):\s*(.+)$/);
+        if (!kv) continue;
+        const key = kv[1].trim().toLowerCase();
+        const val = kv[2].trim();
+        if ((type === 'gold' && key === 'gold') ||
+            (type === 'fame' && key === 'fame') ||
+            (type === 'money' && key === 'money')) {
+          currentValue = parseFloat(val) || 0;
+        }
       }
 
       const newValue = Math.round(currentValue + amount);
-      const currencyType = type === 'gold' ? 'Gold' : 'Normal';
+      let currencyType: string;
+      if (type === 'gold') currencyType = 'Gold';
+      else if (type === 'fame') currencyType = 'Fame';
+      else currencyType = 'Normal';
       const cmd = `#SetCurrencyBalance ${currencyType} ${newValue} ${steamId}`;
       console.log('[WebPanel] GiveCurrency:', { type, amount, currentValue, newValue, cmd });
       const r = await this.rconClient.sendCommand(cmd);

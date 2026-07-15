@@ -572,3 +572,14 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (mainWindow === null) createWindow(); });
+app.on('before-quit', () => {
+  if (restartScheduler) clearInterval(restartScheduler);
+  if (backupTimer) clearInterval(backupTimer);
+  if (consoleWatcher) consoleWatcher.close();
+  if (logWatcher) logWatcher.destroy();
+  if (scumDatabase) scumDatabase.close();
+  if (rconClient) rconClient.disconnect();
+  webPanel.stop();
+  ftpServer.stop();
+  wargmManager.close();
+});

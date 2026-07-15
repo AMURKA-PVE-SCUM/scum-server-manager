@@ -255,6 +255,7 @@ function renderPlayers(){
         <button class="btn btn-warning" onclick="openAttrModal('${p.steamId}')">⚡ Атрибуты</button>
         <button class="btn btn-primary" onclick="playerAction('${p.steamId}','godMode',{enabled:true})">🛡 God</button>
         <button class="btn btn-danger" onclick="playerAction('${p.steamId}','suicide',{})">💀 Kill</button>
+        <button class="btn" onclick="playerAction('${p.steamId}','unstuck',{})">🆘 Unstuck</button>
         <button class="btn" onclick="playerAction('${p.steamId}','silence',{})">🔇 Silence</button>
       </td>
     </tr>

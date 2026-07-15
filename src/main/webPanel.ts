@@ -86,6 +86,7 @@ export class WebPanel {
   private calibrationActive = false;
   private calibrationIndex = 0;
   private calibrationSteamId = '';
+  private calibrationBusy = false;
   private readonly CALIBRATION_POINTS_COUNT = 125;
   private rewardTimer: NodeJS.Timeout | null = null;
   private rewardsDataPath = '';
@@ -1044,11 +1045,9 @@ export class WebPanel {
   }
 
   private async handlePlayerDetails(steamId: string, res: http.ServerResponse): Promise<void> {
+    const scumDb = require('./scumDatabase');
+    const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
     try {
-      // Get player info from database
-      const scumDb = require('./scumDatabase');
-      const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
-      
       // Get basic player info
       const playerInfo = dbReader.getPlayerBySteamId(steamId);
       
@@ -1090,6 +1089,8 @@ export class WebPanel {
     } catch (e: any) {
       console.error('[WebPanel] Error getting player details:', e);
       this.sendJson(res, { success: false, error: e.message }, 500);
+    } finally {
+      dbReader.close();
     }
   }
 
@@ -1651,74 +1652,85 @@ export class WebPanel {
     this.rconClient!.sendCommand(cmd).catch(() => {});
   }
 
+  private withCalibrationLock<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.calibrationBusy) return Promise.reject(new Error('Calibration busy'));
+    this.calibrationBusy = true;
+    return fn().finally(() => { this.calibrationBusy = false; });
+  }
+
   private async handleCalibrateStart(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    try {
-      if (!this.rconClient || !this.rconClient.isConnected()) {
-        this.sendJson(res, { error: 'RCON not connected' }, 500); return;
-      }
-      const body = await this.readBody(req);
-      const { steamId } = JSON.parse(body);
-      if (!steamId || steamId.length < 10) {
-        this.sendJson(res, { error: 'Invalid SteamID' }, 500); return;
-      }
-      this.calibrationActive = true;
-      this.calibrationIndex = 0;
-      this.calibrationSteamId = steamId;
-      this.calibrateTeleportToPoint(0);
-      this.sendJson(res, { success: true, index: 0, total: this.CALIBRATION_POINTS_COUNT });
-    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+    return this.withCalibrationLock(async () => {
+      try {
+        if (!this.rconClient || !this.rconClient.isConnected()) {
+          this.sendJson(res, { error: 'RCON not connected' }, 500); return;
+        }
+        const body = await this.readBody(req);
+        const { steamId } = JSON.parse(body);
+        if (!steamId || steamId.length < 10) {
+          this.sendJson(res, { error: 'Invalid SteamID' }, 500); return;
+        }
+        this.calibrationActive = true;
+        this.calibrationIndex = 0;
+        this.calibrationSteamId = steamId;
+        this.calibrateTeleportToPoint(0);
+        this.sendJson(res, { success: true, index: 0, total: this.CALIBRATION_POINTS_COUNT });
+      } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+    }).catch((e) => this.sendJson(res, { error: e.message }, 500));
   }
-
+  
   private async handleCalibrateRecord(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    try {
-      if (!this.calibrationActive) {
-        this.sendJson(res, { error: 'Calibration not active' }, 500); return;
-      }
-      const points = this.generateCalibrationPoints();
-      const idx = this.calibrationIndex;
-      if (idx >= points.length) {
-        this.calibrationActive = false;
-        this.sendJson(res, { error: 'All points calibrated' }, 500); return;
-      }
-      const point = points[idx];
-      const player = this.cachedPlayers.find(p => p.steamId === this.calibrationSteamId);
-      if (!player || !player.location) {
-        this.sendJson(res, { error: 'Player not found or location unknown. Are you online?' }, 500); return;
-      }
-      const z = Math.round(player.location.z);
-      // Remove existing calibration for this point if any
-      this.calibrationData = this.calibrationData.filter(p => !(Math.abs(p.x - point.x) < 1000 && Math.abs(p.y - point.y) < 1000));
-      this.calibrationData.push({ x: point.x, y: point.y, z, sector: point.sector });
-      this.saveCalibrationData();
-
-      const nextIdx = idx + 1;
-      if (nextIdx >= points.length) {
-        this.calibrationActive = false;
-        this.sendJson(res, { success: true, done: true, index: nextIdx, total: points.length, z });
-        return;
-      }
-      this.calibrationIndex = nextIdx;
-      this.calibrateTeleportToPoint(nextIdx);
-      this.sendJson(res, { success: true, done: false, index: nextIdx, total: points.length, z });
-    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+    return this.withCalibrationLock(async () => {
+      try {
+        if (!this.calibrationActive) {
+          this.sendJson(res, { error: 'Calibration not active' }, 500); return;
+        }
+        const points = this.generateCalibrationPoints();
+        const idx = this.calibrationIndex;
+        if (idx >= points.length) {
+          this.calibrationActive = false;
+          this.sendJson(res, { error: 'All points calibrated' }, 500); return;
+        }
+        const point = points[idx];
+        const player = this.cachedPlayers.find(p => p.steamId === this.calibrationSteamId);
+        if (!player || !player.location) {
+          this.sendJson(res, { error: 'Player not found or location unknown. Are you online?' }, 500); return;
+        }
+        const z = Math.round(player.location.z);
+        this.calibrationData = this.calibrationData.filter(p => !(Math.abs(p.x - point.x) < 1000 && Math.abs(p.y - point.y) < 1000));
+        this.calibrationData.push({ x: point.x, y: point.y, z, sector: point.sector });
+        this.saveCalibrationData();
+  
+        const nextIdx = idx + 1;
+        if (nextIdx >= points.length) {
+          this.calibrationActive = false;
+          this.sendJson(res, { success: true, done: true, index: nextIdx, total: points.length, z });
+          return;
+        }
+        this.calibrationIndex = nextIdx;
+        this.calibrateTeleportToPoint(nextIdx);
+        this.sendJson(res, { success: true, done: false, index: nextIdx, total: points.length, z });
+      } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+    }).catch((e) => this.sendJson(res, { error: e.message }, 500));
   }
-
+  
   private async handleCalibrateSkip(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    try {
-      if (!this.calibrationActive) {
-        this.sendJson(res, { error: 'Calibration not active' }, 500); return;
-      }
-      const points = this.generateCalibrationPoints();
-      const nextIdx = this.calibrationIndex + 1;
-      if (nextIdx >= points.length) {
-        this.calibrationActive = false;
-        this.sendJson(res, { success: true, done: true, index: nextIdx, total: points.length });
-        return;
-      }
-      this.calibrationIndex = nextIdx;
-      this.calibrateTeleportToPoint(nextIdx);
-      this.sendJson(res, { success: true, done: false, index: nextIdx, total: points.length });
-    } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+    return this.withCalibrationLock(async () => {
+      try {
+        if (!this.calibrationActive) {
+          this.sendJson(res, { error: 'Calibration not active' }, 500); return;
+        }
+        const points = this.generateCalibrationPoints();
+        const nextIdx = this.calibrationIndex + 1;
+        if (nextIdx >= points.length) {
+          this.calibrationActive = false;
+          this.sendJson(res, { success: true, done: true, index: nextIdx, total: points.length });
+          return;
+        }
+        this.calibrationIndex = nextIdx;
+        this.calibrateTeleportToPoint(nextIdx);
+        this.sendJson(res, { success: true, done: false, index: nextIdx, total: points.length });
+      } catch (e: any) { this.sendJson(res, { error: e.message }, 500); }
+    }).catch((e) => this.sendJson(res, { error: e.message }, 500));
   }
 
   private handleCalibrateStatus(res: http.ServerResponse): void {
@@ -1921,7 +1933,6 @@ export class WebPanel {
 
     req.on('close', () => {
       clearInterval(pollTimer);
-      this.chatOffsets.clear();
     });
   }
 
@@ -2381,32 +2392,36 @@ export class WebPanel {
   }
 
   private async handleVehicles(res: http.ServerResponse): Promise<void> {
+    const scumDb = require('./scumDatabase');
+    const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
     try {
       if (!this.serverPath) {
         this.sendJson(res, { vehicles: [] });
         return;
       }
-      const scumDb = require('./scumDatabase');
-      const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
       const rows = dbReader.getVehicles();
       this.sendJson(res, { vehicles: rows || [] });
     } catch (e: any) {
       this.sendJson(res, { error: e.message, vehicles: [] }, 500);
+    } finally {
+      dbReader.close();
     }
   }
-
+  
   private async handleFlags(res: http.ServerResponse): Promise<void> {
+    const scumDb = require('./scumDatabase');
+    const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
     try {
       if (!this.serverPath) {
         this.sendJson(res, { flags: [] });
         return;
       }
-      const scumDb = require('./scumDatabase');
-      const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
       const rows = dbReader.getFlags();
       this.sendJson(res, { flags: rows || [] });
     } catch (e: any) {
       this.sendJson(res, { error: e.message, flags: [] }, 500);
+    } finally {
+      dbReader.close();
     }
   }
 }

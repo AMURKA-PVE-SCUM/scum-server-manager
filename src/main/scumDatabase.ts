@@ -170,7 +170,20 @@ export class ScumDatabaseReader {
   }
 
   getVehicles(): any[] {
-    return this.query(`SELECT vehicle_entity_id AS entityId, replace(vehicle_asset_id, 'Vehicle:', '') AS asset, vehicle_asset_id AS assetId, vehicle_alias AS alias, datetime(vehicle_last_access_time, 'unixepoch') AS lastAccess, is_vehicle_automatically_created AS automatic, is_vehicle_functional AS functional, time_spent_in_forbidden_zone AS forbiddenZoneSeconds FROM vehicle_spawner ORDER BY vehicle_entity_id DESC`);
+    try {
+      this.ensureOpen();
+      const cols = this.query("PRAGMA table_info(vehicle_spawner)").map((c: any) => c.name.toLowerCase());
+      const hasLoc = cols.includes('location_x');
+      if (hasLoc) {
+        return this.query(`SELECT vehicle_entity_id AS entityId, replace(vehicle_asset_id, 'Vehicle:', '') AS asset, vehicle_asset_id AS assetId, vehicle_alias AS alias, location_x AS x, location_y AS y, datetime(vehicle_last_access_time, 'unixepoch') AS lastAccess, is_vehicle_automatically_created AS automatic, is_vehicle_functional AS functional, time_spent_in_forbidden_zone AS forbiddenZoneSeconds FROM vehicle_spawner ORDER BY vehicle_entity_id DESC`);
+      }
+      // Try entity table for position
+      const entityCols = this.query("PRAGMA table_info(entity)").map((c: any) => c.name.toLowerCase());
+      if (entityCols.includes('location_x')) {
+        return this.query(`SELECT vs.vehicle_entity_id AS entityId, replace(vs.vehicle_asset_id, 'Vehicle:', '') AS asset, vs.vehicle_asset_id AS assetId, vs.vehicle_alias AS alias, e.location_x AS x, e.location_y AS y, datetime(vs.vehicle_last_access_time, 'unixepoch') AS lastAccess, vs.is_vehicle_automatically_created AS automatic, vs.is_vehicle_functional AS functional, vs.time_spent_in_forbidden_zone AS forbiddenZoneSeconds FROM vehicle_spawner vs LEFT JOIN entity e ON e.id = vs.vehicle_entity_id ORDER BY vs.vehicle_entity_id DESC`);
+      }
+    } catch {}
+    return this.query(`SELECT vehicle_entity_id AS entityId, replace(vehicle_asset_id, 'Vehicle:', '') AS asset, vehicle_asset_id AS assetId, vehicle_alias AS alias, NULL AS x, NULL AS y, datetime(vehicle_last_access_time, 'unixepoch') AS lastAccess, is_vehicle_automatically_created AS automatic, is_vehicle_functional AS functional, time_spent_in_forbidden_zone AS forbiddenZoneSeconds FROM vehicle_spawner ORDER BY vehicle_entity_id DESC`);
   }
 
   getFlags(): any[] {

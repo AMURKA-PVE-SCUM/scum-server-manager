@@ -43,6 +43,9 @@ export class WargmManager {
   setServerPath(serverPath: string): void {
     const newPath = path.join(serverPath, 'SCUM', 'Saved', 'SaveFiles', 'wargm.db');
     if (newPath !== this.dbPath) {
+      // Save old db and close before switching
+      if (this.db) this.save();
+      this.db = null;
       // Migrate old db if exists
       if (fs.existsSync(this.dbPath) && !fs.existsSync(newPath)) {
         fs.ensureDirSync(path.dirname(newPath));
@@ -250,34 +253,43 @@ export class WargmManager {
   }
 
   saveCard(card: WargmCard): number | null {
-    const now = new Date().toISOString();
-    if (card.id) {
-      this.run(
-        `UPDATE wargm_cards SET name = ?, shop_item_id = ?, enabled = ?, updated_at = ? WHERE id = ?`,
-        [card.name, card.shopItemId, card.enabled ? 1 : 0, now, card.id],
-      );
-      this.run(`DELETE FROM wargm_card_items WHERE card_id = ?`, [card.id]);
-    } else {
-      this.run(
-        `INSERT INTO wargm_cards (name, shop_item_id, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-        [card.name, card.shopItemId, card.enabled ? 1 : 0, now, now],
-      );
+    if (!this.db) return null;
+    this.db.exec('BEGIN');
+    try {
+      const now = new Date().toISOString();
+      if (card.id) {
+        this.run(
+          `UPDATE wargm_cards SET name = ?, shop_item_id = ?, enabled = ?, updated_at = ? WHERE id = ?`,
+          [card.name, card.shopItemId, card.enabled ? 1 : 0, now, card.id],
+        );
+        this.run(`DELETE FROM wargm_card_items WHERE card_id = ?`, [card.id]);
+      } else {
+        this.run(
+          `INSERT INTO wargm_cards (name, shop_item_id, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+          [card.name, card.shopItemId, card.enabled ? 1 : 0, now, now],
+        );
+      }
+      let cardId = card.id;
+      if (!cardId) {
+        const rows = this.query(`SELECT last_insert_rowid() as id`);
+        cardId = rows[0]?.id;
+        if (!cardId) { this.db.exec('ROLLBACK'); this.save(); return null; }
+      }
+      for (let i = 0; i < card.items.length; i++) {
+        const item = card.items[i];
+        this.run(
+          `INSERT INTO wargm_card_items (card_id, type, data, sort_order) VALUES (?, ?, ?, ?)`,
+          [cardId, item.type, JSON.stringify(item.data), i],
+        );
+      }
+      this.db.exec('COMMIT');
+      this.save();
+      return cardId;
+    } catch (e: any) {
+      this.db.exec('ROLLBACK');
+      console.error('[WargmDB] saveCard error:', e.message);
+      return null;
     }
-    let cardId = card.id;
-    if (!cardId) {
-      const rows = this.query(`SELECT last_insert_rowid() as id`);
-      cardId = rows[0]?.id;
-      if (!cardId) { this.save(); return null; }
-    }
-    for (let i = 0; i < card.items.length; i++) {
-      const item = card.items[i];
-      this.run(
-        `INSERT INTO wargm_card_items (card_id, type, data, sort_order) VALUES (?, ?, ?, ?)`,
-        [cardId, item.type, JSON.stringify(item.data), i],
-      );
-    }
-    this.save();
-    return cardId;
   }
 
   deleteCard(id: number): boolean {

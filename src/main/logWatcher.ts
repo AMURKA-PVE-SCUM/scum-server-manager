@@ -55,6 +55,7 @@ export class LogWatcher {
     { trigger: '!savedom', rconCommand: '', description: '', helpTrigger: '!сохранитьдом' },
     { trigger: '!home', rconCommand: '', description: '', helpTrigger: '!дом' },
     { trigger: '!homes', rconCommand: '', description: '', helpTrigger: '!дома' },
+    { trigger: '!rating', rconCommand: '', description: '', helpTrigger: '!рейтинг' },
     { trigger: '!help', rconCommand: '', description: '', isHelp: true },
   ];
   private commandAliases: Record<string, string> = {
@@ -74,13 +75,24 @@ export class LogWatcher {
     '!дома': '!homes',
   };
 
+  private migrateOldFile(oldRel: string, filename: string): string {
+    if (!this.serverPath) return path.join(process.cwd(), path.dirname(oldRel), filename);
+    const newPath = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', filename);
+    const oldPath = path.join(process.cwd(), oldRel, filename);
+    fs.ensureDirSync(path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles'));
+    if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+      try { fs.copyFileSync(oldPath, newPath); } catch {}
+    }
+    return newPath;
+  }
+
   constructor(serverPath: string, discord: DiscordWebhook) {
     this.serverPath = serverPath;
     this.discord = discord;
-    this.cooldownPath = path.join(process.cwd(), 'logs', 'pack_cooldowns.json');
+    this.cooldownPath = this.migrateOldFile('logs', 'pack_cooldowns.json');
     fs.ensureDirSync(path.dirname(this.cooldownPath));
     this.loadCooldowns();
-    this.homeDataPath = path.join(process.cwd(), 'data', 'home_locations.json');
+    this.homeDataPath = this.migrateOldFile('data', 'home_locations.json');
     fs.ensureDirSync(path.dirname(this.homeDataPath));
     this.loadHomeLocations();
     if (serverPath) this.startWatching();
@@ -646,7 +658,7 @@ export class LogWatcher {
     this.offsets.set(filePath, end);
     const lines = data.split('\n').filter((l) => l.trim());
     for (const line of lines) {
-      await this.processLine(filePath, line);
+      this.processLine(filePath, line);
     }
   }
 
@@ -665,25 +677,16 @@ export class LogWatcher {
       this.scumLogOffset = stat.size;
       for (const line of text.split('\n').filter(Boolean)) {
         const pm = line.match(/HandlePossessedBy:\s*(\d+),\s*(\d+),\s*(\S+)/);
-        if (pm) { this.discord.sendLoginEvent(pm[3], '', 'join').catch(() => {}); this.addEvent('login', `${pm[3]} connected`); this.announceJoinLeave(pm[3], 'join').catch(() => {}); continue; }
+        if (pm) { this.discord.sendLoginEvent(pm[3], '', 'join').catch(() => {}); this.addEvent('login', `${pm[3]} connected`); continue; }
         const lm = line.match(/LogSCUM:.+'(\d+):([^(]+)\((\d+)\)'.+logged in/);
-        if (lm) { this.discord.sendLoginEvent(lm[2].trim(), '', 'join').catch(() => {}); this.addEvent('login', `${lm[2].trim()} connected`); this.announceJoinLeave(lm[2].trim(), 'join').catch(() => {}); continue; }
+        if (lm) { this.discord.sendLoginEvent(lm[2].trim(), '', 'join').catch(() => {}); this.addEvent('login', `${lm[2].trim()} connected`); continue; }
         const llout = line.match(/LogSCUM:.+'(\d+):([^(]+)\(\d+\)'.+logged out/);
-        if (llout) { this.discord.sendLoginEvent(llout[2].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${llout[2].trim()} disconnected`); this.announceJoinLeave(llout[2].trim(), 'leave').catch(() => {}); continue; }
+        if (llout) { this.discord.sendLoginEvent(llout[2].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${llout[2].trim()} disconnected`); continue; }
         const plout = line.match(/Prisoner logging out:\s*([^(]+)\s*\(\d+\)/);
-        if (plout) { this.discord.sendLoginEvent(plout[1].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${plout[1].trim()} disconnected`); this.announceJoinLeave(plout[1].trim(), 'leave').catch(() => {}); continue; }
+        if (plout) { this.discord.sendLoginEvent(plout[1].trim(), '', 'leave').catch(() => {}); this.addEvent('login', `${plout[1].trim()} disconnected`); continue; }
         const gm = line.match(/Global Stats:.*?P:\s*(\d+)/);
         if (gm) this.lastPlayerCount = parseInt(gm[1], 10);
       }
-    } catch {}
-  }
-
-  private async announceJoinLeave(name: string, type: 'join' | 'leave'): Promise<void> {
-    if (!this.rconClient || !this.rconClient.isConnected()) return;
-    try {
-      const emoji = type === 'join' ? '🟢' : '🔴';
-      const action = type === 'join' ? 'подключился' : 'вышел';
-      await this.rconClient.sendCommand(`SendChat 2 "${emoji} ${name} ${action}"`);
     } catch {}
   }
 

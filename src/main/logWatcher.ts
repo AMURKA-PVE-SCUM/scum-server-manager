@@ -488,8 +488,16 @@ export class LogWatcher {
                 reply = `${playerName}: ${loc}`;
               }
             } else if (cmdKey === '!online') {
-              const playerCount = lines.filter(l => /^\d+\.\s+\S/.test(l) || /^PLAYER\s*\|/i.test(l)).length;
-              const playerList = lines.filter(l => /^\d+\.\s+\S/.test(l) || /^PLAYER\s*\|/i.test(l)).join(', ');
+              const playerListOld = lines.filter(l => /^\d+\.\s+\S/.test(l)).join(', ');
+              const playerListNew = lines.filter(l => /^PLAYER\s*\|/i.test(l)).map(l => {
+                const nm = l.match(/^PLAYER\s*\|\s*(.+?)\s*\|/i);
+                return nm ? nm[1].trim() : l;
+              }).join(', ');
+              const playerCount = Math.max(
+                lines.filter(l => /^\d+\.\s+\S/.test(l)).length,
+                lines.filter(l => /^PLAYER\s*\|/i.test(l)).length
+              );
+              const playerList = playerListOld || playerListNew;
               reply = playerCount > 0 ? `Онлайн (${playerCount}): ${playerList}` : 'Нет игроков онлайн';
             } else {
               reply = result.response.slice(0, 200);

@@ -1171,23 +1171,24 @@ export class WebPanel {
               y = cached.location.y;
               z = cached.location.z;
             } else {
-              // Fresh ListPlayers lookup (same approach as WARGM)
+              // Fresh ListPlayers lookup
               const listRes = await this.rconClient.sendCommand('ListPlayers');
               if (listRes.success && listRes.response) {
                 const lines = listRes.response.split('\n');
-                for (let i = 0; i < lines.length; i++) {
-                  const trimmed = lines[i].trim();
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  // New format: "PLAYER | Name | steam=76561198... | ... | (x, y, z)"
+                  const pm = trimmed.match(new RegExp(`steam=${steamId}\\s*\\|[^|]*\\(([\\d.-]+),\\s*([\\d.-]+),\\s*([\\d.-]+)\\)`));
+                  if (pm) { x = parseFloat(pm[1]); y = parseFloat(pm[2]); z = parseFloat(pm[3]); break; }
+                  // Old format fallback
                   const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
                   if (steamMatch && steamMatch[1] === steamId) {
-                    for (let j = i + 1; j < lines.length; j++) {
+                    for (let j = 0; j < lines.length; j++) {
+                      if (j === lines.indexOf(line)) continue;
                       const t = lines[j].trim();
-                      if (t.match(/^\d+\.\s+\S/)) break;
+                      if (t.match(/^\d+\.\s+\S/)) continue;
                       const locMatch = t.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
-                      if (locMatch) {
-                        x = parseFloat(locMatch[1]);
-                        y = parseFloat(locMatch[2]);
-                        z = parseFloat(locMatch[3]);
-                      }
+                      if (locMatch) { x = parseFloat(locMatch[1]); y = parseFloat(locMatch[2]); z = parseFloat(locMatch[3]); break; }
                     }
                     break;
                   }
@@ -1257,55 +1258,15 @@ export class WebPanel {
       }
       const amount = Math.round(rawAmount);
 
-      // Fetch current balance from fresh ListPlayers
-      const listRes = await this.rconClient.sendCommand('ListPlayers');
-      if (!listRes.success || !listRes.response) {
-        this.sendJson(res, { error: 'Failed to query player data' }, 500);
-        return;
-      }
-
-      let currentValue = 0;
-      let found = false;
-      const lines = listRes.response.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim();
-        const steamMatch = trimmed.match(/Steam:\s*.+?\((\d{17})\)/);
-        if (steamMatch && steamMatch[1] === steamId) {
-          for (let j = i + 1; j < lines.length; j++) {
-            const t = lines[j].trim();
-            if (t.match(/^\d+\.\s+\S/)) break;
-            if (type === 'money') {
-              const bm = t.match(/^Account balance:\s*([\d.+-]+)/);
-              if (bm) { currentValue = parseFloat(bm[1]); found = true; }
-            } else if (type === 'gold') {
-              const gm = t.match(/^Gold balance:\s*([\d.+-]+)/);
-              if (gm) { currentValue = parseFloat(gm[1]); found = true; }
-            } else if (type === 'fame') {
-              const fm = t.match(/^Fame:\s*([\d.+-]+)/);
-              if (fm) { currentValue = parseFloat(fm[1]); found = true; }
-            }
-          }
-          break;
-        }
-      }
-
-      if (!found) {
-        this.sendJson(res, { error: 'Player not found or offline' }, 400);
-        return;
-      }
-
-      const newValue = Math.round((currentValue || 0) + amount);
+      // Use incremental commands instead of reading current + setting new
       let command = '';
-      if (type === 'fame') {
-        command = `#SetFamePoints ${newValue} ${steamId}`;
-      } else {
-        const currencyType = type === 'gold' ? 'Gold' : 'Normal';
-        command = `#SetCurrencyBalance ${currencyType} ${newValue} ${steamId}`;
-      }
+      if (type === 'fame') command = `#AddFame ${amount} ${steamId}`;
+      else if (type === 'gold') command = `#AddGold ${amount} ${steamId}`;
+      else command = `#AddMoney ${amount} ${steamId}`;
 
       const result = await this.rconClient.sendCommand(command);
       if (result.success) {
-        this.sendJson(res, { success: true, response: `${currentValue} → ${newValue}` });
+        this.sendJson(res, { success: true, response: `+${amount}` });
       } else {
         this.sendJson(res, { error: result.response || 'Command failed' }, 500);
       }

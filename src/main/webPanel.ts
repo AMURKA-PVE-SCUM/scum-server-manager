@@ -2218,7 +2218,9 @@ export class WebPanel {
           for (const p of this.cachedPlayers) {
             if (p.steamId) {
               this.ratingManager.ensurePlayer(p.steamId, p.name);
-              this.ratingManager.updateEconomy(p.steamId, p.balance || 0, p.gold || 0, p.fame || 0);
+              // Preserve existing fame if not available from ListPlayers (v0.4.6 doesn't include it)
+              const curFame = p.fame ?? this.ratingManager.getPlayerRank(p.steamId).entry?.fame ?? 0;
+              this.ratingManager.updateEconomy(p.steamId, p.balance || 0, p.gold || 0, curFame);
             }
           }
           // Close sessions for players no longer online

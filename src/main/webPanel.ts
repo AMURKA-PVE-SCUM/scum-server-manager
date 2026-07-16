@@ -1062,16 +1062,16 @@ export class WebPanel {
           const vRes = await this.rconClient.sendCommand('ListSpawnedVehicles');
           if (vRes.success && vRes.response) {
             const allV = this.parseListSpawnedVehicles(vRes.response);
-            const playerNameLower = playerInfo.name?.toLowerCase() || '';
-            playerData.vehicles = allV.filter(v =>
-              v.ownerName && v.ownerName.toLowerCase() === playerNameLower
-            ).map(v => ({
+            // Match by profileId (db id N in "owner: Name (db id N)")
+            const pid = playerInfo.profileId || playerInfo.id || playerInfo.prisonerId;
+            playerData.vehicles = allV.filter(v => v.ownerDbId === pid).map(v => ({
               asset: v.asset,
               customName: v.customName,
               entityId: v.entityId,
               x: v.x,
               y: v.y,
             }));
+            console.log(`[WebPanel] Player ${playerInfo.name} (pid=${pid}) vehicles: ${playerData.vehicles.length}/${allV.length} matched`);
           }
         }
       } catch {}

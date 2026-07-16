@@ -1050,6 +1050,20 @@ let rconHistoryIndex = -1;
 let selectedItemIndex = -1;
 let cachedPlayersList = [];
 
+// Parse date from various SCUM DB formats: unix seconds, unix ms, ISO string, SQL datetime
+function parseServerDate(val) {
+  if (!val) return null;
+  let d;
+  if (typeof val === 'number') {
+    // If > 1e12, assume already milliseconds; otherwise seconds
+    d = new Date(val > 1e12 ? val : val * 1000);
+  } else {
+    // Try ISO or SQL datetime (replace space with T)
+    d = new Date(val.includes('T') ? val : val.replace(' ', 'T'));
+  }
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Item database loaded from API
 let allItems = [];
 let itemImagesMap = null;
@@ -2600,14 +2614,12 @@ async function showPlayerCard(steamId, playerName) {
       
       // Calculate online time from lastLogin
       let onlineTimeHtml = '';
-      if (data.player?.lastLogin) {
-        const loginDate = typeof data.player.lastLogin === 'number' ? new Date(data.player.lastLogin * 1000) : new Date(data.player.lastLogin);
-        if (!isNaN(loginDate.getTime())) {
-          const elapsedMs = Date.now() - loginDate.getTime();
-          const hrs = Math.floor(elapsedMs / 3600000);
-          const mins = Math.floor((elapsedMs % 3600000) / 60000);
-          onlineTimeHtml = `<div class="stat-box"><div class="stat-box-label">${t('playerCard.playtime')}</div><div class="stat-box-value" id="onlineTimeDisplay" style="font-size:13px;color:#58a6ff">${hrs}ч ${mins}м</div></div>`;
-        }
+      const loginDate = data.player?.lastLogin ? parseServerDate(data.player.lastLogin) : null;
+      if (loginDate) {
+        const elapsedMs = Date.now() - loginDate.getTime();
+        const hrs = Math.floor(elapsedMs / 3600000);
+        const mins = Math.floor((elapsedMs % 3600000) / 60000);
+        onlineTimeHtml = `<div class="stat-box"><div class="stat-box-label">${t('playerCard.playtime')}</div><div class="stat-box-value" id="onlineTimeDisplay" style="font-size:13px;color:#58a6ff">${hrs}ч ${mins}м</div></div>`;
       }
 
       let whoisHtml = '';
@@ -2652,7 +2664,7 @@ async function showPlayerCard(steamId, playerName) {
         </div>
         <div class="stat-box">
           <div class="stat-box-label">${t('playerCard.lastLogin')}</div>
-          <div class="stat-box-value" style="font-size:12px">${data.player?.lastLogin ? (() => { const d = typeof data.player.lastLogin === 'number' ? new Date(data.player.lastLogin * 1000) : new Date(data.player.lastLogin); return isNaN(d.getTime()) ? t('data.notAvailable') : d.toLocaleString(); })() : t('data.notAvailable')}</div>
+          <div class="stat-box-value" style="font-size:12px">${(() => { const d = data.player?.lastLogin ? parseServerDate(data.player.lastLogin) : null; return d ? d.toLocaleString() : t('data.notAvailable'); })()}</div>
         </div>
         ${onlineTimeHtml}
         ${locHtml}
@@ -2783,15 +2795,13 @@ async function refreshPlayerCard() {
         headers: {'Authorization': 'Bearer ' + authToken}
       });
       const data = await dbRes.json();
-      if (data.player?.lastLogin) {
-        const loginDate = typeof data.player.lastLogin === 'number' ? new Date(data.player.lastLogin * 1000) : new Date(data.player.lastLogin);
-        if (!isNaN(loginDate.getTime())) {
-          const elapsedMs = Date.now() - loginDate.getTime();
-          const hrs = Math.floor(elapsedMs / 3600000);
-          const mins = Math.floor((elapsedMs % 3600000) / 60000);
-          const el = document.getElementById('onlineTimeDisplay');
-          if (el) el.textContent = hrs + 'ч ' + mins + 'м';
-        }
+      const loginDate = data.player?.lastLogin ? parseServerDate(data.player.lastLogin) : null;
+      if (loginDate) {
+        const elapsedMs = Date.now() - loginDate.getTime();
+        const hrs = Math.floor(elapsedMs / 3600000);
+        const mins = Math.floor((elapsedMs % 3600000) / 60000);
+        const el = document.getElementById('onlineTimeDisplay');
+        if (el) el.textContent = hrs + 'ч ' + mins + 'м';
       }
     } catch {}
   } catch (e) {

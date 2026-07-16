@@ -94,6 +94,7 @@ export class WebPanel {
   private rewardsDataPath = '';
   private lastHourlyReward: Record<string, number> = {};
   private lastTopRewardTime = 0;
+  private playerTimeData: Record<string, { lastLogin: string; accumulatedSeconds: number; rewardedHours: number }> = {};
 
   constructor(config: WebPanelConfig) {
     this.config = config;
@@ -1425,16 +1426,13 @@ export class WebPanel {
   private async handleRewardsData(res: http.ServerResponse): Promise<void> {
     const now = Date.now();
     const data: Record<string, { lastRewardTime: number; hoursPlayed: number }> = {};
-    for (const [steamId, lastReward] of Object.entries(this.lastHourlyReward)) {
-      const player = this.cachedPlayers.find(p => p.steamId === steamId);
-      const sessionStart = this.ratingManager?.getSessionStart(steamId);
+    for (const [steamId, pt] of Object.entries(this.playerTimeData)) {
       let hoursPlayed = 0;
-      if (sessionStart) {
-        const sessionSec = (now - sessionStart) / 1000;
-        const totalSec = this.ratingManager?.getPlayerTotalSeconds(steamId) || 0;
-        hoursPlayed = Math.floor((totalSec + sessionSec) / 3600);
+      const loginTime = new Date(pt.lastLogin).getTime();
+      if (!isNaN(loginTime)) {
+        hoursPlayed = Math.floor((pt.accumulatedSeconds + (now - loginTime) / 1000) / 3600);
       }
-      data[steamId] = { lastRewardTime: lastReward, hoursPlayed };
+      data[steamId] = { lastRewardTime: this.lastHourlyReward[steamId] || 0, hoursPlayed };
     }
     this.sendJson(res, data);
   }
@@ -1479,6 +1477,7 @@ export class WebPanel {
         const data = JSON.parse(fs.readFileSync(this.rewardsDataPath, 'utf-8'));
         this.lastHourlyReward = data.lastHourlyReward || {};
         this.lastTopRewardTime = data.lastTopRewardTime || 0;
+        this.playerTimeData = data.playerTimeData || {};
       }
     } catch {}
   }
@@ -1489,6 +1488,7 @@ export class WebPanel {
       fs.writeFileSync(this.rewardsDataPath, JSON.stringify({
         lastHourlyReward: this.lastHourlyReward,
         lastTopRewardTime: this.lastTopRewardTime,
+        playerTimeData: this.playerTimeData,
       }, null, 2));
     } catch {}
   }
@@ -1506,39 +1506,61 @@ export class WebPanel {
 
     // Hourly rewards
     if (cfg.hourlyEnabled) {
+      const scumDb = require('./scumDatabase');
       for (const player of this.cachedPlayers) {
         if (!player.steamId || !player.name) continue;
-        const lastReward = this.lastHourlyReward[player.steamId] || 0;
-        const sessionStart = this.ratingManager?.getSessionStart(player.steamId);
-        if (!sessionStart) continue;
-        const totalSec = this.ratingManager?.getPlayerTotalSeconds(player.steamId) || 0;
-        const elapsedHours = Math.floor(((now - sessionStart) / 1000 + totalSec) / 3600);
-        // Fix cross-session: if lastReward is before sessionStart, assume no hours rewarded in current session
-        const effectiveLastReward = lastReward && lastReward < sessionStart ? sessionStart : lastReward;
-        const rewardedHours = Math.floor(effectiveLastReward ? (effectiveLastReward - sessionStart) / 3600000 + totalSec / 3600 : 0);
-        const hoursToReward = Math.max(0, elapsedHours - Math.floor(rewardedHours));
-        if (hoursToReward >= 1) {
-          const sid = player.steamId;
-          let curMoney = player.balance || 0, curGold = player.gold || 0, curFame = 0;
-          if (cfg.hourlyFame > 0) {
-            const wr = await this.rconClient.sendCommand(`Whois ${sid}`);
-            if (wr.success && wr.response) {
-              const fm = wr.response.match(/\bfame[:\s]\s*([\d.]+)/i);
-              if (fm) curFame = parseFloat(fm[1]);
-            }
+        const sid = player.steamId;
+
+        // Get lastLogin from SCUM.db
+        let dbPlayer: any;
+        try {
+          const dbReader = new scumDb.ScumDatabaseReader(this.serverPath);
+          dbPlayer = dbReader.getPlayerBySteamId(sid);
+        } catch {}
+        if (!dbPlayer || !dbPlayer.lastLogin) continue;
+
+        const loginTime = new Date(dbPlayer.lastLogin).getTime();
+        if (isNaN(loginTime)) continue;
+
+        let ptd = this.playerTimeData[sid];
+        if (!ptd) {
+          ptd = { lastLogin: dbPlayer.lastLogin, accumulatedSeconds: 0, rewardedHours: 0 };
+          this.playerTimeData[sid] = ptd;
+        } else if (ptd.lastLogin !== dbPlayer.lastLogin) {
+          // Player reconnected — add elapsed from previous session
+          const prevLogin = new Date(ptd.lastLogin).getTime();
+          if (!isNaN(prevLogin)) {
+            ptd.accumulatedSeconds += (now - prevLogin) / 1000;
           }
-          const cmds: string[] = [];
-          if (cfg.hourlyGold > 0) cmds.push(`#SetCurrencyBalance Gold ${Math.round(curGold + cfg.hourlyGold * hoursToReward)} ${sid}`);
-          if (cfg.hourlyMoney > 0) cmds.push(`#SetCurrencyBalance Normal ${Math.round(curMoney + cfg.hourlyMoney * hoursToReward)} ${sid}`);
-          if (cfg.hourlyFame > 0) cmds.push(`#SetFamePoints ${Math.round(curFame + cfg.hourlyFame * hoursToReward)} ${sid}`);
-          for (const cmd of cmds) {
-            await this.rconClient.sendCommand(cmd);
-          }
-          // Log what was dispensed
-          console.log(`[Rewards] Hourly: ${player.name} +${hoursToReward}h (money:${cfg.hourlyMoney}, gold:${cfg.hourlyGold}, fame:${cfg.hourlyFame})`);
-          this.lastHourlyReward[player.steamId] = now;
-          this.saveRewardsData();
+          ptd.lastLogin = dbPlayer.lastLogin;
         }
+
+        // Total seconds played (past sessions + current session)
+        const totalSeconds = ptd.accumulatedSeconds + (now - loginTime) / 1000;
+        const elapsedHours = Math.floor(totalSeconds / 3600);
+        const hoursToReward = Math.max(0, elapsedHours - ptd.rewardedHours);
+
+        if (hoursToReward < 1) continue;
+
+        let curMoney = player.balance || 0, curGold = player.gold || 0, curFame = 0;
+        if (cfg.hourlyFame > 0) {
+          const wr = await this.rconClient.sendCommand(`Whois ${sid}`);
+          if (wr.success && wr.response) {
+            const fm = wr.response.match(/\bfame[:\s]\s*([\d.]+)/i);
+            if (fm) curFame = parseFloat(fm[1]);
+          }
+        }
+        const cmds: string[] = [];
+        if (cfg.hourlyGold > 0) cmds.push(`#SetCurrencyBalance Gold ${Math.round(curGold + cfg.hourlyGold * hoursToReward)} ${sid}`);
+        if (cfg.hourlyMoney > 0) cmds.push(`#SetCurrencyBalance Normal ${Math.round(curMoney + cfg.hourlyMoney * hoursToReward)} ${sid}`);
+        if (cfg.hourlyFame > 0) cmds.push(`#SetFamePoints ${Math.round(curFame + cfg.hourlyFame * hoursToReward)} ${sid}`);
+        for (const cmd of cmds) {
+          await this.rconClient.sendCommand(cmd);
+        }
+        console.log(`[Rewards] Hourly: ${player.name} +${hoursToReward}h (money:${cfg.hourlyMoney}, gold:${cfg.hourlyGold}, fame:${cfg.hourlyFame})`);
+        this.lastHourlyReward[sid] = now;
+        ptd.rewardedHours += hoursToReward;
+        this.saveRewardsData();
       }
     }
 

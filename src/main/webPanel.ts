@@ -1513,7 +1513,9 @@ export class WebPanel {
         if (!sessionStart) continue;
         const totalSec = this.ratingManager?.getPlayerTotalSeconds(player.steamId) || 0;
         const elapsedHours = Math.floor(((now - sessionStart) / 1000 + totalSec) / 3600);
-        const rewardedHours = Math.floor(lastReward ? (lastReward - sessionStart) / 3600000 + (this.ratingManager?.getPlayerTotalSeconds(player.steamId) || 0) / 3600 : 0);
+        // Fix cross-session: if lastReward is before sessionStart, assume no hours rewarded in current session
+        const effectiveLastReward = lastReward && lastReward < sessionStart ? sessionStart : lastReward;
+        const rewardedHours = Math.floor(effectiveLastReward ? (effectiveLastReward - sessionStart) / 3600000 + totalSec / 3600 : 0);
         const hoursToReward = Math.max(0, elapsedHours - Math.floor(rewardedHours));
         if (hoursToReward >= 1) {
           const sid = player.steamId;
@@ -1532,6 +1534,8 @@ export class WebPanel {
           for (const cmd of cmds) {
             await this.rconClient.sendCommand(cmd);
           }
+          // Log what was dispensed
+          console.log(`[Rewards] Hourly: ${player.name} +${hoursToReward}h (money:${cfg.hourlyMoney}, gold:${cfg.hourlyGold}, fame:${cfg.hourlyFame})`);
           this.lastHourlyReward[player.steamId] = now;
           this.saveRewardsData();
         }

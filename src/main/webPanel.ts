@@ -1056,25 +1056,31 @@ export class WebPanel {
         vehicles: [] as any[]
       };
 
-      // Get vehicles owned by this player from ListSpawnedVehicles
+      // Get vehicles owned by this player
       try {
-        if (this.rconClient && this.rconClient.isConnected()) {
+        let allV: any[] = this.cachedRconVehicles || [];
+        // Fallback: fetch fresh if cache is empty
+        if (allV.length === 0 && this.rconClient?.isConnected()) {
           const vRes = await this.rconClient.sendCommand('ListSpawnedVehicles');
           if (vRes.success && vRes.response) {
-            const allV = this.parseListSpawnedVehicles(vRes.response);
-            // Match by profileId (db id N in "owner: Name (db id N)")
-            const pid = playerInfo.profileId || playerInfo.id || playerInfo.prisonerId;
-            playerData.vehicles = allV.filter(v => v.ownerDbId === pid).map(v => ({
-              asset: v.asset,
-              customName: v.customName,
-              entityId: v.entityId,
-              x: v.x,
-              y: v.y,
-            }));
-            console.log(`[WebPanel] Player ${playerInfo.name} (pid=${pid}) vehicles: ${playerData.vehicles.length}/${allV.length} matched`);
+            allV = this.parseListSpawnedVehicles(vRes.response);
+            this.cachedRconVehicles = allV;
           }
         }
-      } catch {}
+        const pid = playerInfo.profileId || playerInfo.id;
+        const prisId = playerInfo.prisonerId;
+        playerData.vehicles = allV.filter((v: any) => v.ownerDbId === pid || v.ownerDbId === prisId).map((v: any) => ({
+          asset: v.asset,
+          customName: v.customName,
+          entityId: v.entityId,
+          x: v.x,
+          y: v.y,
+          ownerName: v.ownerName,
+        }));
+        console.log(`[WebPanel] Player ${playerInfo.name} (profileId=${pid}, prisId=${prisId}) vehicles: ${playerData.vehicles.length}/${allV.length} matched, ownerDbIds=[${allV.map((v: any) => v.ownerDbId).join(',')}]`);
+      } catch (e: any) {
+        console.error('[WebPanel] Error getting player vehicles:', e);
+      }
       
       console.log('[WebPanel] Player details:', JSON.stringify(playerData, null, 2));
       

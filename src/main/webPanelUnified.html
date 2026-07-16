@@ -2597,6 +2597,18 @@ async function showPlayerCard(steamId, playerName) {
             <div class="stat-box-value" style="font-size:13px">X=${Math.round(playerLoc.x)} Y=${Math.round(playerLoc.y)} Z=${Math.round(playerLoc.z)}</div>
           </div>`
         : '';
+      
+      // Calculate online time from lastLogin
+      let onlineTimeHtml = '';
+      if (data.player?.lastLogin) {
+        const loginDate = typeof data.player.lastLogin === 'number' ? new Date(data.player.lastLogin * 1000) : new Date(data.player.lastLogin);
+        if (!isNaN(loginDate.getTime())) {
+          const elapsedMs = Date.now() - loginDate.getTime();
+          const hrs = Math.floor(elapsedMs / 3600000);
+          const mins = Math.floor((elapsedMs % 3600000) / 60000);
+          onlineTimeHtml = `<div class="stat-box"><div class="stat-box-label">${t('playerCard.playtime')}</div><div class="stat-box-value" id="onlineTimeDisplay" style="font-size:13px;color:#58a6ff">${hrs}ч ${mins}м</div></div>`;
+        }
+      }
 
       let whoisHtml = '';
       if (whois) {
@@ -2608,12 +2620,21 @@ async function showPlayerCard(steamId, playerName) {
         if (whois.headshotKills != null) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.headshotKills')}</div><div class="stat-box-value">${whois.headshotKills.toLocaleString()}</div></div>`);
         if (whois.playtime) whoisRows.push(`<div class="stat-box"><div class="stat-box-label">${t('playerCard.playtime')}</div><div class="stat-box-value" style="font-size:12px">${whois.playtime}</div></div>`);
         if (whois.squad && whois.squad !== 'None' && whois.squad !== '') whoisRows.push(`<div class="stat-box" style="grid-column:1/-1"><div class="stat-box-label">${t('playerCard.squad')}</div><div class="stat-box-value" style="color:#58a6ff">${whois.squad}</div></div>`);
-        if (whois.vehicles && whois.vehicles.length > 0) {
-          whoisRows.push(`<div class="stat-box" style="grid-column:1/-1"><div class="stat-box-label">${t('playerCard.vehicles')}</div><div class="stat-box-value" style="font-size:11px;line-height:1.6">${whois.vehicles.map(v => '🚗 ' + v).join('<br>')}</div></div>`);
-        }
         if (whoisRows.length > 0) {
           whoisHtml = `<div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;margin-top:4px;font-size:13px;color:var(--muted);margin-bottom:4px">📋 ${t('playerCard.whoisTitle')}</div>${whoisRows.join('')}`;
         }
+      }
+
+      // Vehicles from DB/RCON
+      let vehiclesHtml = '';
+      if (data.player?.vehicles && data.player.vehicles.length > 0) {
+        vehiclesHtml = `<div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:6px">🚗 ${t('playerCard.vehicles')} (${data.player.vehicles.length})</div>
+          ${data.player.vehicles.map(v => {
+            const name = v.customName && v.customName !== '-' ? v.customName : (v.asset || 'Unknown');
+            return `<div style="font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">🚙 ${name}</div>`;
+          }).join('')}
+        </div>`;
       }
 
       statsGrid.innerHTML = `
@@ -2631,10 +2652,12 @@ async function showPlayerCard(steamId, playerName) {
         </div>
         <div class="stat-box">
           <div class="stat-box-label">${t('playerCard.lastLogin')}</div>
-          <div class="stat-box-value" style="font-size:12px">${data.player?.lastLogin ? new Date(data.player.lastLogin * 1000).toLocaleString() : t('data.notAvailable')}</div>
+          <div class="stat-box-value" style="font-size:12px">${data.player?.lastLogin ? (() => { const d = typeof data.player.lastLogin === 'number' ? new Date(data.player.lastLogin * 1000) : new Date(data.player.lastLogin); return isNaN(d.getTime()) ? t('data.notAvailable') : d.toLocaleString(); })() : t('data.notAvailable')}</div>
         </div>
+        ${onlineTimeHtml}
         ${locHtml}
         ${whoisHtml}
+        ${vehiclesHtml}
       `;
     } else {
       statsGrid.innerHTML = '<p style="color:var(--muted);text-align:center;grid-column:1/-1">' + t('playerCard.noDbInfo') + '</p>';
@@ -2753,6 +2776,24 @@ async function refreshPlayerCard() {
     if (fameEl && w.fame != null) fameEl.textContent = '⭐ ' + w.fame.toLocaleString();
     if (moneyEl && w.money != null) moneyEl.textContent = '💵 $' + w.money.toLocaleString();
     if (goldEl && w.gold != null) goldEl.textContent = '🏆 ' + w.gold.toLocaleString();
+
+    // Update online time from lastLogin (re-fetch player details to get latest lastLogin)
+    try {
+      const dbRes = await fetch(`/api/players/${selectedPlayer}`, {
+        headers: {'Authorization': 'Bearer ' + authToken}
+      });
+      const data = await dbRes.json();
+      if (data.player?.lastLogin) {
+        const loginDate = typeof data.player.lastLogin === 'number' ? new Date(data.player.lastLogin * 1000) : new Date(data.player.lastLogin);
+        if (!isNaN(loginDate.getTime())) {
+          const elapsedMs = Date.now() - loginDate.getTime();
+          const hrs = Math.floor(elapsedMs / 3600000);
+          const mins = Math.floor((elapsedMs % 3600000) / 60000);
+          const el = document.getElementById('onlineTimeDisplay');
+          if (el) el.textContent = hrs + 'ч ' + mins + 'м';
+        }
+      }
+    } catch {}
   } catch (e) {
     // silent
   }

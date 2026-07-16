@@ -1052,8 +1052,29 @@ export class WebPanel {
         goldBalance: walletInfo?.goldBalance || 0,
         attributes: attributes || null,
         skills: skills || [],
-        quickSlots: quickSlots || []
+        quickSlots: quickSlots || [],
+        vehicles: [] as any[]
       };
+
+      // Get vehicles owned by this player from ListSpawnedVehicles
+      try {
+        if (this.rconClient && this.rconClient.isConnected()) {
+          const vRes = await this.rconClient.sendCommand('ListSpawnedVehicles');
+          if (vRes.success && vRes.response) {
+            const allV = this.parseListSpawnedVehicles(vRes.response);
+            const playerNameLower = playerInfo.name?.toLowerCase() || '';
+            playerData.vehicles = allV.filter(v =>
+              v.ownerName && v.ownerName.toLowerCase() === playerNameLower
+            ).map(v => ({
+              asset: v.asset,
+              customName: v.customName,
+              entityId: v.entityId,
+              x: v.x,
+              y: v.y,
+            }));
+          }
+        }
+      } catch {}
       
       console.log('[WebPanel] Player details:', JSON.stringify(playerData, null, 2));
       

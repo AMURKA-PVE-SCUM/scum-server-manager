@@ -1069,7 +1069,13 @@ export class WebPanel {
         }
         const pid = playerInfo.profileId || playerInfo.id;
         const prisId = playerInfo.prisonerId;
-        playerData.vehicles = allV.filter((v: any) => v.ownerDbId === pid || v.ownerDbId === prisId).map((v: any) => ({
+        const playerNameLower = (playerInfo.name || '').toLowerCase();
+        playerData.vehicles = allV.filter((v: any) => {
+          if (v.ownerDbId != null && (v.ownerDbId === pid || v.ownerDbId === prisId)) return true;
+          // Fallback: match by name if db id not available
+          if (v.ownerName && playerNameLower && v.ownerName.toLowerCase() === playerNameLower) return true;
+          return false;
+        }).map((v: any) => ({
           asset: v.asset,
           customName: v.customName,
           entityId: v.entityId,

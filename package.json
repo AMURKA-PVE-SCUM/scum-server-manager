@@ -1,0 +1,117 @@
+{
+  "name": "scum-server-manager",
+  "version": "2.6.0",
+  "description": "SCUM Dedicated Server Manager — управление, мониторинг и настройка SCUM сервера",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p src/main/tsconfig.json && electron dist/main/index.js",
+    "dev:main:watch": "concurrently \"tsc -p src/main/tsconfig.json --watch\" \"wait-on dist/main/index.js && electron dist/main/index.js\"",
+    "dev:renderer": "vite",
+    "dev:unified": "concurrently \"npm run dev:main:watch\" \"npm run dev:renderer\" --kill-others",
+    "build": "npm run build:main && npm run build:renderer && npm run copy-assets",
+    "build:main": "tsc -p src/main/tsconfig.json",
+    "build:renderer": "vite build",
+    "copy-assets": "copyfiles -u 2 \"src/main/*.html\" dist/main/",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "lint": "eslint src/**/*.{ts,tsx}",
+    "typecheck": "tsc --noEmit -p src/renderer/tsconfig.json && tsc --noEmit -p src/main/tsconfig.json"
+  },
+  "keywords": [
+    "scum",
+    "server",
+    "manager",
+    "dedicated-server"
+  ],
+  "author": "SCUM Server Manager",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/ini": "^4.1.1",
+    "@types/node": "^20.10.0",
+    "@types/ps-list": "^6.0.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "asar": "^3.2.0",
+    "concurrently": "^8.2.2",
+    "copyfiles": "^2.4.1",
+    "electron": "^27.3.11",
+    "electron-builder": "^24.6.4",
+    "electron-packager": "^17.1.2",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "wait-on": "^8.0.3"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.1",
+    "@mui/material": "^5.15.1",
+    "asar": "^3.2.0",
+    "chokidar": "^4.0.3",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.9",
+    "fs-extra": "^11.1.1",
+    "ftp-srv": "^4.6.3",
+    "ini": "^4.1.1",
+    "lolka.js": "^0.4.1",
+    "ps-list": "^7.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    "recharts": "^3.10.1",
+    "sql.js": "^1.14.1",
+    "srcds-rcon": "^2.2.1"
+  },
+  "build": {
+    "appId": "com.scumservermanager.app",
+    "productName": "SCUM Server Manager",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "**/dist/main/**/*",
+      "**/dist/renderer/**/*",
+      "!src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "tools",
+        "to": "tools",
+        "filter": [
+          "*.exe"
+        ]
+      },
+      {
+        "from": "iditem.txt",
+        "to": "iditem.txt"
+      },
+      {
+        "from": "SCUM-Images",
+        "to": "SCUM-Images"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.wasm",
+      "**/*.node"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "AMURKA-PVE-SCUM",
+      "repo": "scum-server-manager"
+    }
+  }
+}

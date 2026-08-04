@@ -49,11 +49,8 @@ export function OnlinePlayers() {
   const loadPlayers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/players/online');
-      const data = await response.json();
-      if (data.players) {
-        setPlayers(data.players);
-      }
+      const players = await window.electronAPI.server.onlinePlayers();
+      if (players) setPlayers(players);
     } catch (e: any) {
       console.error('Failed to load players:', e.message);
     } finally {
@@ -63,17 +60,11 @@ export function OnlinePlayers() {
 
   const sendPlayerAction = async (steamId: string, action: string, params: any) => {
     try {
-      const response = await fetch('/api/players/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ steamId, action, params }),
-      });
-      const result = await response.json();
-      
-      if (result.success) {
+      const result = await window.electronAPI.server.playerAction(steamId, action, params);
+      if (result && result.success) {
         setSnack({ open: true, message: 'Command sent successfully', severity: 'success' });
       } else {
-        setSnack({ open: true, message: result.error || 'Command failed', severity: 'error' });
+        setSnack({ open: true, message: result?.error || 'Command failed', severity: 'error' });
       }
     } catch (e: any) {
       setSnack({ open: true, message: e.message, severity: 'error' });
@@ -121,7 +112,7 @@ export function OnlinePlayers() {
   };
 
   const handleAnnounce = () => {
-    sendPlayerAction('', 'announce', { text: announceDialog.text });
+    sendPlayerAction('', 'announce', { message: announceDialog.text });
     setAnnounceDialog({ open: false, text: '' });
   };
 

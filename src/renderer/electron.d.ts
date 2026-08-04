@@ -17,6 +17,8 @@ interface ElectronAPI {
       players: number; maxPlayers: number; fps: number;
       playersList: Array<{ steamId: string; name: string; ip: string; ping: number; timeConnected: number }>;
     }>;
+    onlinePlayers: () => Promise<Array<{ steamId: string; name: string; duration: number; gold?: number; balance?: number }>>;
+    playerAction: (steamId: string, action: string, params?: any) => Promise<any>;
     checkUpdate: () => Promise<{ available: boolean; currentBuild: string; latestBuild: string; error: string }>;
     update: () => Promise<string>;
     updateStream: () => Promise<string>;

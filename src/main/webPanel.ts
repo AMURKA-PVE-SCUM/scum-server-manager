@@ -486,6 +486,8 @@ export class WebPanel {
           this.handleRconStatus(res);
         } else if (url === '/api/players' && method === 'GET') {
           this.handleOnlinePlayers(res);
+        } else if (url === '/api/players/online' && method === 'GET') {
+          this.handleOnlinePlayers(res);
         } else if (url.startsWith('/api/players/whois/') && method === 'GET') {
           const steamId = url.split('/')[4];
           this.handlePlayerWhois(steamId, res);
@@ -697,6 +699,40 @@ export class WebPanel {
 
   isRunning(): boolean {
     return this.server !== null;
+  }
+
+  async getOnlinePlayers(): Promise<any[]> {
+    try {
+      if (this.rconClient && this.rconClient.isConnected()) {
+        const result = await this.rconClient.sendCommand('ListPlayers');
+        if (result.success && result.response) {
+          const parsed = this.parseListPlayersOutput(result.response);
+          return parsed.map(p => ({
+            steamId: p.steamId,
+            name: p.name,
+            connectedAt: p.connectedAt.toISOString(),
+            duration: Math.floor((Date.now() - p.connectedAt.getTime()) / 1000),
+            location: p.location || null,
+            fame: p.fame ?? null,
+            balance: p.balance ?? null,
+            gold: p.gold ?? null,
+          }));
+        }
+      }
+      // Fallback: players tracked from server logs (no RCON required)
+      return Array.from(this.onlinePlayers.values()).map(p => ({
+        steamId: p.steamId,
+        name: p.name,
+        connectedAt: p.connectedAt.toISOString(),
+        duration: Math.floor((Date.now() - p.connectedAt.getTime()) / 1000),
+        location: p.location || null,
+        fame: p.fame ?? null,
+        balance: p.balance ?? null,
+        gold: p.gold ?? null,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   private authenticated(req: http.IncomingMessage): boolean {
@@ -980,7 +1016,18 @@ export class WebPanel {
   private async handleOnlinePlayers(res: http.ServerResponse): Promise<void> {
     try {
       if (!this.rconClient || !this.rconClient.isConnected()) {
-        this.sendJson(res, { players: [] });
+        // Fallback: use players tracked from server logs (no RCON required)
+        const players = Array.from(this.onlinePlayers.values()).map(p => ({
+          steamId: p.steamId,
+          name: p.name,
+          connectedAt: p.connectedAt.toISOString(),
+          duration: Math.floor((Date.now() - p.connectedAt.getTime()) / 1000),
+          location: p.location || null,
+          fame: p.fame ?? null,
+          balance: p.balance ?? null,
+          gold: p.gold ?? null,
+        }));
+        this.sendJson(res, { players });
         return;
       }
       const result = await this.rconClient.sendCommand('ListPlayers');
@@ -1208,93 +1255,70 @@ export class WebPanel {
     try {
       const body = await this.readBody(req);
       const { steamId, action, params } = JSON.parse(body);
-      
-      if (!this.rconClient || !this.rconClient.isConnected()) {
-        this.sendJson(res, { error: 'RCON not connected' }, 500);
-        return;
-      }
-
-      let command = '';
-      switch (action) {
-        case 'setAttributes':
-          command = `SetAttributes ${params.strength} ${params.dexterity} ${params.stamina} ${params.intellect} ${steamId}`;
-          break;
-        case 'godMode':
-          command = `SetGodMode ${params.enabled ? 'true' : 'false'} ${steamId}`;
-          break;
-        case 'setImmortality':
-          command = `SetImmortality ${params.enabled ? 'true' : 'false'} ${steamId}`;
-          break;
-        case 'showNamePlates':
-          command = `#ShowNamePlates true ${steamId}`;
-          break;
-        case 'showOtherPlayerInfo':
-          command = `#ShowOtherPlayerInfo true ${steamId}`;
-          break;
-        case 'suicide':
-          command = `Suicide ${steamId}`;
-          break;
-        case 'silence':
-          command = `Silence ${steamId}`;
-          break;
-        case 'unsilence':
-          command = `Unsilence ${steamId}`;
-          break;
-        case 'knockout':
-          command = `Knockout ${params.seconds} ${steamId}`;
-          break;
-        case 'announce':
-          command = `#Announce ${params.message}`;
-          break;
-        case 'notify':
-          command = `#SendNotification ${params.type} 0 "${params.message}" ${steamId}`;
-          break;
-        case 'chat': {
-          const colorMap: Record<string, string> = { White: '0', Red: '7', Green: '3', Blue: '2', Yellow: '4', Orange: '6' };
-          const type = colorMap[params.color] || '4';
-          command = `SendChat ${type} "${params.message}" ${steamId}`;
-          break;
-        }
-        case 'scheduleCargoDrop': {
-          const notSet = (v: any) => v === undefined || v === null || v === '' || v === false;
-          let x = params.x, y = params.y, z = params.z;
-          if (notSet(x) && notSet(y) && notSet(z)) {
-            // Always get fresh position from ListPlayers
-            const freshRes = await this.rconClient.sendCommand('ListPlayers');
-            if (freshRes.success && freshRes.response) {
-              for (const line of freshRes.response.split('\n')) {
-                if (line.includes(`steam=${steamId}`)) {
-                  const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
-                  if (pm) { x = parseFloat(pm[1]); y = parseFloat(pm[2]); z = parseFloat(pm[3]); break; }
-                }
-              }
-            }
-          }
-          if (notSet(x) || notSet(y) || notSet(z)) {
-            this.sendJson(res, { error: 'Не удалось определить координаты игрока' }, 400);
-            return;
-          }
-          command = `ScheduleWorldEvent BP_CargoDropEvent ${x} ${y} ${z}`;
-          break;
-        }
-        case 'setAllSkills':
-          await this.executeSetAllSkills(steamId, res);
-          return;
-        case 'unstuck':
-          command = `Unstuck ${steamId}`;
-          break;
-        default:
-          this.sendJson(res, { error: 'Unknown action' }, 400);
-          return;
-      }
-
-      console.log(`[WebPanel] Executing command: ${command}`);
-      const result = await this.rconClient.sendCommand(command);
-      console.log(`[WebPanel] Command result:`, result);
+      const result = await this.executePlayerAction(steamId, action, params || {});
       this.sendJson(res, result);
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);
     }
+  }
+
+  async executePlayerAction(steamId: string, action: string, params: any): Promise<any> {
+    if (!this.rconClient || !this.rconClient.isConnected()) {
+      return { error: 'RCON not connected' };
+    }
+
+    let command = '';
+    switch (action) {
+      case 'setAttributes':
+        command = `SetAttributes ${params.strength} ${params.dexterity} ${params.stamina} ${params.intellect} ${steamId}`;
+        break;
+      case 'godMode':
+        command = `SetGodMode ${params.enabled ? 'true' : 'false'} ${steamId}`;
+        break;
+      case 'setImmortality':
+        command = `SetImmortality ${params.enabled ? 'true' : 'false'} ${steamId}`;
+        break;
+      case 'showNamePlates':
+        command = `#ShowNamePlates true ${steamId}`;
+        break;
+      case 'showOtherPlayerInfo':
+        command = `#ShowOtherPlayerInfo true ${steamId}`;
+        break;
+      case 'suicide':
+        command = `Suicide ${steamId}`;
+        break;
+      case 'silence':
+        command = `Silence ${steamId}`;
+        break;
+      case 'unsilence':
+        command = `Unsilence ${steamId}`;
+        break;
+      case 'knockout':
+        command = `Knockout ${params.seconds} ${steamId}`;
+        break;
+      case 'announce':
+        command = `#Announce ${params.message}`;
+        break;
+      case 'notify':
+        command = `#SendNotification ${params.type} 0 "${params.message}" ${steamId}`;
+        break;
+      case 'chat': {
+        const colorMap: Record<string, string> = { White: '0', Red: '7', Green: '3', Blue: '2', Yellow: '4', Orange: '6' };
+        const type = colorMap[params.color] || '4';
+        command = `SendChat ${type} "${params.message}" ${steamId}`;
+        break;
+      }
+      case 'unstuck':
+        command = `Unstuck ${steamId}`;
+        break;
+      default:
+        return { error: 'Unknown action' };
+    }
+
+    console.log(`[WebPanel] Executing command: ${command}`);
+    const result = await this.rconClient.sendCommand(command);
+    console.log(`[WebPanel] Command result:`, result);
+    return result;
   }
 
   private async executeSetAllSkills(steamId: string, res: http.ServerResponse): Promise<void> {

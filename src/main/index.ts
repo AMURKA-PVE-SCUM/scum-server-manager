@@ -375,6 +375,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle('server:stop', async () => { await serverManager.stop(); const s = serverManager.getStatus(); discordWebhook.sendStatusUpdate('stopped').catch(() => {}); return s; });
   ipcMain.handle('server:restart', async () => { rconClient.setAutoReconnect(false); await serverManager.restart(); const s = serverManager.getStatus(); if (s.running) { setTimeout(() => { rconClient.connect(store.store.rcon.host || 'localhost', store.store.rcon.port || 28015, store.store.rcon.password).catch(() => {});     }, 60000); discordWebhook.sendStatusUpdate('restarted').catch(() => {}); } return s; });
   ipcMain.handle('server:status', () => serverManager.getStatus());
+  ipcMain.handle('server:online-players', async () => {
+    try { return await webPanel.getOnlinePlayers(); } catch { return []; }
+  });
+  ipcMain.handle('players:action', async (_event, steamId, action, params) => {
+    try { return await webPanel.executePlayerAction(steamId, action, params || {}); } catch (e: any) { return { error: e.message }; }
+  });
   ipcMain.handle('server:check-update', async () => {
     try {
       steamCmd.setSteamCmdPath(store.store.server.steamCmdPath || 'D:\\steamcmd');

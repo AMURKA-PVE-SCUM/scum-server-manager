@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('server:stop'),
     restart: () => ipcRenderer.invoke('server:restart'),
     status: () => ipcRenderer.invoke('server:status'),
+    onlinePlayers: () => ipcRenderer.invoke('server:online-players'),
+    playerAction: (steamId: string, action: string, params?: any) => ipcRenderer.invoke('players:action', steamId, action, params),
     checkUpdate: () => ipcRenderer.invoke('server:check-update'),
     update: () => ipcRenderer.invoke('server:update'),
     manualUpdate: () => ipcRenderer.invoke('server:manual-update'),

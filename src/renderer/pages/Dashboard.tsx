@@ -111,12 +111,10 @@ export function Dashboard() {
 
   const fetchOnlinePlayers = useCallback(async () => {
     try {
-      if (!config || !config.webPanel?.port) return;
-      const r = await fetch(`http://localhost:${config.webPanel.port}/api/players/online`);
-      const data = await r.json();
-      if (data.players) setOnlinePlayers(data.players);
+      const players = await window.electronAPI.server.onlinePlayers();
+      if (players) setOnlinePlayers(players);
     } catch {}
-  }, [config]);
+  }, []);
 
   useEffect(() => {
     fetchStatus(); fetchConfig();

@@ -194,6 +194,39 @@ export class ScumDatabaseReader {
     return this.query(`SELECT vehicle_entity_id AS entityId, replace(vehicle_asset_id, 'Vehicle:', '') AS asset, vehicle_asset_id AS assetId, vehicle_alias AS alias, NULL AS x, NULL AS y, datetime(vehicle_last_access_time, 'unixepoch') AS lastAccess, is_vehicle_automatically_created AS automatic, is_vehicle_functional AS functional, time_spent_in_forbidden_zone AS forbiddenZoneSeconds FROM vehicle_spawner ORDER BY vehicle_entity_id DESC`);
   }
 
+  getMapZones(): any[] {
+    try {
+      this.ensureOpen();
+      // configuration_index is the ordinal index into configurations sorted by id, not the id itself
+      const configs = this.query(`SELECT id, name, color_red, color_green, color_blue FROM custom_zone_configuration ORDER BY id`);
+      const regions = this.query(`SELECT name, location_x, location_y, size_x, size_y, configuration_index FROM custom_zone_region`);
+      const colorToHex = (r: number, g: number, b: number) => {
+        const to = (v: number) => Math.round(Math.max(0, Math.min(1, v || 0)) * 255).toString(16).padStart(2, '0');
+        return '#' + to(r) + to(g) + to(b);
+      };
+      return regions.map((reg: any) => {
+        const cfg = configs[reg.configuration_index] || configs[0];
+        const sizeX = reg.size_x || 0;
+        const sizeY = reg.size_y || 0;
+        // size_y == 0 => circular zone (radius = size_x), else rectangular (full width/height)
+        const shape = sizeY > 0 ? 'rect' : 'circle';
+        return {
+          name: reg.name,
+          x: reg.location_x,
+          y: reg.location_y,
+          shape,
+          sizeX,
+          sizeY,
+          radius: shape === 'circle' ? sizeX : 0,
+          color: cfg ? colorToHex(cfg.color_red, cfg.color_green, cfg.color_blue) : '#3f8a5a',
+        };
+      });
+    } catch (e: any) {
+      console.error('[SCUMdb] getMapZones error:', e.message);
+      return [];
+    }
+  }
+
   getFlags(): any[] {
     return this.query(`SELECT f.element_id AS elementId, b.id AS baseId, b.name AS baseName, b.location_x AS x, b.location_y AS y, up.name AS ownerName, up.user_id AS ownerSteamId, f.overtake_end_time AS overtakeEndTime, f.overtaker_user_profile_id AS overtakerProfileId FROM base_element_flag f LEFT JOIN base_element e ON e.element_id = f.element_id LEFT JOIN base b ON b.id = e.base_id LEFT JOIN user_profile up ON up.id = COALESCE(b.owner_user_profile_id, b.user_profile_id, e.owner_profile_id) ORDER BY f.element_id DESC`);
   }

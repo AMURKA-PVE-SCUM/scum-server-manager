@@ -455,6 +455,8 @@ export class WebPanel {
           this.handleFlags(res);
         } else if (url === '/api/chests' && method === 'GET') {
           this.handleChests(res);
+        } else if (url === '/api/map-zones' && method === 'GET') {
+          this.handleMapZones(res);
         } else if (url === '/api/vehicles' && method === 'GET') {
           this.handleVehicles(res);
         } else if (!this.authenticated(req)) {
@@ -2888,6 +2890,26 @@ export class WebPanel {
       this.sendJson(res, data);
     } catch (e: any) {
       this.sendJson(res, { error: e.message, chests: [], takeovers: [] }, 500);
+    }
+  }
+
+  private handleMapZones(res: http.ServerResponse): void {
+    try {
+      if (!this.serverPath) {
+        this.sendJson(res, { zones: [] });
+        return;
+      }
+      const dbReader = new ScumDatabaseReader(this.serverPath);
+      if (!dbReader.isAvailable()) {
+        dbReader.close();
+        this.sendJson(res, { zones: [] });
+        return;
+      }
+      const zones = dbReader.getMapZones();
+      dbReader.close();
+      this.sendJson(res, { zones });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message, zones: [] }, 500);
     }
   }
 

@@ -839,6 +839,9 @@ th{letter-spacing:.05em}
           <input type="checkbox" id="mapShowFlags" onchange="loadMapFlags();renderMapMarkers()"> <span data-i18n="map.flags">Флаги</span>
         </label>
         <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="mapShowChests" onchange="loadMapChests()"> <span data-i18n="map.chests">Ящики</span>
+        </label>
+        <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
           <input type="checkbox" id="mapShowGrid" checked onchange="renderMapMarkers()"> <span data-i18n="map.grid">Сетка</span>
         </label>
         <label style="color:var(--text);font-size:13px;display:flex;align-items:center;gap:4px">
@@ -1268,6 +1271,27 @@ th{letter-spacing:.05em}
   </div>
 </div>
 
+<!-- Chest Card Modal -->
+<div class="modal-overlay" id="chestCardModal" style="display:none;z-index:1001">
+  <div class="modal player-card">
+    <div class="player-card-header">
+      <div class="player-avatar" style="background:#a9742f">
+        <span id="chestCardIcon">📦</span>
+      </div>
+      <div class="player-info">
+        <h3 id="chestCardName">Chest</h3>
+        <p id="chestCardEntity" style="color:var(--text-dim)"></p>
+      </div>
+    </div>
+    <div class="player-stats-grid" id="chestCardBody">
+      <!-- Chest details will be inserted here -->
+    </div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn" onclick="closeChestCard()" data-i18n="modal.close">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <!-- Give Items Modal -->
 <div class="modal-overlay sub-modal" id="giveItemModal" style="display:none">
   <div class="modal">
@@ -1659,6 +1683,11 @@ const translations = {
     'map.orange': 'Оранжевая',
     'map.labels': 'Метки',
     'map.flags': 'Флаги',
+    'map.chests': 'Ящики',
+    'map.chestOwner': 'Владелец',
+    'map.chestClaimed': 'Присвоен',
+    'map.chestTaken': 'Смена владельца',
+    'map.chestLocation': 'Координаты',
     'map.grid': 'Сетка',
     'map.vehicles': 'Транспорт',
     'map.players': 'Игроки на карте',
@@ -2040,6 +2069,11 @@ const translations = {
     'map.orange': 'Orange',
     'map.labels': 'Labels',
     'map.flags': 'Flags',
+    'map.chests': 'Chests',
+    'map.chestOwner': 'Owner',
+    'map.chestClaimed': 'Claimed',
+    'map.chestTaken': 'Owner changed',
+    'map.chestLocation': 'Location',
     'map.grid': 'Grid',
     'map.vehicles': 'Vehicles',
     'map.players': 'Players on Map',
@@ -3274,6 +3308,10 @@ function closePlayerCard() {
   if (window._playerCardWhoisTimer) { clearInterval(window._playerCardWhoisTimer); window._playerCardWhoisTimer = null; }
 }
 
+function closeChestCard() {
+  document.getElementById('chestCardModal').style.display = 'none';
+}
+
 // Refresh player card Whois data after actions
 async function refreshPlayerCard() {
   if (!selectedPlayer) return;
@@ -3982,6 +4020,8 @@ const WORLD_MAX_Y = 619000;
 let mapPlayers = [];
 let mapFlags = [];
 let mapFlagsLoaded = false;
+let mapChests = [];
+let mapChestsLoaded = false;
 let mapInitDone = false;
 let mapVehicles = [];
 let mapRefreshTimer = null;
@@ -4165,6 +4205,39 @@ function renderMapMarkers() {
     }
   }
 
+  // Draw chests (only on map, not in the player list)
+  if (document.getElementById('mapShowChests').checked && mapChests.length) {
+    const cR = Math.max(5, 5 / mapZoom);
+    for (const ch of mapChests) {
+      if (ch.x == null || ch.y == null) continue;
+      if (filter && ch.ownerName && !ch.ownerName.toLowerCase().includes(filter)) continue;
+      const c = worldToPixel(ch.x, ch.y);
+      // Draw chest box
+      ctx.fillStyle = ch.taken ? '#ff8800' : '#a9742f';
+      ctx.fillRect(c.px - cR, c.py - cR, cR * 2, cR * 2);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(0.5, 1 / mapZoom);
+      ctx.strokeRect(c.px - cR, c.py - cR, cR * 2, cR * 2);
+      // Lock mark
+      ctx.beginPath();
+      ctx.arc(c.px, c.py, Math.max(2, cR * 0.4), 0, Math.PI * 2);
+      ctx.strokeStyle = ch.taken ? '#fff' : '#ffd700';
+      ctx.lineWidth = Math.max(0.6, 1 / mapZoom);
+      ctx.stroke();
+      if (showLabels && mapZoom >= labelMinZoom) {
+        const label = ch.ownerName || 'ID:' + ch.entityId;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.font = `${Math.max(9, 10 / mapZoom)}px Consolas, monospace`;
+        ctx.textAlign = 'center';
+        const tw = ctx.measureText(label).width;
+        roundRect(ctx, c.px - tw / 2 - 3, c.py - cR - 14, tw + 6, 12, 2);
+        ctx.fill();
+        ctx.fillStyle = ch.taken ? '#ffcc66' : '#e6d0a3';
+        ctx.fillText(label, c.px, c.py - cR - 5);
+      }
+    }
+  }
+
   // Draw sector grid
   if (document.getElementById('mapShowGrid').checked) {
     const gridStep = MAP_SIZE / 5;
@@ -4272,6 +4345,53 @@ function showPlayerOnMap(steamId) {
   highlightPlayer(steamId, true);
 }
 
+function highlightChest(entityId, show) {
+  renderMapMarkers();
+  if (!show) return;
+  const canvas = document.getElementById('mapCanvas');
+  const ctx = canvas.getContext('2d');
+  const ch = mapChests.find(x => x.entityId === entityId);
+  if (!ch) return;
+  const c = worldToPixel(ch.x, ch.y);
+  ctx.setTransform(mapZoom, 0, 0, mapZoom, mapPanX, mapPanY);
+  ctx.beginPath();
+  ctx.arc(c.px, c.py, 12, 0, Math.PI * 2);
+  ctx.strokeStyle = '#ffff00';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  document.querySelectorAll('.map-player-item').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector('.map-player-item[data-chest-id="' + entityId + '"]');
+  if (el) el.classList.add('active');
+}
+
+function showChestOnMap(entityId) {
+  highlightChest(entityId, true);
+  showChestCard(entityId);
+}
+
+function showChestCard(entityId) {
+  const ch = mapChests.find(x => x.entityId === entityId);
+  if (!ch) return;
+  const body = document.getElementById('chestCardBody');
+  body.innerHTML =
+    '<div class="stat-box" style="grid-column:1/-1"><div class="stat-box-label">' + t('map.chestOwner') + '</div>' +
+    '<div class="stat-box-value" style="font-size:15px">' + escHtml(ch.ownerName || '—') + '</div></div>' +
+    '<div class="stat-box"><div class="stat-box-label">Steam ID</div>' +
+    '<div class="stat-box-value" style="font-size:12px;word-break:break-all">' + escHtml(ch.ownerSteamId) + '</div></div>' +
+    '<div class="stat-box"><div class="stat-box-label">Entity ID</div>' +
+    '<div class="stat-box-value" style="font-size:12px">' + escHtml(ch.entityId) + '</div></div>' +
+    '<div class="stat-box"><div class="stat-box-label">' + t('map.chestClaimed') + '</div>' +
+    '<div class="stat-box-value" style="font-size:12px">' + escHtml(ch.claimedAt || '—') + '</div></div>' +
+    (ch.taken
+      ? '<div class="stat-box"><div class="stat-box-label" style="color:#ffcc66">' + t('map.chestTaken') + '</div>' +
+        '<div class="stat-box-value" style="font-size:13px;color:#ffcc66">⚠ ' + (ch.ownerChanges || 0) + '</div></div>'
+      : '') +
+    '<div class="stat-box" style="grid-column:1/-1"><div class="stat-box-label">' + t('map.chestLocation') + '</div>' +
+    '<div class="stat-box-value" style="font-size:13px">X=' + Math.round(ch.x) + ' Y=' + Math.round(ch.y) + ' Z=' + Math.round(ch.z) + '</div></div>';
+  document.getElementById('chestCardName').textContent = (ch.ownerName || ('ID:' + ch.entityId)) + (ch.taken ? ' ⚠' : '');
+  document.getElementById('chestCardModal').style.display = 'flex';
+}
+
 function screenToContentCoords(canvas, clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const sx = clientX - rect.left;
@@ -4375,6 +4495,17 @@ function onMapClick(e) {
       return;
     }
   }
+  if (document.getElementById('mapShowChests').checked) {
+    for (const ch of mapChests) {
+      if (ch.x == null) continue;
+      const c = worldToPixel(ch.x, ch.y);
+      const dx = cp.x - c.px, dy = cp.y - c.py;
+      if (dx * dx + dy * dy < hitR2) {
+        showChestOnMap(ch.entityId);
+        return;
+      }
+    }
+  }
 }
 
 function mapZoomIn() {
@@ -4425,6 +4556,22 @@ async function loadMapFlags() {
   renderMapMarkers();
 }
 
+async function loadMapChests() {
+  if (!document.getElementById('mapShowChests').checked) { renderMapMarkers(); return; }
+  try {
+    const res = await fetch('/api/chests', {
+      headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
+    });
+    const data = await res.json();
+    mapChests = (data.chests || []).filter(c => c.x != null && c.y != null);
+    mapChestsLoaded = true;
+  } catch (e) {
+    console.error('Map chests error:', e);
+    mapChests = [];
+  }
+  renderMapMarkers();
+}
+
 async function loadMapPlayers() {
   try {
     const res = await fetch('/api/players', {
@@ -4448,6 +4595,7 @@ function startMapAutoRefresh() {
     if (document.getElementById('mapAutoRefresh').checked) {
       loadMapPlayers();
       if (document.getElementById('mapShowFlags').checked && mapFlagsLoaded) loadMapFlags();
+      if (document.getElementById('mapShowChests').checked && mapChestsLoaded) loadMapChests();
       if (document.getElementById('mapShowVehicles').checked) loadMapVehicles();
     }
   }, 5000);

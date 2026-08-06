@@ -198,6 +198,41 @@ export class ScumDatabaseReader {
     return this.query(`SELECT f.element_id AS elementId, b.id AS baseId, b.name AS baseName, b.location_x AS x, b.location_y AS y, up.name AS ownerName, up.user_id AS ownerSteamId, f.overtake_end_time AS overtakeEndTime, f.overtaker_user_profile_id AS overtakerProfileId FROM base_element_flag f LEFT JOIN base_element e ON e.element_id = f.element_id LEFT JOIN base b ON b.id = e.base_id LEFT JOIN user_profile up ON up.id = COALESCE(b.owner_user_profile_id, b.user_profile_id, e.owner_profile_id) ORDER BY f.element_id DESC`);
   }
 
+  getChestPositions(): Map<string, { x: number; y: number; z: number; entityClass: string }> {
+    const result = new Map<string, { x: number; y: number; z: number; entityClass: string }>();
+    try {
+      this.ensureOpen();
+      const chestClasses = ['Improvised_Metal_Chest_ES', 'Asian_Chest_Metal_ES'];
+      const rows = this.query(`SELECT id, class, owning_entity_id, parent_entity_id, location_x, location_y, location_z FROM entity`);
+      const byId = new Map<number, any>();
+      rows.forEach((r: any) => byId.set(r.id, r));
+      const chestRows = rows.filter((r: any) => chestClasses.indexOf(r.class) !== -1);
+      for (const chest of chestRows) {
+        const id = String(chest.id);
+        let cur = chest;
+        let ownerFound = null;
+        const seen = new Set<number>();
+        for (let i = 0; i < 10; i++) {
+          if (cur && Math.abs(cur.location_x) > 1 && Math.abs(cur.location_y) > 1) {
+            ownerFound = cur;
+            break;
+          }
+          const nextId = cur && cur.owning_entity_id != null ? cur.owning_entity_id : (cur && cur.parent_entity_id != null ? cur.parent_entity_id : null);
+          if (nextId == null || seen.has(nextId)) break;
+          seen.add(nextId);
+          cur = byId.get(nextId) || null;
+        }
+        const loc = ownerFound || (Math.abs(chest.location_x) > 1 && Math.abs(chest.location_y) > 1 ? chest : null);
+        if (loc) {
+          result.set(id, { x: loc.location_x, y: loc.location_y, z: loc.location_z || 0, entityClass: loc.class || '' });
+        }
+      }
+    } catch (e: any) {
+      console.error('[SCUMdb] getChestPositions error:', e.message);
+    }
+    return result;
+  }
+
   getBankAccounts(): any[] {
     return this.query(`SELECT r.id AS accountId, r.user_profile_id AS profileId, up.name AS ownerName, up.user_id AS ownerSteamId, r.bank_account_number AS accountNumber, r.save_timestamp AS saveTimestamp, c.currency_type AS currencyType, c.account_balance AS accountBalance FROM bank_account_registry r LEFT JOIN bank_account_registry_currencies c ON c.bank_account_id = r.id LEFT JOIN user_profile up ON up.id = r.user_profile_id ORDER BY c.account_balance DESC, r.id LIMIT 300`);
   }

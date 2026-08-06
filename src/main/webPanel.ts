@@ -32,6 +32,7 @@ export class WebPanel {
   private playersPollInterval: NodeJS.Timeout | null = null;
   private cachedPlayers: OnlinePlayer[] = [];
   private cachedRconVehicles: any[] = [];
+  private chestCache: { data: { chests: any[]; takeovers: any[] }; ts: number } | null = null;
   private rconCredentials: { host: string; port: number; password: string } | null = null;
   private readonly PLAYERS_POLL_INTERVAL = 3000;
   private packsConfig: PackConfig = {
@@ -452,6 +453,8 @@ export class WebPanel {
           this.serveMapImage(variant, res);
         } else if (url === '/api/flags' && method === 'GET') {
           this.handleFlags(res);
+        } else if (url === '/api/chests' && method === 'GET') {
+          this.handleChests(res);
         } else if (url === '/api/vehicles' && method === 'GET') {
           this.handleVehicles(res);
         } else if (!this.authenticated(req)) {
@@ -2769,6 +2772,122 @@ export class WebPanel {
       this.sendJson(res, { error: e.message, flags: [] }, 500);
     } finally {
       dbReader.close();
+    }
+  }
+
+  private handleChests(res: http.ServerResponse): void {
+    try {
+      if (!this.serverPath) {
+        this.sendJson(res, { chests: [], takeovers: [] });
+        return;
+      }
+      const now = Date.now();
+      if (this.chestCache && now - this.chestCache.ts < 10000) {
+        this.sendJson(res, this.chestCache.data);
+        return;
+      }
+      const logsDir = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'Logs');
+      const events: any[] = [];
+      if (fs.existsSync(logsDir)) {
+        const files = fs.readdirSync(logsDir)
+          .filter(f => f.toLowerCase().startsWith('chest_ownership') && f.endsWith('.log'))
+          .sort();
+        const claimedRe = /^(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}):\s*Chest \(entity id:\s*(\d+)\) ownership claimed\.\s*Owner:\s*(\d+)\s*\((\d+),\s*([^)]+)\)\.\s*Location:\s*X=(-?[\d.]+)\s*Y=(-?[\d.]+)\s*Z=(-?[\d.]+)/;
+        const changedRe = /^(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}):\s*Chest \(entity id:\s*(\d+)\) ownership changed\.\s*Old owner:\s*([^>]+?)\s*->\s*New owner:\s*([^)]+?)\)\.\s*Location:\s*X=(-?[\d.]+)\s*Y=(-?[\d.]+)\s*Z=(-?[\d.]+)/;
+        for (const f of files) {
+          const fp = path.join(logsDir, f);
+          let content: string;
+          try {
+            const buf = fs.readFileSync(fp);
+            if (buf.length === 0) continue;
+            content = buf[1] === 0 ? buf.toString('utf16le') : buf.toString('utf8');
+          } catch { continue; }
+          if (content.charCodeAt(0) === 0xFEFF || content.charCodeAt(0) === 0xFFFE) content = content.slice(1);
+          for (const rawLine of content.split(/\r?\n/)) {
+            const line = rawLine.replace(/\uFEFF/g, '').trim();
+            if (!line.includes('Chest (')) continue;
+            let m = line.match(claimedRe);
+            if (m) {
+              events.push({
+                timestamp: m[1],
+                entityId: m[2],
+                ownerSteamId: m[3],
+                ownerDbId: parseInt(m[4]),
+                ownerName: m[5].trim(),
+                x: parseFloat(m[6]),
+                y: parseFloat(m[7]),
+                z: parseFloat(m[8]),
+              });
+              continue;
+            }
+            m = line.match(changedRe);
+            if (m) {
+              const newOwnerRaw = m[4].trim();
+              const nm = newOwnerRaw.match(/^(\d+)\s*\((\d+),\s*([^)]+)$/);
+              events.push({
+                timestamp: m[1],
+                entityId: m[2],
+                ownerSteamId: nm ? nm[1] : null,
+                ownerDbId: nm ? parseInt(nm[2]) : -1,
+                ownerName: nm ? nm[3].trim() : null,
+                x: parseFloat(m[5]),
+                y: parseFloat(m[6]),
+                z: parseFloat(m[7]),
+              });
+            }
+          }
+        }
+      }
+      // Resolve current positions from SCUM.db (walk up owning chain for chests in vehicles)
+      const dbPositions = new Map<string, { x: number; y: number; z: number }>();
+      try {
+        const dbReader = new ScumDatabaseReader(this.serverPath);
+        if (dbReader.isAvailable()) {
+          const positions = dbReader.getChestPositions();
+          positions.forEach((p, k) => dbPositions.set(k, p));
+        }
+        dbReader.close();
+      } catch (e: any) {
+        console.error('[WebPanel] chest position lookup failed:', e.message);
+      }
+      // Latest event per entity (current owner), detect owner changes
+      const latestByEntity = new Map<string, any>();
+      const ownerHistory = new Map<string, Set<string | null>>();
+      for (const ev of events) {
+        latestByEntity.set(ev.entityId, ev);
+        if (!ownerHistory.has(ev.entityId)) ownerHistory.set(ev.entityId, new Set());
+        ownerHistory.get(ev.entityId)!.add(ev.ownerSteamId);
+      }
+      const chests: any[] = [];
+      const takeovers: any[] = [];
+      for (const [entityId, ev] of latestByEntity.entries()) {
+        const owners = ownerHistory.get(entityId)!;
+        // Count distinct non-null owners as changes (ignoring resets to null)
+        const distinctOwners = new Set<string>();
+        owners.forEach(o => { if (o) distinctOwners.add(o); });
+        const ownerCount = distinctOwners.size;
+        const dbPos = dbPositions.get(entityId);
+        const chest = {
+          entityId,
+          ownerSteamId: ev.ownerSteamId,
+          ownerDbId: ev.ownerDbId,
+          ownerName: ev.ownerName,
+          x: dbPos ? dbPos.x : ev.x,
+          y: dbPos ? dbPos.y : ev.y,
+          z: dbPos ? dbPos.z : ev.z,
+          posFromDb: !!dbPos,
+          claimedAt: ev.timestamp,
+          ownerChanges: ownerCount - 1,
+          taken: ownerCount > 1,
+        };
+        chests.push(chest);
+        if (ownerCount > 1) takeovers.push(chest);
+      }
+      const data = { chests, takeovers, totalEvents: events.length };
+      this.chestCache = { data, ts: now };
+      this.sendJson(res, data);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message, chests: [], takeovers: [] }, 500);
     }
   }
 

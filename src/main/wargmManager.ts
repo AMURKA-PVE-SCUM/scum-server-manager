@@ -458,12 +458,13 @@ export class WargmManager {
   }
 
   async claimOperation(settings: WargmSettings, operationId: string | number): Promise<boolean> {
+    // operation_success marks the purchase as delivered on WARGM (only call on successful delivery)
     const result = await this.apiRequest(
       settings,
-      `shop/operation_claim?operation_id=${operationId}`,
+      `shop/operation_success?operation_id=${operationId}`,
     );
     if (!result.success) {
-      console.error(`[Wargm] claimOperation failed for ${operationId}: ${result.error}`);
+      console.error(`[Wargm] claimOperation (operation_success) failed for ${operationId}: ${result.error}`);
     }
     return result.success;
   }

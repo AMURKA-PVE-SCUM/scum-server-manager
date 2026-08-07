@@ -1272,6 +1272,23 @@ export class WebPanel {
       return { error: 'RCON not connected' };
     }
 
+    if (action === 'chestFull') {
+      const chestItem = params.chestItem || 'Improvised_Metal_Chest';
+      const itemName = (params.itemName || '').trim();
+      const count = parseInt(params.count) || 0;
+      if (!itemName) return { error: 'Ящик: не указан предмет' };
+      if (count <= 0) return { error: 'Ящик: неверное количество' };
+      const rp = await this.rconClient.sendCommand('ListPlayers');
+      const online = rp.success ? this.parseListPlayersOutput(rp.response) : [];
+      const target = online.find(p => p.steamId === steamId);
+      if (!target || !target.location) return { error: 'Игрок не найден или координаты неизвестны' };
+      const { x, y, z } = target.location;
+      const cmd = `SpawnInventoryFullOf ${chestItem} 1 ${Array(count).fill(itemName).join(' ')} x=${x} y=${y} z=${z}`;
+      console.log(`[WebPanel] ChestFull: ${cmd}`);
+      const result = await this.rconClient.sendCommand(cmd);
+      return result;
+    }
+
     let command = '';
     switch (action) {
       case 'setAttributes':

@@ -263,7 +263,7 @@ export interface WargmSettings {
 
 export interface WargmCardItem {
   id?: number;
-  type: 'item' | 'vehicle' | 'skill' | 'attributes' | 'money' | 'gold' | 'fame' | 'cargo_drop' | 'vip';
+  type: 'item' | 'vehicle' | 'skill' | 'attributes' | 'money' | 'gold' | 'fame' | 'cargo_drop' | 'vip' | 'chest_full';
   data: Record<string, any>;
   sortOrder?: number;
 }

@@ -1315,6 +1315,30 @@ th{letter-spacing:.05em}
   </div>
 </div>
 
+<!-- Give Chest Modal -->
+<div class="modal-overlay sub-modal" id="giveChestModal" style="display:none">
+  <div class="modal">
+    <h3 id="giveChestPlayerName">Give Chest</h3>
+    <div class="form-group">
+      <label data-i18n="wargm.chestItem">Тип ящика</label>
+      <input type="text" id="giveChestItem" value="Improvised_Metal_Chest">
+    </div>
+    <div class="form-group" style="position:relative">
+      <label data-i18n="items.search">Поиск предметов</label>
+      <input type="text" id="giveChestId" data-i18n-placeholder="items.search" placeholder="Поиск предметов..." oninput="showChestItemSuggestions()" onkeydown="handleChestItemKeydown(event)" autocomplete="off">
+      <div id="chestItemSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:4px"></div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="items.amount">Количество</label>
+      <input type="number" id="giveChestCount" value="1" min="1" max="999">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeGiveChestModal()" data-i18n="modal.cancel">Отмена</button>
+      <button class="btn btn-primary" onclick="executeGiveChest()" data-i18n="items.give">Выдать</button>
+    </div>
+  </div>
+</div>
+
 <!-- Spawn Vehicle Modal -->
 <div class="modal-overlay sub-modal" id="spawnVehicleModal" style="display:none">
   <div class="modal">
@@ -1559,6 +1583,9 @@ const translations = {
     'playerCard.rconActions': 'Действия RCON',
     'playerCard.setAttributes': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="4.5" r="2"/><path d="M9.5 9l2.5-2.5L14.5 9l-1.5 8h-2L9.5 9Z"/><path d="M8 12l-2-1-2 3 2 1 2-3Zm8 0 2-1 2 3-2 1-2-3Z"/></svg> Установить атрибуты',
     'playerCard.giveItems': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="5" y="8" width="14" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2M5 14h14M9 11v2M15 11v2"/></svg> Выдать предметы',
+    'playerCard.giveChest': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="4" y="8" width="16" height="13"/><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1h-2M12 7v14M12 7c-3-3-6-1-6 1s3 0 6-1Zm0 0c3-3 6-1 6 1s-3 0-6-1Z"/></svg> Выдать ящик с предметами',
+    'playerCard.giveChestTitle': 'Выдать ящик с предметами',
+    'playerCard.giveChestSuccess': 'Ящик с предметами выдан!',
     'playerCard.giveMoney': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg> Выдать деньги',
     'playerCard.giveGold': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h12v4a6 6 0 0 1-12 0V3Z"/><path d="M6 5H4v2a4 4 0 0 0 4 4M18 5h2v2a4 4 0 0 1-4 4M12 13v4M8 20h8"/></svg> Выдать золото',
     'playerCard.setFame': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="m12 3 2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5Z"/></svg> Установить славу',
@@ -1750,6 +1777,8 @@ const translations = {
     'wargm.cargoHintAuto': 'Дроп по координатам игрока (авто)',
     'wargm.vehicleHint': 'Спавнится напрямую командой #SpawnVehicle',
     'wargm.vipDays': 'Дней VIP',
+    'wargm.chestItem': 'Тип ящика',
+    'wargm.chestHint': 'Выдаёт ящик, заполненный предметом N раз по координатам игрока (#SpawnInventoryFullOf)',
     'packs.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
     'packs.refresh': '⟳ Обновить',
     'packs.subtabTitle': 'Наборы',
@@ -1946,6 +1975,9 @@ const translations = {
     'playerCard.rconActions': 'RCON Actions',
     'playerCard.setAttributes': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="4.5" r="2"/><path d="M9.5 9l2.5-2.5L14.5 9l-1.5 8h-2L9.5 9Z"/><path d="M8 12l-2-1-2 3 2 1 2-3Zm8 0 2-1 2 3-2 1-2-3Z"/></svg> Set Attributes',
     'playerCard.giveItems': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="5" y="8" width="14" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2M5 14h14M9 11v2M15 11v2"/></svg> Give Items',
+    'playerCard.giveChest': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="4" y="8" width="16" height="13"/><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1h-2M12 7v14M12 7c-3-3-6-1-6 1s3 0 6-1Zm0 0c3-3 6-1 6 1s-3 0-6-1Z"/></svg> Give Chest with Items',
+    'playerCard.giveChestTitle': 'Give Chest with Items',
+    'playerCard.giveChestSuccess': 'Chest with items delivered!',
     'playerCard.giveMoney': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg> Give Money',
     'playerCard.giveGold': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h12v4a6 6 0 0 1-12 0V3Z"/><path d="M6 5H4v2a4 4 0 0 0 4 4M18 5h2v2a4 4 0 0 1-4 4M12 13v4M8 20h8"/></svg> Give Gold',
     'playerCard.setFame': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="m12 3 2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5Z"/></svg> Set Fame',
@@ -2216,6 +2248,8 @@ const translations = {
     'airdrop.calibrateCancel': 'Cancel',
     'airdrop.calibrateReset': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg> Reset All',
     'wargm.vipDays': 'VIP Days',
+    'wargm.chestItem': 'Chest type',
+    'wargm.chestHint': 'Delivers a chest filled with the item N times at the player coordinates (#SpawnInventoryFullOf)',
     'nav.notifications': 'Notifications',
     'notifications.desc': 'Automatic messages in the game chat on schedule, online stats, and join/leave notifications.',
     'notifications.autoMessages': 'Auto Messages',
@@ -3229,6 +3263,9 @@ async function showPlayerCard(steamId, playerName) {
       <button class="action-btn success" onclick="showGiveItemModal('${steamId}', '${escapeHtml(playerName)}')">
          ${t('playerCard.giveItems')}
       </button>
+      <button class="action-btn success" onclick="showGiveChestModal('${steamId}', '${escapeHtml(playerName)}')">
+         ${t('playerCard.giveChest')}
+      </button>
       <button class="action-btn success" onclick="showGiveMoneyModal('${steamId}', '${escapeHtml(playerName)}')">
          ${t('playerCard.giveMoney')}
       </button>
@@ -3468,6 +3505,94 @@ function hideItemSuggestions() {
   document.getElementById('itemSuggestions').style.display = 'none';
   selectedItemIndex = -1;
 }
+
+// Give Chest modal + autocomplete
+function showGiveChestModal(steamId, playerName) {
+  selectedPlayer = steamId;
+  document.getElementById('giveChestPlayerName').innerHTML = t('playerCard.giveChestTitle') + ' ' + escapeHtml(playerName);
+  document.getElementById('giveChestItem').value = 'Improvised_Metal_Chest';
+  document.getElementById('giveChestId').value = '';
+  document.getElementById('giveChestCount').value = '1';
+  document.getElementById('giveChestModal').style.display = 'flex';
+}
+
+function closeGiveChestModal() {
+  document.getElementById('giveChestModal').style.display = 'none';
+  document.getElementById('chestItemSuggestions').style.display = 'none';
+}
+
+function showChestItemSuggestions() {
+  const input = document.getElementById('giveChestId');
+  const query = input.value.toLowerCase().trim();
+  const suggestionsDiv = document.getElementById('chestItemSuggestions');
+  if (!query) { suggestionsDiv.style.display = 'none'; return; }
+  const matches = allItems.filter(item => item.toLowerCase().includes(query)).slice(0, 20);
+  if (!matches.length) { suggestionsDiv.style.display = 'none'; return; }
+  selectedItemIndex = -1;
+  suggestionsDiv.innerHTML = matches.map((item, index) => `
+    <div class="suggestion-item" data-index="${index}" onclick="selectChestItem('${item}')" onmouseenter="highlightSuggestion(${index})" style="display:flex;align-items:center">
+      ${getItemIconHtml(item)}${highlightMatch(item, query)}
+    </div>
+  `).join('');
+  suggestionsDiv.style.display = 'block';
+}
+
+function selectChestItem(item) {
+  document.getElementById('giveChestId').value = item;
+  document.getElementById('chestItemSuggestions').style.display = 'none';
+}
+
+function handleChestItemKeydown(event) {
+  const suggestionsDiv = document.getElementById('chestItemSuggestions');
+  const items = document.querySelectorAll('.suggestion-item');
+  if (suggestionsDiv.style.display === 'none' || items.length === 0) return;
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    selectedItemIndex = Math.min(selectedItemIndex + 1, items.length - 1);
+    highlightSuggestion(selectedItemIndex);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    selectedItemIndex = Math.max(selectedItemIndex - 1, 0);
+    highlightSuggestion(selectedItemIndex);
+  } else if (event.key === 'Enter' && selectedItemIndex >= 0) {
+    event.preventDefault();
+    const selected = items[selectedItemIndex];
+    if (selected) selectChestItem(selected.textContent.trim());
+  } else if (event.key === 'Escape') {
+    suggestionsDiv.style.display = 'none';
+  }
+}
+
+async function executeGiveChest() {
+  const chestItem = document.getElementById('giveChestItem').value.trim();
+  const itemId = document.getElementById('giveChestId').value.trim();
+  const count = parseInt(document.getElementById('giveChestCount').value);
+  if (!itemId) {
+    showNotification(t('notification.enterItem'), 'error');
+    return;
+  }
+  if (!count || count <= 0) {
+    showNotification(t('notification.enterItem'), 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/players/action', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({steamId: selectedPlayer, action: 'chestFull', params: {chestItem, itemName: itemId, count}})
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('playerCard.giveChestSuccess'), 'success');
+      closeGiveChestModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
 
 // Inline suggestions for pack items and WARGM
 function showInlineSuggestions(input, customSource) {
@@ -5516,6 +5641,7 @@ function wargmAddItem(prefill) {
         <option value="fame">Слава</option>
         <option value="cargo_drop">Карго-дроп</option>
         <option value="vip">VIP</option>
+        <option value="chest_full">Ящик с предметами</option>
       </select>
       <button class="btn" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;color:var(--red)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
     </div>
@@ -5628,13 +5754,31 @@ function wargmChangeItemType(idx, prefill) {
             <input type="number" id="wargmItem_days_${idx}" value="${d.days || 30}" min="1" max="3650"></div>
         </div>`;
       break;
+    case 'chest_full':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:8px">
+          <div class="form-group"><label style="font-size:11px" data-i18n="wargm.chestItem">Тип ящика</label>
+            <input type="text" id="wargmItem_chest_${idx}" value="${escHtml(d.chestItem || 'Improvised_Metal_Chest')}"></div>
+          <div class="form-group" style="position:relative">
+            <label data-i18n="wargm.itemName" style="font-size:11px">Shortname предмета</label>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div id="wargmItem_icon_${idx}" style="flex-shrink:0;width:24px;height:24px;display:flex;align-items:center"></div>
+              <input type="text" id="wargmItem_name_${idx}" value="${escHtml(d.itemName || d.shortname || '')}" placeholder="CementBag" oninput="showInlineSuggestions(this);updateWargmItemIcon(${idx})" style="flex:1">
+            </div>
+            <div class="wargm-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+          </div>
+          <div class="form-group"><label data-i18n="wargm.amount" style="font-size:11px">Количество</label>
+            <input type="number" id="wargmItem_count_${idx}" value="${d.count || 1}" min="1" max="999"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)" data-i18n="wargm.chestHint">Выдаёт ящик, заполненный предметом N раз по координатам игрока (#SpawnInventoryFullOf)</div>`;
+      break;
   }
 
   fields.innerHTML = html;
   // Re-apply translations
   if (typeof applyTranslations === 'function') applyTranslations(fields);
   // Update icon if editing existing item or vehicle
-  if (prefill && (type === 'item' || type === 'vehicle')) updateWargmItemIcon(idx);
+  if (prefill && (type === 'item' || type === 'vehicle' || type === 'chest_full')) updateWargmItemIcon(idx);
 }
 
 function wargmCollectItemData(idx) {
@@ -5674,6 +5818,12 @@ function wargmCollectItemData(idx) {
       break;
     case 'vip':
       data.days = parseInt(document.getElementById(`wargmItem_days_${idx}`)?.value) || 30;
+      break;
+    case 'chest_full':
+      data.chestItem = document.getElementById(`wargmItem_chest_${idx}`)?.value || 'Improvised_Metal_Chest';
+      data.itemName = document.getElementById(`wargmItem_name_${idx}`)?.value || '';
+      data.shortname = data.itemName;
+      data.count = parseInt(document.getElementById(`wargmItem_count_${idx}`)?.value) || 0;
       break;
   }
   return { type, data };

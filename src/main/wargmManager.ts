@@ -602,6 +602,24 @@ export class WargmManager {
         return { success: r.success, message: r.success ? `Дроп в ${loc.x},${loc.y},${loc.z}` : `Дроп: ${r.response || 'ОШИБКА'}` };
       }
 
+      case 'chest_full': {
+        const chestItem = d.chestItem || 'Improvised_Metal_Chest';
+        const itemName = d.itemName || d.shortname || '';
+        const count = parseInt(d.count) || 0;
+        if (!itemName) return { success: false, message: 'Ящик: не указан предмет' };
+        if (count <= 0) return { success: false, message: 'Ящик: неверное количество' };
+        const loc = await this.getPlayerLocation(steamId);
+        if (!loc) {
+          console.log(`[Wargm] ChestFull failed: getPlayerLocation returned null for ${steamId}`);
+          return { success: false, message: 'Ящик: не удалось определить координаты игрока' };
+        }
+        const items = Array(count).fill(itemName).join(' ');
+        const cmd = `SpawnInventoryFullOf ${chestItem} 1 ${items} x=${loc.x} y=${loc.y} z=${loc.z}`;
+        console.log(`[Wargm] ChestFull: ${cmd}`);
+        const r = await this.rconClient.sendCommand(cmd);
+        return { success: r.success, message: r.success ? `Ящик ${chestItem} с ${itemName} x${count}` : `Ящик: ${r.response || 'ОШИБКА'}` };
+      }
+
       case 'vip': {
         const days = parseInt(d.days) || 30;
         if (this.vipAddCallback) {

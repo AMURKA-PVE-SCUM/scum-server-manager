@@ -501,10 +501,11 @@ export class WargmManager {
     const r = await this.rconClient.sendCommand('ListPlayers');
     if (!r.success || !r.response) return null;
     for (const line of r.response.split('\n')) {
-      if (line.includes(`steam=${steamId}`)) {
-        const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
-        if (pm) return { x: parseFloat(pm[1]), y: parseFloat(pm[2]), z: parseFloat(pm[3]) };
-      }
+      const sm = line.match(/steam=(\d{17})/);
+      if (!sm) continue;
+      if (sm[1] !== String(steamId)) continue;
+      const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
+      if (pm) return { x: parseFloat(pm[1]), y: parseFloat(pm[2]), z: parseFloat(pm[3]) };
     }
     return null;
   }
@@ -665,6 +666,12 @@ export class WargmManager {
       if (i > 0) await this.delay(1000);
 
       const execResult = await this.executeCard(matchCard, steamId);
+
+      // Only claim and mark delivered on success; otherwise leave pending for retry
+      if (!execResult.success) {
+        console.error(`[Wargm] Delivery failed for op ${opId} (${matchCard.name}), leaving pending for retry: ${execResult.results.join('; ')}`);
+        continue;
+      }
 
       // Claim on WARGM first, then mark local delivery only on success
       const claimed = await this.claimOperation(settings, opId);

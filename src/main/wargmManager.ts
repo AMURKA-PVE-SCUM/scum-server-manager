@@ -500,13 +500,35 @@ export class WargmManager {
     if (!this.rconClient) return null;
     const r = await this.rconClient.sendCommand('ListPlayers');
     if (!r.success || !r.response) return null;
-    for (const line of r.response.split('\n')) {
-      const sm = line.match(/steam=(\d{17})/);
-      if (!sm) continue;
-      if (sm[1] !== String(steamId)) continue;
-      const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
-      if (pm) return { x: parseFloat(pm[1]), y: parseFloat(pm[2]), z: parseFloat(pm[3]) };
+    const target = String(steamId);
+    const lines = r.response.split('\n');
+    let pending: { steamId: string; loc?: { x: number; y: number; z: number } } | null = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      // New format (v0.4.6): "PLAYER | Name | steam=765611... | ... | (x, y, z)"
+      const pipeMatch = line.match(/^PLAYER\s*\|\s*.+?\s*\|\s*steam=(\d{17})\s*\|/i);
+      if (pipeMatch) {
+        pending = { steamId: pipeMatch[1] };
+        const pm = line.match(/\(([\d.+-]+),\s*([\d.+-]+),\s*([\d.+-]+)\)/);
+        if (pm) pending.loc = { x: parseFloat(pm[1]), y: parseFloat(pm[2]), z: parseFloat(pm[3]) };
+        if (pending.steamId === target && pending.loc) return pending.loc;
+        continue;
+      }
+      // Legacy format: "1. Name" then following "Steam: ..." / "Location: ..."
+      const nameMatch = line.match(/^\d+\.\s+(.+)$/);
+      if (nameMatch) { pending = { steamId: '' }; continue; }
+      if (pending) {
+        const steamMatch = line.match(/Steam:\s*.+?\((\d{17})\)/);
+        if (steamMatch) { pending.steamId = steamMatch[1]; continue; }
+        const locMatch = line.match(/Location:\s*X=([\d.+-]+)\s+Y=([\d.+-]+)\s+Z=([\d.+-]+)/);
+        if (locMatch) {
+          pending.loc = { x: parseFloat(locMatch[1]), y: parseFloat(locMatch[2]), z: parseFloat(locMatch[3]) };
+          if (pending.steamId === target && pending.loc) return pending.loc;
+        }
+      }
     }
+    console.log(`[Wargm] getPlayerLocation: player ${target} not found with coords. ListPlayers:\n${r.response.slice(0, 1500)}`);
     return null;
   }
 

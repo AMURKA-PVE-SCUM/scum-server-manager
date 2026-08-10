@@ -67,6 +67,7 @@ export class LogWatcher {
     { trigger: '!rating', rconCommand: '', description: '', helpTrigger: '!рейтинг' },
     { trigger: '!car', rconCommand: '', description: '', helpTrigger: '!машина' },
     { trigger: '!carregister', rconCommand: '', description: '', helpTrigger: '!привязать' },
+    { trigger: '!carunbind', rconCommand: '', description: '', helpTrigger: '!отвязать' },
     { trigger: '!cars', rconCommand: '', description: '', helpTrigger: '!машины' },
     { trigger: '!help', rconCommand: '', description: '', isHelp: true },
   ];
@@ -91,6 +92,9 @@ export class LogWatcher {
     '!привязатьмашину': '!carregister',
     '!машины': '!cars',
     '!транспорт': '!cars',
+    '!отвязать': '!carunbind',
+    '!отвязатьмашину': '!carunbind',
+    '!отвязатьавто': '!carunbind',
   };
 
   private migrateOldFile(oldRel: string, filename: string): string {
@@ -584,7 +588,33 @@ export class LogWatcher {
         return;
       }
       const list = regs.map((r, i) => `${i + 1}. ${r.name}`).join(', ');
-      await this.rconClient.sendCommand(`SendChat 4 "Ваши машины: ${list}. Телепорт: !машина N" ${steamId}`);
+      await this.rconClient.sendCommand(`SendChat 4 "Ваши машины: ${list}. Телепорт: !машина N, отвязка: !отвязать N" ${steamId}`);
+      return;
+    }
+
+    // Vehicle unbind (отвязать)
+    if (cmdKey === '!carunbind') {
+      if (!this.vehicleTeleportConfig.enabled) {
+        await this.rconClient.sendCommand(`SendChat 4 "Система транспорта отключена" ${steamId}`);
+        return;
+      }
+      const regs = this.vehicleRegistrations[steamId] || [];
+      if (regs.length === 0) {
+        await this.rconClient.sendCommand(`SendChat 4 "У вас нет привязанных машин. Используйте !привязать N" ${steamId}`);
+        return;
+      }
+      const num = parseInt(trimmedParts[1]);
+      if (isNaN(num) || num < 1 || num > regs.length) {
+        const list = regs.map((r, i) => `${i + 1}) ${r.name}`).join(', ');
+        await this.rconClient.sendCommand(`SendChat 4 "Ваши привязанные машины: ${list}" ${steamId}`);
+        await this.rconClient.sendCommand(`SendChat 4 "Для отвязки укажите номер: !отвязать N" ${steamId}`);
+        return;
+      }
+      const chosen = regs[num - 1];
+      const remaining = regs.filter((_, i) => i !== num - 1);
+      this.vehicleRegistrations[steamId] = remaining;
+      this.saveVehicleRegistrations();
+      await this.rconClient.sendCommand(`SendChat 4 "❌ Автомобиль \"${chosen.name}\" отвязан" ${steamId}`);
       return;
     }
 

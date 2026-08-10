@@ -93,6 +93,7 @@ const store = new ElectronStore<AppConfig>({
         starterBonus: { items: [{ itemId: 'Apple', amount: 10 }], money: 1000, gold: 100, fame: 500 },
         dailyBonus: { items: [{ itemId: 'Apple', amount: 5 }], money: 500, gold: 50, fame: 200 },
       },
+      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
       airdrop: {
         enabled: false,
@@ -203,6 +204,8 @@ function initServices(): void {
   logWatcher.setTeleportLocations(config.plugins.teleport?.locations || []);
   logWatcher.setPacksConfig(config.packs);
   scumDatabase = new ScumDatabaseReader(config.server.serverPath);
+  logWatcher.setScumDb(scumDatabase);
+  logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
   webPanel.setServices(serverManager, steamCmd, config.server.serverPath);
   webPanel.setRconClient(rconClient);
   webPanel.updateConfig(config.webPanel);
@@ -232,6 +235,7 @@ function initServices(): void {
         starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
         dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
       },
+      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
       airdrop: {
         enabled: false,
@@ -330,6 +334,7 @@ function initServices(): void {
     };
     logWatcher.setVipConfig(vip);
     logWatcher.setSaveHomeConfig(plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 });
+    logWatcher.setVehicleTeleportConfig(plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
   });
   const vipCfg = config.plugins.vip || {
     enabled: true, players: [],
@@ -338,6 +343,8 @@ function initServices(): void {
   };
   logWatcher.setVipConfig(vipCfg);
   logWatcher.setSaveHomeConfig(config.plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 });
+  logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+  const vtCfg = config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] };
   wargmManager.setVipAddCallback((steamId: string, days: number) => {
     const cur = store.store;
     const p = cur.plugins || { teleport: { enabled: true, locations: [] }, vip: vipCfg };
@@ -351,6 +358,22 @@ function initServices(): void {
     }
     store.set('plugins', p);
     logWatcher.setVipConfig(p.vip);
+    webPanel.setPluginsConfig(p);
+  });
+  wargmManager.setCarTeleportAddCallback((steamId: string, days: number) => {
+    const cur = store.store;
+    const p = cur.plugins || { teleport: { enabled: true, locations: [] }, vip: vipCfg };
+    if (!p.vehicleTeleport) p.vehicleTeleport = vtCfg;
+    if (!p.vehicleTeleport.players) p.vehicleTeleport.players = [];
+    const existing = p.vehicleTeleport.players.findIndex((x: any) => x.steamId === steamId);
+    const expiresAt = Date.now() + days * 86400000;
+    if (existing >= 0) {
+      p.vehicleTeleport.players[existing].expiresAt = Math.max(p.vehicleTeleport.players[existing].expiresAt, expiresAt);
+    } else {
+      p.vehicleTeleport.players.push({ steamId, expiresAt, note: 'WARGM' });
+    }
+    store.set('plugins', p);
+    logWatcher.setVehicleTeleportConfig(p.vehicleTeleport);
     webPanel.setPluginsConfig(p);
   });
   wargmManager.setRconClient(rconClient);

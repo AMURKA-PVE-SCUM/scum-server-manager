@@ -118,6 +118,18 @@ export interface VipConfig {
   dailyBonus: VipBonus;
 }
 
+export interface VehicleTeleportConfig {
+  enabled: boolean;
+  maxVehicles: number;
+  vipMaxVehicles: number;
+  registerRadius: number;
+  teleportPrice: number;
+  teleportGoldPrice?: number;
+  teleportFamePrice?: number;
+  cooldownSeconds: number;
+  players: VipPlayer[];
+}
+
 export interface SaveHomeConfig {
   enabled: boolean;
   maxLocations: number;
@@ -189,6 +201,7 @@ export interface PluginsConfig {
     locations: TeleportLocation[];
   };
   vip: VipConfig;
+  vehicleTeleport: VehicleTeleportConfig;
   saveHome: SaveHomeConfig;
   airdrop: AirdropConfig;
   rewards: RewardsConfig;
@@ -263,7 +276,7 @@ export interface WargmSettings {
 
 export interface WargmCardItem {
   id?: number;
-  type: 'item' | 'vehicle' | 'skill' | 'attributes' | 'money' | 'gold' | 'fame' | 'cargo_drop' | 'vip' | 'chest_full';
+  type: 'item' | 'vehicle' | 'skill' | 'attributes' | 'money' | 'gold' | 'fame' | 'cargo_drop' | 'vip' | 'chest_full' | 'car_teleport';
   data: Record<string, any>;
   sortOrder?: number;
 }

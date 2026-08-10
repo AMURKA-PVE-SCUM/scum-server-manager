@@ -396,6 +396,9 @@ th{letter-spacing:.05em}
         <button class="btn packs-subtab" data-subtab="savehome" onclick="switchPacksSubtab('savehome'); loadSaveHomeConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5M10 20v-6h4v6"/></svg> <span data-i18n="savehome.subtabTitle">Дом</span>
         </button>
+        <button class="btn packs-subtab" data-subtab="vehicleteleport" onclick="switchPacksSubtab('vehicleteleport'); loadVehicleTeleportConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> <span data-i18n="vehicleteleport.subtabTitle">Транспорт</span>
+        </button>
         <button class="btn packs-subtab" data-subtab="airdrop" onclick="switchPacksSubtab('airdrop'); loadAirdropConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="4" y="8" width="16" height="13"/><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1h-2M12 7v14M12 7c-3-3-6-1-6 1s3 0 6-1Zm0 0c3-3 6-1 6 1s-3 0-6-1Z"/></svg> <span data-i18n="airdrop.subtabTitle">Сброс</span>
         </button>
@@ -546,6 +549,60 @@ th{letter-spacing:.05em}
           <p style="color:var(--muted)" data-i18n="savehome.help">Игроки используют !сохранитьдом для сохранения текущей позиции и !дом для телепорта к сохранённой точке. !дома — список сохранений.</p>
         </div>
       </div> <!-- end savehome -->
+
+      <!-- Vehicle Teleport -->
+      <div class="packs-subtab-content" id="subtab-vehicleteleport">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0" data-i18n="vehicleteleport.title"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> Транспорт: телепорт к машине</h3>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:12px">
+              <input type="checkbox" id="vehicleTeleportEnabled" onchange="onVehicleTeleportChanged()">
+              <span data-i18n="vehicleteleport.enabled">Модуль включен</span>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.maxVehicles">Макс. машин (обычный)</label>
+              <input type="number" id="vehicleTeleportMaxVehicles" value="1" min="1" max="20" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.vipMaxVehicles">Макс. машин (с доступом)</label>
+              <input type="number" id="vehicleTeleportVipMaxVehicles" value="3" min="1" max="20" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.cooldown">Кулдаун (сек)</label>
+              <input type="number" id="vehicleTeleportCooldown" value="60" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.teleportPrice">Цена телепорта ($)</label>
+              <input type="number" id="vehicleTeleportTeleportPrice" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.teleportGoldPrice">Цена телепорта (золото)</label>
+              <input type="number" id="vehicleTeleportTeleportGoldPrice" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.teleportFamePrice">Цена телепорта (слава)</label>
+              <input type="number" id="vehicleTeleportTeleportFamePrice" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+          </div>
+          <div style="margin-top:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h4 style="margin:0" data-i18n="vehicleteleport.players">Игроки с доступом (телепорт)</h4>
+              <button class="btn" onclick="addVehicleTeleportPlayer()" style="padding:6px 12px">+ <span data-i18n="packs.addItem">Добавить</span></button>
+            </div>
+            <div id="vehicleTeleportPlayersList"></div>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            <button class="btn btn-success" onclick="saveVehicleTeleportConfig()" data-i18n="vehicleteleport.save"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить</button>
+          </div>
+        </div>
+        <div class="card" style="background:var(--bg);font-size:13px">
+          <p style="color:var(--muted)" data-i18n="vehicleteleport.help">Игрок вводит !привязать — получает список своих автомобилей с номерами, затем !привязать N привязывает выбранный (бесплатно, только свои). !машина — телепорт к машине (нужен доступ), !машины — список привязанных. Без доступа !машина покажет координаты машины.</p>
+        </div>
+      </div> <!-- end vehicleteleport -->
 
       <!-- Airdrop -->
       <div class="packs-subtab-content" id="subtab-airdrop">
@@ -1777,6 +1834,8 @@ const translations = {
     'wargm.cargoHintAuto': 'Дроп по координатам игрока (авто)',
     'wargm.vehicleHint': 'Спавнится напрямую командой #SpawnVehicle',
     'wargm.vipDays': 'Дней VIP',
+    'wargm.carTeleportDays': 'Дней доступа к транспорту',
+    'wargm.carTeleportHint': 'Выдаёт доступ к команде !машина (телепорт к своей машине) на N дней',
     'wargm.chestItem': 'Тип ящика',
     'wargm.chestHint': 'Выдаёт ящик, заполненный предметом N раз по координатам игрока (#SpawnInventoryFullOf)',
     'packs.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
@@ -1821,6 +1880,18 @@ const translations = {
     'savehome.teleportFamePrice': 'Цена телепорта (слава)',
     'savehome.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
     'savehome.help': 'Игроки используют !сохранитьдом для сохранения текущей позиции и !дом для телепорта к сохранённой точке. !дома — список сохранений.',
+    'vehicleteleport.subtabTitle': 'Транспорт',
+    'vehicleteleport.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> Транспорт: телепорт к машине',
+    'vehicleteleport.enabled': 'Модуль включен',
+    'vehicleteleport.maxVehicles': 'Макс. машин (обычный)',
+    'vehicleteleport.vipMaxVehicles': 'Макс. машин (с доступом)',
+    'vehicleteleport.cooldown': 'Кулдаун (сек)',
+    'vehicleteleport.teleportPrice': 'Цена телепорта ($)',
+    'vehicleteleport.teleportGoldPrice': 'Цена телепорта (золото)',
+    'vehicleteleport.teleportFamePrice': 'Цена телепорта (слава)',
+    'vehicleteleport.players': 'Игроки с доступом (телепорт)',
+    'vehicleteleport.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
+    'vehicleteleport.help': 'Игрок вводит !привязать — получает список своих автомобилей с номерами, затем !привязать N привязывает выбранный (бесплатно, только свои). !машина — телепорт к машине (нужен доступ), !машины — список привязанных. Без доступа !машина покажет координаты машины.',
     'rewards.subtabTitle': 'Награды',
     'rewards.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="m12 3 2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5Z"/></svg> Награды за онлайн',
     'rewards.enabled': 'Включить модуль наград',
@@ -2228,6 +2299,18 @@ const translations = {
     'savehome.teleportFamePrice': 'Teleport price (fame)',
     'savehome.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Save',
     'savehome.help': 'Players use !сохранитьдом to save current position, !дом to teleport home, !дома to list saved locations.',
+    'vehicleteleport.subtabTitle': 'Transport',
+    'vehicleteleport.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> Vehicle teleport',
+    'vehicleteleport.enabled': 'Module enabled',
+    'vehicleteleport.maxVehicles': 'Max vehicles (normal)',
+    'vehicleteleport.vipMaxVehicles': 'Max vehicles (with access)',
+    'vehicleteleport.cooldown': 'Cooldown (sec)',
+    'vehicleteleport.teleportPrice': 'Teleport price ($)',
+    'vehicleteleport.teleportGoldPrice': 'Teleport price (gold)',
+    'vehicleteleport.teleportFamePrice': 'Teleport price (fame)',
+    'vehicleteleport.players': 'Players with access (teleport)',
+    'vehicleteleport.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Save',
+    'vehicleteleport.help': 'Player types !привязать to see a numbered list of their vehicles, then !привязать N binds the chosen one (free, own vehicles only). !машина teleports to the vehicle (needs access), !машины lists registered. Without access !машина shows vehicle coordinates.',
     'airdrop.subtabTitle': 'Airdrop',
     'airdrop.enabled': 'Module enabled',
     'airdrop.auto': 'Auto-drop',
@@ -2248,6 +2331,8 @@ const translations = {
     'airdrop.calibrateCancel': 'Cancel',
     'airdrop.calibrateReset': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg> Reset All',
     'wargm.vipDays': 'VIP Days',
+    'wargm.carTeleportDays': 'Vehicle access days',
+    'wargm.carTeleportHint': 'Grants access to the !машина command (teleport to own vehicle) for N days',
     'wargm.chestItem': 'Chest type',
     'wargm.chestHint': 'Delivers a chest filled with the item N times at the player coordinates (#SpawnInventoryFullOf)',
     'nav.notifications': 'Notifications',
@@ -2995,6 +3080,73 @@ async function saveSaveHomeConfig() {
     if (!res.ok) { showNotification('saveSaveHome HTTP ' + res.status, 'error'); return; }
     const result = await res.json();
     if (result.success) { showNotification('Save Home config saved', 'success'); }
+    else { showNotification('Save failed: ' + (result.error || 'unknown'), 'error'); }
+  } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
+}
+
+// Vehicle Teleport module
+let vehicleTeleportConfig = { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] };
+
+async function loadVehicleTeleportConfig() {
+  try {
+    const res = await fetch('/api/plugins/vehicleTeleport', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) return;
+    vehicleTeleportConfig = await res.json();
+    document.getElementById('vehicleTeleportEnabled').checked = vehicleTeleportConfig.enabled;
+    document.getElementById('vehicleTeleportMaxVehicles').value = vehicleTeleportConfig.maxVehicles;
+    document.getElementById('vehicleTeleportVipMaxVehicles').value = vehicleTeleportConfig.vipMaxVehicles;
+    document.getElementById('vehicleTeleportCooldown').value = vehicleTeleportConfig.cooldownSeconds;
+    document.getElementById('vehicleTeleportTeleportPrice').value = vehicleTeleportConfig.teleportPrice;
+    document.getElementById('vehicleTeleportTeleportGoldPrice').value = vehicleTeleportConfig.teleportGoldPrice || 0;
+    document.getElementById('vehicleTeleportTeleportFamePrice').value = vehicleTeleportConfig.teleportFamePrice || 0;
+    renderVehicleTeleportPlayers();
+  } catch (e) { console.error('loadVehicleTeleportConfig error:', e); }
+}
+
+function onVehicleTeleportChanged() {
+  vehicleTeleportConfig.enabled = document.getElementById('vehicleTeleportEnabled').checked;
+  vehicleTeleportConfig.maxVehicles = parseInt(document.getElementById('vehicleTeleportMaxVehicles').value) || 1;
+  vehicleTeleportConfig.vipMaxVehicles = parseInt(document.getElementById('vehicleTeleportVipMaxVehicles').value) || 3;
+  vehicleTeleportConfig.cooldownSeconds = parseInt(document.getElementById('vehicleTeleportCooldown').value) || 0;
+  vehicleTeleportConfig.teleportPrice = parseInt(document.getElementById('vehicleTeleportTeleportPrice').value) || 0;
+  vehicleTeleportConfig.teleportGoldPrice = parseInt(document.getElementById('vehicleTeleportTeleportGoldPrice').value) || 0;
+  vehicleTeleportConfig.teleportFamePrice = parseInt(document.getElementById('vehicleTeleportTeleportFamePrice').value) || 0;
+}
+
+function renderVehicleTeleportPlayers() {
+  const container = document.getElementById('vehicleTeleportPlayersList');
+  if (!vehicleTeleportConfig.players || vehicleTeleportConfig.players.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:10px">' + t('vip.noPlayers') + '</p>';
+    return;
+  }
+  container.innerHTML = '<table style="width:100%"><thead><tr><th style="text-align:left;padding:6px 8px">SteamID</th><th style="text-align:left;padding:6px 8px">' + t('vip.expires') + '</th><th style="text-align:left;padding:6px 8px">' + t('vip.note') + '</th><th style="text-align:left;padding:6px 8px">' + t('packs.actions') + '</th></tr></thead><tbody>'
+    + vehicleTeleportConfig.players.map((p, i) => {
+      const expStr = p.expiresAt > 0 ? new Date(p.expiresAt).toLocaleDateString('ru-RU') : t('vip.permanent');
+      return '<tr><td style="padding:6px 8px"><input type="text" value="' + escapeHtml(p.steamId) + '" placeholder="76561198..." onchange="vehicleTeleportConfig.players[' + i + '].steamId=this.value" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:Consolas,monospace;font-size:12px"></td><td style="padding:6px 8px"><input type="date" value="' + (p.expiresAt > 0 ? new Date(p.expiresAt).toISOString().slice(0, 10) : '') + '" onchange="vehicleTeleportConfig.players[' + i + '].expiresAt=this.value?new Date(this.value).getTime():0" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td><td style="padding:6px 8px"><input type="text" value="' + escapeHtml(p.note || '') + '" onchange="vehicleTeleportConfig.players[' + i + '].note=this.value" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td><td style="padding:6px 8px"><button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick="vehicleTeleportConfig.players.splice(' + i + ', 1); renderVehicleTeleportPlayers()">' + t('teleport.delete') + '</button></td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function addVehicleTeleportPlayer() {
+  vehicleTeleportConfig.players.push({steamId: '', expiresAt: 0, note: ''});
+  renderVehicleTeleportPlayers();
+  const rows = document.querySelectorAll('#vehicleTeleportPlayersList tbody tr');
+  if (rows.length > 0) {
+    const inputs = rows[rows.length - 1].querySelectorAll('input');
+    if (inputs.length > 0) inputs[0].focus();
+  }
+}
+
+async function saveVehicleTeleportConfig() {
+  onVehicleTeleportChanged();
+  try {
+    const res = await fetch('/api/plugins/vehicleTeleport', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify(vehicleTeleportConfig),
+    });
+    if (!res.ok) { showNotification('saveVehicleTeleport HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) { showNotification('Transport config saved', 'success'); }
     else { showNotification('Save failed: ' + (result.error || 'unknown'), 'error'); }
   } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
 }
@@ -5641,6 +5793,7 @@ function wargmAddItem(prefill) {
         <option value="fame">Слава</option>
         <option value="cargo_drop">Карго-дроп</option>
         <option value="vip">VIP</option>
+        <option value="car_teleport">Доступ к транспорту</option>
         <option value="chest_full">Ящик с предметами</option>
       </select>
       <button class="btn" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;color:var(--red)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
@@ -5754,6 +5907,14 @@ function wargmChangeItemType(idx, prefill) {
             <input type="number" id="wargmItem_days_${idx}" value="${d.days || 30}" min="1" max="3650"></div>
         </div>`;
       break;
+    case 'car_teleport':
+      html = `
+        <div style="display:grid;grid-template-columns:1fr;gap:8px">
+          <div class="form-group"><label style="font-size:11px" data-i18n="wargm.carTeleportDays">Дней доступа к транспорту</label>
+            <input type="number" id="wargmItem_days_${idx}" value="${d.days || 30}" min="1" max="3650"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)" data-i18n="wargm.carTeleportHint">Выдаёт доступ к команде !машина (телепорт к своей машине) на N дней</div>`;
+      break;
     case 'chest_full':
       html = `
         <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:8px">
@@ -5817,6 +5978,9 @@ function wargmCollectItemData(idx) {
       // no data fields needed; drops at player location
       break;
     case 'vip':
+      data.days = parseInt(document.getElementById(`wargmItem_days_${idx}`)?.value) || 30;
+      break;
+    case 'car_teleport':
       data.days = parseInt(document.getElementById(`wargmItem_days_${idx}`)?.value) || 30;
       break;
     case 'chest_full':

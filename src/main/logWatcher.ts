@@ -4,7 +4,8 @@ import { watch, FSWatcher } from 'chokidar';
 import { DiscordWebhook } from './discordWebhook';
 import { RconClient } from './rconClient';
 import { WargmManager } from './wargmManager';
-import type { LogEvent, PackConfig, PackItem, SaveHomeConfig, TeleportLocation, VipConfig } from './types';
+import { ScumDatabaseReader } from './scumDatabase';
+import type { LogEvent, PackConfig, PackItem, SaveHomeConfig, TeleportLocation, VehicleTeleportConfig, VipConfig } from './types';
 
 interface ChatCommand {
   trigger: string;
@@ -43,6 +44,13 @@ export class LogWatcher {
   private saveHomeConfig: SaveHomeConfig = { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 };
   private homeLocations: Record<string, { name: string; x: number; y: number; z: number }[]> = {};
   private homeDataPath = '';
+  private vehicleTeleportConfig: VehicleTeleportConfig = {
+    enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300,
+    teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [],
+  };
+  private vehicleRegistrations: Record<string, { entityId: number; name: string; asset: string; registeredAt: number }[]> = {};
+  private vehicleRegPath = '';
+  private scumDb: ScumDatabaseReader | null = null;
   private chatCommands: ChatCommand[] = [
     { trigger: '!balance', rconCommand: 'ListPlayers', description: 'Check your balance', hideFromHelp: true },
     { trigger: '!location', rconCommand: 'ListPlayers', description: 'Show your location', hideFromHelp: true },
@@ -57,6 +65,9 @@ export class LogWatcher {
     { trigger: '!home', rconCommand: '', description: '', helpTrigger: '!дом' },
     { trigger: '!homes', rconCommand: '', description: '', helpTrigger: '!дома' },
     { trigger: '!rating', rconCommand: '', description: '', helpTrigger: '!рейтинг' },
+    { trigger: '!car', rconCommand: '', description: '', helpTrigger: '!машина' },
+    { trigger: '!carregister', rconCommand: '', description: '', helpTrigger: '!привязать' },
+    { trigger: '!cars', rconCommand: '', description: '', helpTrigger: '!машины' },
     { trigger: '!help', rconCommand: '', description: '', isHelp: true },
   ];
   private commandAliases: Record<string, string> = {
@@ -75,6 +86,11 @@ export class LogWatcher {
     '!дом': '!home',
     '!дома': '!homes',
     '!удалитьдом': '!delhome',
+    '!машина': '!car',
+    '!привязать': '!carregister',
+    '!привязатьмашину': '!carregister',
+    '!машины': '!cars',
+    '!транспорт': '!cars',
   };
 
   private migrateOldFile(oldRel: string, filename: string): string {
@@ -97,6 +113,9 @@ export class LogWatcher {
     this.homeDataPath = this.migrateOldFile('data', 'home_locations.json');
     fs.ensureDirSync(path.dirname(this.homeDataPath));
     this.loadHomeLocations();
+    this.vehicleRegPath = this.migrateOldFile('data', 'vehicle_registrations.json');
+    fs.ensureDirSync(path.dirname(this.vehicleRegPath));
+    this.loadVehicleRegistrations();
     if (serverPath) this.startWatching();
   }
 
@@ -114,6 +133,40 @@ export class LogWatcher {
 
   setSaveHomeConfig(cfg: SaveHomeConfig): void {
     this.saveHomeConfig = cfg;
+  }
+
+  setVehicleTeleportConfig(cfg: VehicleTeleportConfig): void {
+    this.vehicleTeleportConfig = cfg;
+  }
+
+  private loadVehicleRegistrations(): void {
+    try {
+      if (fs.existsSync(this.vehicleRegPath)) {
+        this.vehicleRegistrations = JSON.parse(fs.readFileSync(this.vehicleRegPath, 'utf-8'));
+      }
+    } catch {}
+  }
+
+  private saveVehicleRegistrations(): void {
+    try {
+      fs.writeFileSync(this.vehicleRegPath, JSON.stringify(this.vehicleRegistrations, null, 2));
+    } catch {}
+  }
+
+  getVehicleRegistrations(steamId: string): { entityId: number; name: string; asset: string; registeredAt: number }[] {
+    return this.vehicleRegistrations[steamId] || [];
+  }
+
+  private isVehicleTeleport(steamId: string): boolean {
+    if (!this.vehicleTeleportConfig.enabled) return false;
+    const p = this.vehicleTeleportConfig.players.find(x => x.steamId === steamId);
+    if (!p) return false;
+    if (p.expiresAt > 0 && Date.now() > p.expiresAt) return false;
+    return true;
+  }
+
+  private maxVehicleSlots(steamId: string): number {
+    return this.isVehicleTeleport(steamId) ? this.vehicleTeleportConfig.vipMaxVehicles : this.vehicleTeleportConfig.maxVehicles;
   }
 
   private loadHomeLocations(): void {
@@ -140,6 +193,10 @@ export class LogWatcher {
 
   setWargmManager(mgr: WargmManager): void {
     this.wargmManager = mgr;
+  }
+
+  setScumDb(db: ScumDatabaseReader): void {
+    this.scumDb = db;
   }
 
   private loadCooldowns(): void {
@@ -476,6 +533,140 @@ export class LogWatcher {
       return;
     }
 
+    // Vehicle registration (привязать)
+    if (cmdKey === '!carregister') {
+      if (!this.vehicleTeleportConfig.enabled) {
+        await this.rconClient.sendCommand(`SendChat 4 "Система привязки транспорта отключена" ${steamId}`);
+        return;
+      }
+      const { pid, prisId, name: dbName } = this.getPlayerDbIds(steamId);
+      const vehicles = await this.getListSpawnedVehiclesData();
+      const owned = vehicles.filter(v => this.vehicleBelongsToPlayer(v, pid, prisId, dbName));
+      if (owned.length === 0) {
+        await this.rconClient.sendCommand(`SendChat 4 "У вас нет зарегистрированных автомобилей на сервере" ${steamId}`);
+        return;
+      }
+      const num = parseInt(trimmedParts[1]);
+      if (isNaN(num) || num < 1 || num > owned.length) {
+        const list = owned.map((v, i) => `${i + 1}) ${v.customName || v.asset || 'ID ' + v.entityId}`).join(', ');
+        await this.rconClient.sendCommand(`SendChat 4 "Ваши автомобили: ${list}" ${steamId}`);
+        await this.rconClient.sendCommand(`SendChat 4 "Для привязки укажите номер: !привязать N" ${steamId}`);
+        return;
+      }
+      const chosen = owned[num - 1];
+      const current = this.vehicleRegistrations[steamId] || [];
+      const max = this.maxVehicleSlots(steamId);
+      if (current.length >= max) {
+        await this.rconClient.sendCommand(`SendChat 4 "Достигнут лимит привязок (${max}). Используйте !машины для просмотра" ${steamId}`);
+        return;
+      }
+      if (current.some(r => r.entityId === chosen.entityId)) {
+        await this.rconClient.sendCommand(`SendChat 4 "Этот автомобиль уже привязан" ${steamId}`);
+        return;
+      }
+      const label = chosen.customName || chosen.asset || `ID ${chosen.entityId}`;
+      current.push({ entityId: chosen.entityId!, name: label, asset: chosen.asset || '', registeredAt: Date.now() });
+      this.vehicleRegistrations[steamId] = current;
+      this.saveVehicleRegistrations();
+      await this.rconClient.sendCommand(`SendChat 4 "✅ Автомобиль \"${label}\" привязан" ${steamId}`);
+      return;
+    }
+
+    // Vehicle list (машины)
+    if (cmdKey === '!cars') {
+      if (!this.vehicleTeleportConfig.enabled) {
+        await this.rconClient.sendCommand(`SendChat 4 "Система транспорта отключена" ${steamId}`);
+        return;
+      }
+      const regs = this.vehicleRegistrations[steamId] || [];
+      if (regs.length === 0) {
+        await this.rconClient.sendCommand(`SendChat 4 "У вас нет привязанных машин. Используйте !привязать <имя>" ${steamId}`);
+        return;
+      }
+      const list = regs.map((r, i) => `${i + 1}. ${r.name}`).join(', ');
+      await this.rconClient.sendCommand(`SendChat 4 "Ваши машины: ${list}. Телепорт: !машина N" ${steamId}`);
+      return;
+    }
+
+    // Vehicle teleport (машина)
+    if (cmdKey === '!car') {
+      if (!this.vehicleTeleportConfig.enabled) {
+        await this.rconClient.sendCommand(`SendChat 4 "Система транспорта отключена" ${steamId}`);
+        return;
+      }
+      const regs = this.vehicleRegistrations[steamId] || [];
+      if (regs.length === 0) {
+        await this.rconClient.sendCommand(`SendChat 4 "У вас нет привязанных машин. Используйте !привязать <имя>" ${steamId}`);
+        return;
+      }
+      const idx = parseInt(trimmedParts[1]);
+      const carIdx = (!isNaN(idx) && idx >= 1 && idx <= regs.length) ? idx - 1 : 0;
+      const reg = regs[carIdx];
+
+      // Cooldown check
+      if (this.vehicleTeleportConfig.cooldownSeconds > 0) {
+        const key = `!car_${steamId}`;
+        const last = this.cooldowns[key] || 0;
+        const elapsed = (Date.now() - last) / 1000;
+        if (elapsed < this.vehicleTeleportConfig.cooldownSeconds) {
+          const remaining = Math.ceil(this.vehicleTeleportConfig.cooldownSeconds - elapsed);
+          await this.rconClient.sendCommand(`SendChat 4 "Подождите ${remaining}с до следующего вызова" ${steamId}`);
+          return;
+        }
+      }
+
+      // Get live vehicle coordinates (may have moved)
+      const vehicles = await this.getListSpawnedVehiclesData();
+      const live = vehicles.find(v => v.entityId === reg.entityId);
+      if (!live || live.x == null || live.y == null) {
+        await this.rconClient.sendCommand(`SendChat 4 "❌ Не удалось определить местоположение машины \"${reg.name}\"" ${steamId}`);
+        return;
+      }
+      const vx = live.x, vy = live.y, vz = live.z != null ? live.z : 0;
+
+      // No access -> show coordinates only
+      if (!this.isVehicleTeleport(steamId)) {
+        await this.rconClient.sendCommand(`SendChat 4 "Машина \"${reg.name}\": X=${Math.round(vx)} Y=${Math.round(vy)} Z=${Math.round(vz)}. Для телепорта приобретите доступ" ${steamId}`);
+        return;
+      }
+
+      // Apply cooldown
+      if (this.vehicleTeleportConfig.cooldownSeconds > 0) {
+        this.cooldowns[`!car_${steamId}`] = Date.now();
+        this.saveCooldowns();
+      }
+
+      const anyCost = this.vehicleTeleportConfig.teleportPrice > 0 || (this.vehicleTeleportConfig.teleportGoldPrice || 0) > 0 || (this.vehicleTeleportConfig.teleportFamePrice || 0) > 0;
+      if (anyCost) {
+        await this.rconClient.sendCommand(`SendChat 4 "⏳ Телепорт к машине (${reg.name}) через 15 секунд..." ${steamId}`);
+        await new Promise(resolve => setTimeout(resolve, 15000));
+        const costParts: string[] = [];
+        if (this.vehicleTeleportConfig.teleportPrice > 0) {
+          await this.rconClient!.sendCommand(`ChangeCurrencyBalance Normal -${this.vehicleTeleportConfig.teleportPrice} ${steamId}`);
+          costParts.push(`$${this.vehicleTeleportConfig.teleportPrice}`);
+        }
+        if ((this.vehicleTeleportConfig.teleportGoldPrice || 0) > 0) {
+          await this.rconClient!.sendCommand(`ChangeCurrencyBalance Gold -${this.vehicleTeleportConfig.teleportGoldPrice} ${steamId}`);
+          costParts.push(`${this.vehicleTeleportConfig.teleportGoldPrice} золота`);
+        }
+        if ((this.vehicleTeleportConfig.teleportFamePrice || 0) > 0) {
+          await this.rconClient!.sendCommand(`ChangeFamePoints -${this.vehicleTeleportConfig.teleportFamePrice} ${steamId}`);
+          costParts.push(`${this.vehicleTeleportConfig.teleportFamePrice} славы`);
+        }
+        await this.rconClient!.sendCommand(`SendChat 4 "💸 Списано: ${costParts.join(', ')}" ${steamId}`);
+      } else {
+        await this.rconClient.sendCommand(`SendChat 4 "⏳ Телепорт к машине (${reg.name})..." ${steamId}`);
+      }
+      const cmd = `Teleport ${Math.round(vx)} ${Math.round(vy)} ${Math.round(vz)} ${steamId}`;
+      const r = await this.rconClient.sendCommand(cmd);
+      if (r.success) {
+        await this.rconClient.sendCommand(`SendChat 4 "✅ Телепорт к машине (${reg.name}) выполнен" ${steamId}`);
+      } else {
+        await this.rconClient.sendCommand(`SendChat 4 "❌ Ошибка телепортации" ${steamId}`);
+      }
+      return;
+    }
+
     // Check for commands
     for (const cmd of this.chatCommands) {
       if (cmdKey === cmd.trigger) {
@@ -596,6 +787,63 @@ export class LogWatcher {
       return { money, gold, x, y, z };
     }
     return null;
+  }
+
+  private async getListSpawnedVehiclesData(): Promise<{ entityId: number | null; asset: string | null; customName: string | null; ownerDbId: number | null; ownerName: string | null; x: number | null; y: number | null; z: number | null }[]> {
+    if (!this.rconClient) return [];
+    const r = await this.rconClient.sendCommand('ListSpawnedVehicles');
+    if (!r.success || !r.response) return [];
+    const vehicles: any[] = [];
+    for (const line of r.response.split('\n').map(l => l.trim()).filter(Boolean)) {
+      let entityId: number | null = null;
+      let asset: string | null = null;
+      let ownerName: string | null = null;
+      let ownerDbId: number | null = null;
+      let x: number | null = null, y: number | null = null, z: number | null = null;
+      let customName: string | null = null;
+      const idM = line.match(/ID\s+(\d+)/i);
+      if (idM) entityId = parseInt(idM[1]);
+      const assetM = line.match(/\|\s+([A-Z][A-Za-z_0-9]+)\s+\|/);
+      if (assetM) asset = assetM[1];
+      const nameM = line.match(/\|\s*name:\s*([^|]+?)\s*\|/i);
+      if (nameM) customName = nameM[1].trim();
+      const posM = line.match(/\(([\d.-]+),\s*([\d.-]+),\s*([\d.-]+)\)/);
+      if (posM) { x = parseFloat(posM[1]); y = parseFloat(posM[2]); z = parseFloat(posM[3]); }
+      const ownerM = line.match(/\|\s*owner:\s*(.+?)(?:\s*\(db id (\d+)\))?\s*$/i);
+      if (ownerM) {
+        const raw = ownerM[1].trim();
+        ownerName = (raw === '-' || raw === 'None' || raw === '') ? null : raw;
+        if (ownerM[2]) ownerDbId = parseInt(ownerM[2]);
+      }
+      if (!ownerM) {
+        const o2 = line.match(/\|\s*(.+?)\s*\(db id (\d+)\)\s*$/i);
+        if (o2) {
+          const rr = o2[1].trim();
+          ownerName = (rr === '-' || rr === 'None' || rr === '') ? null : rr;
+          ownerDbId = parseInt(o2[2]);
+        }
+      }
+      if (entityId || asset) {
+        vehicles.push({ entityId, asset, customName, ownerDbId, ownerName, x, y, z });
+      }
+    }
+    return vehicles;
+  }
+
+  private getPlayerDbIds(steamId: string): { pid: number | null; prisId: number | null; name: string } {
+    if (this.scumDb) {
+      try {
+        const p = this.scumDb.getPlayerBySteamId(steamId);
+        if (p) return { pid: p.profileId || p.id || null, prisId: p.prisonerId || null, name: p.name || '' };
+      } catch {}
+    }
+    return { pid: null, prisId: null, name: '' };
+  }
+
+  private vehicleBelongsToPlayer(v: any, pid: number | null, prisId: number | null, name: string): boolean {
+    if (v.ownerDbId != null && pid != null && (v.ownerDbId === pid || v.ownerDbId === prisId)) return true;
+    if (v.ownerName && name && v.ownerName.toLowerCase() === name.toLowerCase()) return true;
+    return false;
   }
 
   private startWatching(): void {

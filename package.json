@@ -1,6 +1,6 @@
 {
   "name": "scum-server-manager",
-  "version": "2.6.7",
+  "version": "2.6.8",
   "description": "SCUM Dedicated Server Manager — управление, мониторинг и настройка SCUM сервера",
   "main": "dist/main/index.js",
   "scripts": {

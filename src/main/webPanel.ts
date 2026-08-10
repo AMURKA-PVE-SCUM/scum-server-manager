@@ -49,12 +49,13 @@ export class WebPanel {
   private lolkaBot: LolkaBot | null = null;
   private pluginsConfig: PluginsConfig = {
     teleport: { enabled: true, locations: [] },
-    vip: {
-      enabled: true, players: [],
-      starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
-      dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
-    },
-    saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
+      vip: {
+        enabled: true, players: [],
+        starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
+        dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
+      },
+      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
+      saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
     airdrop: {
       enabled: false,
       chestItem: 'Improvised_Metal_Chest',
@@ -526,6 +527,10 @@ export class WebPanel {
           this.sendJson(res, this.pluginsConfig.saveHome);
         } else if (url === '/api/plugins/savehome' && method === 'POST') {
           this.handleSetSaveHome(req, res);
+        } else if (url === '/api/plugins/vehicleTeleport' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+        } else if (url === '/api/plugins/vehicleTeleport' && method === 'POST') {
+          this.handleSetVehicleTeleport(req, res);
         } else if (url === '/api/wargm/settings' && method === 'GET') {
           this.handleWargmGetSettings(res);
         } else if (url === '/api/wargm/settings' && method === 'POST') {
@@ -1478,6 +1483,21 @@ export class WebPanel {
       this.sendJson(res, { success: true });
     } catch (e: any) {
       console.error('[WebPanel] handleSetSaveHome error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetVehicleTeleport(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      this.pluginsConfig.vehicleTeleport = cfg;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetVehicleTeleport error:', e.message);
       this.sendJson(res, { error: e.message }, 500);
     }
   }

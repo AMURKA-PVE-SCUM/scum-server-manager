@@ -33,6 +33,7 @@ export class WargmManager {
   private dbPath: string;
   private rconClient: RconClient | null = null;
   private vipAddCallback: ((steamId: string, days: number) => void) | null = null;
+  private carTeleportAddCallback: ((steamId: string, days: number) => void) | null = null;
   private lastCommandTime = new Map<string, number>();
 
   constructor() {
@@ -63,6 +64,10 @@ export class WargmManager {
 
   setVipAddCallback(cb: (steamId: string, days: number) => void): void {
     this.vipAddCallback = cb;
+  }
+
+  setCarTeleportAddCallback(cb: (steamId: string, days: number) => void): void {
+    this.carTeleportAddCallback = cb;
   }
 
   async init(): Promise<boolean> {
@@ -651,6 +656,15 @@ export class WargmManager {
           return { success: true, message: `VIP на ${days} дн.` };
         }
         return { success: false, message: 'VIP: система не настроена' };
+      }
+
+      case 'car_teleport': {
+        const days = parseInt(d.days) || 30;
+        if (this.carTeleportAddCallback) {
+          this.carTeleportAddCallback(steamId, days);
+          return { success: true, message: `Доступ к транспорту на ${days} дн.` };
+        }
+        return { success: false, message: 'Транспорт: система не настроена' };
       }
 
       default:

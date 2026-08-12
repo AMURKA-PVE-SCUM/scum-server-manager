@@ -56,6 +56,8 @@ export class WebPanel {
       },
       vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
+      vote: { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 },
+      shop: { enabled: true, items: [] },
     airdrop: {
       enabled: false,
       chestItem: 'Improvised_Metal_Chest',
@@ -531,6 +533,14 @@ export class WebPanel {
           this.sendJson(res, this.pluginsConfig.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
         } else if (url === '/api/plugins/vehicleTeleport' && method === 'POST') {
           this.handleSetVehicleTeleport(req, res);
+        } else if (url === '/api/plugins/vote' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
+        } else if (url === '/api/plugins/vote' && method === 'POST') {
+          this.handleSetVote(req, res);
+        } else if (url === '/api/plugins/shop' && method === 'GET') {
+          this.sendJson(res, this.pluginsConfig.shop || { enabled: true, items: [] });
+        } else if (url === '/api/plugins/shop' && method === 'POST') {
+          this.handleSetShop(req, res);
         } else if (url === '/api/wargm/settings' && method === 'GET') {
           this.handleWargmGetSettings(res);
         } else if (url === '/api/wargm/settings' && method === 'POST') {
@@ -1190,6 +1200,7 @@ export class WebPanel {
           entityId: v.entityId,
           x: v.x,
           y: v.y,
+          z: v.z,
           ownerName: v.ownerName,
         }));
         console.log(`[WebPanel] Player ${playerInfo.name} (profileId=${pid}, prisId=${prisId}) vehicles: ${playerData.vehicles.length}/${allV.length} matched, ownerDbIds=[${allV.map((v: any) => v.ownerDbId).join(',')}]`);
@@ -1498,6 +1509,36 @@ export class WebPanel {
       this.sendJson(res, { success: true });
     } catch (e: any) {
       console.error('[WebPanel] handleSetVehicleTeleport error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetVote(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      this.pluginsConfig.vote = cfg;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetVote error:', e.message);
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private async handleSetShop(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      this.pluginsConfig.shop = cfg;
+      if (this.pluginsSaveCallback) {
+        this.pluginsSaveCallback(this.pluginsConfig);
+      }
+      this.sendJson(res, { success: true });
+    } catch (e: any) {
+      console.error('[WebPanel] handleSetShop error:', e.message);
       this.sendJson(res, { error: e.message }, 500);
     }
   }
@@ -2720,6 +2761,7 @@ export class WebPanel {
               asset: rv.asset,
               x: rv.x,
               y: rv.y,
+              z: rv.z,
               ownerName: rv.ownerName || null,
               customName: (rv.customName && rv.customName !== '-') ? rv.customName : null,
             }));
@@ -2755,6 +2797,7 @@ export class WebPanel {
       let ownerDbId: number | null = null;
       let x: number | null = null;
       let y: number | null = null;
+      let z: number | null = null;
       let customName: string | null = null;
 
       // Format: "ID 12345678 | BPC_Asset | name: CustomName | (x, y, z) | owner: PlayerName (db id 999)"
@@ -2771,7 +2814,7 @@ export class WebPanel {
 
       // Position: (x, y, z)
       const posM = line.match(/\(?([\d.-]+),\s*([\d.-]+),\s*([\d.-]+)\)?/);
-      if (posM) { x = parseFloat(posM[1]); y = parseFloat(posM[2]); }
+      if (posM) { x = parseFloat(posM[1]); y = parseFloat(posM[2]); z = parseFloat(posM[3]); }
 
       // Owner: "owner: PlayerName (db id 999)" or "owner: -"
       const ownerM = line.match(/\|\s*owner:\s*(.+?)(?:\s*\(db id (\d+)\))?\s*$/i);
@@ -2792,7 +2835,7 @@ export class WebPanel {
       }
 
       if (entityId || asset) {
-        vehicles.push({ entityId, asset, ownerName, ownerDbId, x, y, customName });
+        vehicles.push({ entityId, asset, ownerName, ownerDbId, x, y, z, customName });
       }
     }
     return vehicles;

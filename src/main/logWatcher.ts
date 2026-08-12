@@ -5,7 +5,7 @@ import { DiscordWebhook } from './discordWebhook';
 import { RconClient } from './rconClient';
 import { WargmManager } from './wargmManager';
 import { ScumDatabaseReader } from './scumDatabase';
-import type { LogEvent, PackConfig, PackItem, SaveHomeConfig, TeleportLocation, VehicleTeleportConfig, VipConfig } from './types';
+import type { LogEvent, PackConfig, PackItem, SaveHomeConfig, ShopConfig, ShopItem, TeleportLocation, VehicleTeleportConfig, VipConfig, VoteConfig } from './types';
 
 interface ChatCommand {
   trigger: string;
@@ -50,6 +50,8 @@ export class LogWatcher {
   };
   private vehicleRegistrations: Record<string, { entityId: number; name: string; asset: string; registeredAt: number }[]> = {};
   private vehicleRegPath = '';
+  private voteConfig: VoteConfig = { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 };
+  private shopConfig: ShopConfig = { enabled: true, items: [] };
   private scumDb: ScumDatabaseReader | null = null;
   private chatCommands: ChatCommand[] = [
     { trigger: '!balance', rconCommand: 'ListPlayers', description: 'Check your balance', hideFromHelp: true },
@@ -69,6 +71,9 @@ export class LogWatcher {
     { trigger: '!carregister', rconCommand: '', description: '', helpTrigger: '!привязать' },
     { trigger: '!carunbind', rconCommand: '', description: '', helpTrigger: '!отвязать' },
     { trigger: '!cars', rconCommand: '', description: '', helpTrigger: '!машины' },
+    { trigger: '!weather', rconCommand: '', description: '', helpTrigger: '!погода' },
+    { trigger: '!time', rconCommand: '', description: '', helpTrigger: '!время' },
+    { trigger: '!shop', rconCommand: '', description: '', helpTrigger: '!купить' },
     { trigger: '!help', rconCommand: '', description: '', isHelp: true },
   ];
   private commandAliases: Record<string, string> = {
@@ -95,6 +100,10 @@ export class LogWatcher {
     '!отвязать': '!carunbind',
     '!отвязатьмашину': '!carunbind',
     '!отвязатьавто': '!carunbind',
+    '!погода': '!weather',
+    '!время': '!time',
+    '!купить': '!shop',
+    '!магазин': '!shop',
   };
 
   private migrateOldFile(oldRel: string, filename: string): string {
@@ -143,6 +152,14 @@ export class LogWatcher {
     this.vehicleTeleportConfig = cfg;
   }
 
+  setVoteConfig(cfg: VoteConfig): void {
+    this.voteConfig = cfg;
+  }
+
+  setShopConfig(cfg: ShopConfig): void {
+    this.shopConfig = cfg;
+  }
+
   private loadVehicleRegistrations(): void {
     try {
       if (fs.existsSync(this.vehicleRegPath)) {
@@ -171,6 +188,10 @@ export class LogWatcher {
 
   private maxVehicleSlots(steamId: string): number {
     return this.isVehicleTeleport(steamId) ? this.vehicleTeleportConfig.vipMaxVehicles : this.vehicleTeleportConfig.maxVehicles;
+  }
+
+  private voteCooldownSeconds(steamId: string): number {
+    return this.isVip(steamId) ? this.voteConfig.vipCooldownSeconds : this.voteConfig.cooldownSeconds;
   }
 
   private loadHomeLocations(): void {
@@ -618,6 +639,79 @@ export class LogWatcher {
       return;
     }
 
+    // Vote weather (погода)
+    if (cmdKey === '!weather') {
+      if (!this.voteConfig.enabled || !this.voteConfig.weatherEnabled) {
+        await this.rconClient.sendCommand(`SendChat 4 "Голосование за погоду отключено" ${steamId}`);
+        return;
+      }
+      const val = parseInt(trimmedParts[1]);
+      if (trimmedParts.length < 2 || (val !== 0 && val !== 1)) {
+        await this.rconClient.sendCommand(`SendChat 4 "Использование: !погода <0|1> (0 — солнечно, 1 — дождь)" ${steamId}`);
+        return;
+      }
+      const cd = this.voteCooldownSeconds(steamId);
+      if (cd > 0) {
+        const key = `!vote_weather_${steamId}`;
+        const last = this.cooldowns[key] || 0;
+        const elapsed = (Date.now() - last) / 1000;
+        if (elapsed < cd) {
+          const remaining = Math.ceil(cd - elapsed);
+          await this.rconClient.sendCommand(`SendChat 4 "Подождите ${remaining}с до следующего голосования" ${steamId}`);
+          return;
+        }
+        this.cooldowns[key] = Date.now();
+        this.saveCooldowns();
+      }
+      const label = val === 1 ? 'дождь' : 'солнечно';
+      const r = await this.rconClient.sendCommand(`vote SetWeather ${val}`);
+      if (r.success) {
+        await this.rconClient.sendCommand(`SendChat 4 "✅ Запущено голосование за погоду: ${label}. Проголосуйте в появившемся окне!" ${steamId}`);
+      } else {
+        await this.rconClient.sendCommand(`SendChat 4 "❌ Не удалось запустить голосование" ${steamId}`);
+      }
+      return;
+    }
+
+    // Vote time of day (время)
+    if (cmdKey === '!time') {
+      if (!this.voteConfig.enabled || !this.voteConfig.timeEnabled) {
+        await this.rconClient.sendCommand(`SendChat 4 "Голосование за время отключено" ${steamId}`);
+        return;
+      }
+      const hour = parseInt(trimmedParts[1]);
+      if (trimmedParts.length < 2 || isNaN(hour) || hour < 0 || hour > 23) {
+        await this.rconClient.sendCommand(`SendChat 4 "Использование: !время <час 0-23>. Пример: !время 14" ${steamId}`);
+        return;
+      }
+      const cd = this.voteCooldownSeconds(steamId);
+      if (cd > 0) {
+        const key = `!vote_time_${steamId}`;
+        const last = this.cooldowns[key] || 0;
+        const elapsed = (Date.now() - last) / 1000;
+        if (elapsed < cd) {
+          const remaining = Math.ceil(cd - elapsed);
+          await this.rconClient.sendCommand(`SendChat 4 "Подождите ${remaining}с до следующего голосования" ${steamId}`);
+          return;
+        }
+        this.cooldowns[key] = Date.now();
+        this.saveCooldowns();
+      }
+      const r = await this.rconClient.sendCommand(`vote SetTimeOfDay ${hour}`);
+      if (r.success) {
+        await this.rconClient.sendCommand(`SendChat 4 "✅ Запущено голосование за время: ${hour}:00. Проголосуйте в появившемся окне!" ${steamId}`);
+      } else {
+        await this.rconClient.sendCommand(`SendChat 4 "❌ Не удалось запустить голосование" ${steamId}`);
+      }
+      return;
+    }
+
+    // Shop (купить)
+    if (cmdKey === '!shop') {
+      await this.handleShopCommand(steamId, trimmedParts);
+      return;
+    }
+
     // Vehicle teleport (машина)
     if (cmdKey === '!car') {
       if (!this.vehicleTeleportConfig.enabled) {
@@ -772,6 +866,164 @@ export class LogWatcher {
       section.push(lines[i]);
     }
     return section;
+  }
+
+  // --- Shop (магазин) ---
+  private async handleShopCommand(steamId: string, args: string[]): Promise<void> {
+    if (!this.rconClient) return;
+    if (!this.shopConfig.enabled) {
+      await this.rconClient.sendCommand(`SendChat 4 "Магазин отключен" ${steamId}`);
+      return;
+    }
+    const items = this.shopConfig.items || [];
+    if (items.length === 0) {
+      await this.rconClient.sendCommand(`SendChat 4 "Магазин пуст" ${steamId}`);
+      return;
+    }
+    const pageArg = parseInt(args[1]);
+    const qtyArg = parseInt(args[2]);
+    if (args.length >= 3 && !isNaN(pageArg) && pageArg >= 1 && !isNaN(qtyArg) && qtyArg >= 1) {
+      await this.shopPurchase(steamId, items, pageArg, qtyArg);
+      return;
+    }
+    await this.shopShowCatalog(steamId, items, isNaN(pageArg) ? 1 : pageArg);
+  }
+
+  private async shopShowCatalog(steamId: string, items: ShopItem[], page: number): Promise<void> {
+    if (!this.rconClient) return;
+    const perPage = 10;
+    const totalPages = Math.max(1, Math.ceil(items.length / perPage));
+    const pageNum = Math.min(Math.max(1, page), totalPages);
+    const start = (pageNum - 1) * perPage;
+    const pageItems = items.slice(start, start + perPage);
+    const lines: string[] = [];
+    pageItems.forEach((it, i) => {
+      const num = start + i + 1;
+      const name = it.itemName || '?';
+      const qty = it.type === 'vehicle' ? '' : `x${it.amount}`;
+      const costs: string[] = [];
+      if (it.price > 0) costs.push(`$${it.price}`);
+      if ((it.goldPrice || 0) > 0) costs.push(`${it.goldPrice} золота`);
+      if ((it.famePrice || 0) > 0) costs.push(`${it.famePrice} славы`);
+      const costStr = costs.length > 0 ? ` — ${costs.join(', ')}` : ' — бесплатно';
+      lines.push(`${num}. ${name}${qty}${costStr}`);
+    });
+    const chunks: string[] = [];
+    for (let i = 0; i < lines.length; i += 5) {
+      chunks.push(lines.slice(i, i + 5).join('. '));
+    }
+    for (const chunk of chunks) {
+      await this.rconClient.sendCommand(`SendChat 4 "${chunk}" ${steamId}`);
+    }
+    if (totalPages > 1) {
+      await this.rconClient.sendCommand(`SendChat 4 "Страница ${pageNum}/${totalPages}. Ещё: !купить ${pageNum + 1 > totalPages ? 1 : pageNum + 1}" ${steamId}`);
+    }
+    await this.rconClient.sendCommand(`SendChat 4 "Покупка: !купить N количество (например !купить ${start + 1} 1)" ${steamId}`);
+  }
+
+  private async shopPurchase(steamId: string, items: ShopItem[], idx: number, qty: number): Promise<void> {
+    if (!this.rconClient) return;
+    const item = items[idx - 1];
+    if (!item || !item.enabled) {
+      await this.rconClient.sendCommand(`SendChat 4 "Товар #${idx} не найден" ${steamId}`);
+      return;
+    }
+    if (item.type === 'vehicle' && qty !== 1) {
+      qty = 1;
+    }
+    if (qty > 100) {
+      await this.rconClient.sendCommand(`SendChat 4 "Максимум 100 за покупку" ${steamId}`);
+      return;
+    }
+    const needMoney = (item.price || 0) * qty;
+    const needGold = (item.goldPrice || 0) * qty;
+    const needFame = (item.famePrice || 0) * qty;
+    const bal = await this.getPlayerBalances(steamId);
+    if (bal) {
+      if (needMoney > 0 && bal.money < needMoney) {
+        await this.rconClient.sendCommand(`SendChat 4 "Недостаточно денег: нужно $${needMoney}, у вас $${bal.money.toFixed(0)}" ${steamId}`);
+        return;
+      }
+      if (needGold > 0 && bal.gold < needGold) {
+        await this.rconClient.sendCommand(`SendChat 4 "Недостаточно золота: нужно ${needGold}, у вас ${bal.gold.toFixed(0)}" ${steamId}`);
+        return;
+      }
+      if (needFame > 0 && bal.fame !== null && bal.fame < needFame) {
+        await this.rconClient.sendCommand(`SendChat 4 "Недостаточно славы: нужно ${needFame}, у вас ${bal.fame.toFixed(0)}" ${steamId}`);
+        return;
+      }
+    }
+    if (needMoney > 0) {
+      await this.rconClient.sendCommand(`ChangeCurrencyBalance Normal -${needMoney} ${steamId}`);
+    }
+    if (needGold > 0) {
+      await this.rconClient.sendCommand(`ChangeCurrencyBalance Gold -${needGold} ${steamId}`);
+    }
+    if (needFame > 0) {
+      await this.rconClient.sendCommand(`ChangeFamePoints -${needFame} ${steamId}`);
+    }
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    if (item.type === 'item') {
+      const r = await this.rconClient.sendCommand(`SpawnItem ${item.itemName} ${item.amount * qty} Location ${steamId}`);
+      if (r.success) succeeded.push(`${item.itemName}x${item.amount * qty}`);
+      else failed.push(`предмет ${item.itemName}: ${r.response || 'ОШИБКА'}`);
+    } else {
+      for (let k = 0; k < qty; k++) {
+        const r = await this.rconClient.sendCommand(`SpawnVehicle ${item.itemName} 1 Location ${steamId}`);
+        if (r.success) succeeded.push(item.itemName);
+        else failed.push(`ТС ${item.itemName}: ${r.response || 'ОШИБКА'}`);
+        if (qty > 1 && k < qty - 1) await new Promise(res => setTimeout(res, 500));
+      }
+    }
+    if (succeeded.length > 0) {
+      await this.rconClient.sendCommand(`SendChat 4 "✅ Куплено: ${succeeded.join(', ')}" ${steamId}`);
+    }
+    if (failed.length > 0) {
+      const err = failed.slice(0, 3).join('; ');
+      await this.rconClient.sendCommand(`SendChat 4 "❌ Ошибка: ${err}" ${steamId}`);
+    }
+  }
+
+  private async getPlayerBalances(steamId: string): Promise<{ money: number; gold: number; fame: number | null } | null> {
+    if (!this.rconClient) return null;
+    try {
+      const r = await this.rconClient.sendCommand('ListPlayers');
+      if (!r.success || !r.response) return null;
+      const lines = r.response.split('\n');
+      let money = 0, gold = 0, fame: number | null = null;
+      let found = false;
+      for (const raw of lines) {
+        const line = raw.trim();
+        const pipeMatch = line.match(/^PLAYER\s*\|\s*.+?\s*\|\s*steam=(\d{17})\s*\|/i);
+        if (pipeMatch && pipeMatch[1] === steamId) {
+          found = true;
+          const moneyM = line.match(/money=([\d.+-]+)/);
+          const goldM = line.match(/gold=([\d.+-]+)/);
+          const fameM = line.match(/fame=([\d.+-]+)/);
+          if (moneyM) money = parseFloat(moneyM[1]);
+          if (goldM) gold = parseFloat(goldM[1]);
+          if (fameM) fame = parseFloat(fameM[1]);
+        }
+      }
+      if (found) {
+        // Fame is not present in the new pipe format; try the legacy block too
+        const section = this.extractPlayerSection(lines, steamId, '');
+        for (const l of section) {
+          const fm = l.match(/^Fame:\s*([\d.+-]+)/) || l.match(/\bfame[:\s]\s*([\d.+-]+)/i);
+          if (fm) fame = parseFloat(fm[1]);
+          const bm = l.match(/^Account balance:\s*([\d.+-]+)/);
+          if (bm) money = parseFloat(bm[1]);
+          const gm = l.match(/^Gold balance:\s*([\d.+-]+)/);
+          if (gm) gold = parseFloat(gm[1]);
+        }
+        return { money, gold, fame };
+      }
+      return null;
+    } catch (e) {
+      console.error('[LogWatcher] getPlayerBalances error:', e);
+      return null;
+    }
   }
 
   // --- v0.4.6 ListPlayers helpers ---

@@ -139,6 +139,29 @@ export interface SaveHomeConfig {
   teleportFamePrice?: number;
 }
 
+export interface VoteConfig {
+  enabled: boolean;
+  weatherEnabled: boolean;
+  timeEnabled: boolean;
+  cooldownSeconds: number;
+  vipCooldownSeconds: number;
+}
+
+export interface ShopItem {
+  type: 'item' | 'vehicle';
+  itemName: string;
+  amount: number;
+  price: number;
+  goldPrice?: number;
+  famePrice?: number;
+  enabled: boolean;
+}
+
+export interface ShopConfig {
+  enabled: boolean;
+  items: ShopItem[];
+}
+
 export interface RewardsConfig {
   enabled: boolean;
   hourlyEnabled: boolean;
@@ -203,6 +226,8 @@ export interface PluginsConfig {
   vip: VipConfig;
   vehicleTeleport: VehicleTeleportConfig;
   saveHome: SaveHomeConfig;
+  vote: VoteConfig;
+  shop: ShopConfig;
   airdrop: AirdropConfig;
   rewards: RewardsConfig;
   chatSender: string;

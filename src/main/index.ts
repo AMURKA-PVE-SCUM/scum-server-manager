@@ -95,6 +95,8 @@ const store = new ElectronStore<AppConfig>({
       },
       vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
+      vote: { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 },
+      shop: { enabled: true, items: [] },
       airdrop: {
         enabled: false,
         chestItem: 'Improvised_Metal_Chest',
@@ -206,6 +208,8 @@ function initServices(): void {
   scumDatabase = new ScumDatabaseReader(config.server.serverPath);
   logWatcher.setScumDb(scumDatabase);
   logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+  logWatcher.setVoteConfig(config.plugins.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
+  logWatcher.setShopConfig(config.plugins.shop || { enabled: true, items: [] });
   webPanel.setServices(serverManager, steamCmd, config.server.serverPath);
   webPanel.setRconClient(rconClient);
   webPanel.updateConfig(config.webPanel);
@@ -237,6 +241,8 @@ function initServices(): void {
       },
       vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
+      vote: { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 },
+      shop: { enabled: true, items: [] },
       airdrop: {
         enabled: false,
         chestItem: 'Improvised_Metal_Chest',
@@ -276,6 +282,14 @@ function initServices(): void {
   }
   if (!pluginsCfg.saveHome) {
     pluginsCfg.saveHome = { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 };
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.vote) {
+    pluginsCfg.vote = { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 };
+    store.set('plugins', pluginsCfg);
+  }
+  if (!pluginsCfg.shop) {
+    pluginsCfg.shop = { enabled: true, items: [] };
     store.set('plugins', pluginsCfg);
   }
   if (!pluginsCfg.airdrop) {
@@ -335,6 +349,8 @@ function initServices(): void {
     logWatcher.setVipConfig(vip);
     logWatcher.setSaveHomeConfig(plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 });
     logWatcher.setVehicleTeleportConfig(plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+    logWatcher.setVoteConfig(plugins.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
+    logWatcher.setShopConfig(plugins.shop || { enabled: true, items: [] });
   });
   const vipCfg = config.plugins.vip || {
     enabled: true, players: [],
@@ -344,6 +360,8 @@ function initServices(): void {
   logWatcher.setVipConfig(vipCfg);
   logWatcher.setSaveHomeConfig(config.plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 });
   logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+  logWatcher.setVoteConfig(config.plugins.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
+  logWatcher.setShopConfig(config.plugins.shop || { enabled: true, items: [] });
   const vtCfg = config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] };
   wargmManager.setVipAddCallback((steamId: string, days: number) => {
     const cur = store.store;

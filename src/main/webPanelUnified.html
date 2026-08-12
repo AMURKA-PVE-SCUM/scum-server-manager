@@ -83,13 +83,18 @@ tr:hover{background:rgba(88,166,255,0.05)}
 .stat-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px}
 .stat-box-label{font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
 .stat-box-value{font-size:18px;font-weight:700;color:var(--accent)}
-.player-actions-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.action-btn{padding:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;transition:all 0.2s;text-align:left;display:flex;align-items:center;gap:8px}
-.action-btn:hover{background:var(--border);transform:translateY(-1px)}
+.player-actions-grid{display:flex;flex-direction:column;gap:16px}
+.action-group-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px}
+.action-group-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.action-btn{padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer;font-size:13px;transition:all 0.2s;text-align:left;display:flex;align-items:center;gap:8px}
+.action-btn:hover{background:var(--border);transform:translateY(-1px);border-color:var(--muted)}
+.action-btn svg{flex-shrink:0;opacity:.9}
 .action-btn.danger{border-color:var(--red);color:var(--red)}
-.action-btn.danger:hover{background:rgba(248,81,73,0.1)}
+.action-btn.danger:hover{background:rgba(248,81,73,0.1);border-color:var(--red)}
 .action-btn.success{border-color:var(--green);color:var(--green)}
-.action-btn.success:hover{background:rgba(63,185,80,0.1)}
+.action-btn.success:hover{background:rgba(63,185,80,0.1);border-color:var(--green)}
+.action-btn.accent{border-color:var(--accent);color:var(--accent)}
+.action-btn.accent:hover{background:rgba(88,166,255,0.1);border-color:var(--accent)}
 .suggestion-item{padding:8px 12px;cursor:pointer;transition:background 0.15s;font-size:13px}
 .suggestion-item:hover,.suggestion-item.highlighted{background:rgba(88,166,255,0.15);color:var(--accent)}
 .suggestion-item strong{font-weight:600}
@@ -399,6 +404,12 @@ th{letter-spacing:.05em}
         <button class="btn packs-subtab" data-subtab="vehicleteleport" onclick="switchPacksSubtab('vehicleteleport'); loadVehicleTeleportConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> <span data-i18n="vehicleteleport.subtabTitle">Транспорт</span>
         </button>
+        <button class="btn packs-subtab" data-subtab="vote" onclick="switchPacksSubtab('vote'); loadVoteConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6V2h8v4M12 12v-4M8 18H5l3-4h4l3 4h-3Z"/></svg> <span data-i18n="vote.subtabTitle">Голосования</span>
+        </button>
+        <button class="btn packs-subtab" data-subtab="shop" onclick="switchPacksSubtab('shop'); loadShopConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 2h12l1 3H5l1-3Z"/><path d="M4 5h16l-1.5 5a3.5 3.5 0 0 1-6.5 1 3.5 3.5 0 0 1-6.5-1L4 5Z"/><path d="M9 18h6M12 13v9"/></svg> <span data-i18n="shop.subtabTitle">Магазин</span>
+        </button>
         <button class="btn packs-subtab" data-subtab="airdrop" onclick="switchPacksSubtab('airdrop'); loadAirdropConfig()" style="border-radius:4px 4px 0 0;border-bottom:none">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="4" y="8" width="16" height="13"/><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1h-2M12 7v14M12 7c-3-3-6-1-6 1s3 0 6-1Zm0 0c3-3 6-1 6 1s-3 0-6-1Z"/></svg> <span data-i18n="airdrop.subtabTitle">Сброс</span>
         </button>
@@ -603,6 +614,53 @@ th{letter-spacing:.05em}
           <p style="color:var(--muted)" data-i18n="vehicleteleport.help">Игрок вводит !привязать — получает список своих автомобилей с номерами, затем !привязать N привязывает выбранный (бесплатно, только свои). !машина — телепорт к машине (нужен доступ), !машины — список привязанных. Без доступа !машина покажет координаты машины.</p>
         </div>
       </div> <!-- end vehicleteleport -->
+
+      <!-- Vote -->
+      <div class="packs-subtab-content" id="subtab-vote">
+        <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6V2h8v4M12 12v-4M8 18H5l3-4h4l3 4h-3Z"/></svg> <span data-i18n="vote.title">Голосования</span></h3>
+        <div class="card" style="max-width:800px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voteEnabled" onchange="saveVoteConfig()"> <span data-i18n="vote.enabled">Модуль включен</span></label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voteWeatherEnabled" onchange="saveVoteConfig()"> <span data-i18n="vote.weatherEnabled">Смена погоды (!погода)</span></label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="voteTimeEnabled" onchange="saveVoteConfig()"> <span data-i18n="vote.timeEnabled">Смена времени (!время)</span></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vote.cooldown">Кулдаун (сек)</label>
+              <input type="number" id="voteCooldown" value="600" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVoteChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vote.vipCooldown">Кулдаун VIP (сек)</label>
+              <input type="number" id="voteVipCooldown" value="300" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVoteChanged()">
+            </div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <button class="btn btn-success" onclick="saveVoteConfig()" data-i18n="vote.save"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить</button>
+          </div>
+        </div>
+        <div class="card" style="background:var(--bg);font-size:13px">
+          <p style="color:var(--muted)" data-i18n="vote.help">Любой игрок может запустить голосование: !погода 0 (солнечно) или !погода 1 (дождь), !время 14 (час 0-23). Сервер сам создаёт голосование и считает голоса. Кулдаун 0 = без ограничений.</p>
+        </div>
+      </div> <!-- end vote -->
+
+      <!-- Shop -->
+      <div class="packs-subtab-content" id="subtab-shop">
+        <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 2h12l1 3H5l1-3Z"/><path d="M4 5h16l-1.5 5a3.5 3.5 0 0 1-6.5 1 3.5 3.5 0 0 1-6.5-1L4 5Z"/><path d="M9 18h6M12 13v9"/></svg> <span data-i18n="shop.title">Магазин</span></h3>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="shopEnabled" onchange="onShopChanged()"> <span data-i18n="shop.enabled">Магазин включен</span></label>
+          </div>
+          <div id="shopItemsList"></div>
+          <button class="btn btn-primary" onclick="addShopItem()" style="margin-top:8px">+ <span data-i18n="shop.addItem">Добавить товар</span></button>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            <button class="btn btn-success" onclick="saveShopConfig()" data-i18n="shop.save"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить</button>
+            <button class="btn" onclick="loadShopConfig()" data-i18n="packs.refresh">⟳ Обновить</button>
+          </div>
+        </div>
+        <div class="card" style="background:var(--bg);font-size:13px">
+          <p style="color:var(--muted)" data-i18n="shop.help">Игрок пишет !купить — видит каталог (по 10 позиций). !купить 2 — вторая страница. Покупка: !купить N количество (например !купить 1 3). Оплата списывается деньгами, золотом и/или славой автоматически.</p>
+        </div>
+      </div> <!-- end shop -->
 
       <!-- Airdrop -->
       <div class="packs-subtab-content" id="subtab-airdrop">
@@ -1504,6 +1562,16 @@ th{letter-spacing:.05em}
   </div>
 </div>
 
+<div class="modal-overlay sub-modal" id="vehicleTeleportModal" style="display:none">
+  <div class="modal">
+    <h3 id="vehicleTeleportPlayerName"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 17l2-4a2 2 0 0 1 1.8-1.2h8.4A2 2 0 0 1 18 13l2 4v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2Z"/><path d="M4 15h16"/></svg> <span data-i18n="playerCard.selectVehicle">Выберите транспорт</span></h3>
+    <div id="vehicleTeleportList" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeVehicleTeleportModal()" data-i18n="modal.cancel">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let authToken = null;
 let rconConnected = false;
@@ -1853,9 +1921,19 @@ const translations = {
     'teleport.delete': 'Удалить',
     'teleport.help': 'Игроки используют !телепорт для просмотра списка и !телепорт N для перемещения. Стоимость списывается с баланса игрока (деньги). Команда: Teleport X Y Z SteamID',
     'playerCard.teleportTo': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> Телепортировать',
+    'playerCard.teleportToVehicle': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 17l2-4a2 2 0 0 1 1.8-1.2h8.4A2 2 0 0 1 18 13l2 4v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2Z"/><path d="M4 15h16"/></svg> Телепорт к транспорту',
+    'playerCard.selectVehicle': 'Выберите транспорт игрока',
+    'playerCard.vehicleNoCoords': 'Координаты неизвестны',
+    'playerCard.vehicleNoVehicles': 'У игрока нет транспорта',
+    'playerCard.vehicleTeleported': 'Игрок телепортирован к транспорту',
     'playerCard.teleportCoords': 'Координаты (X Y Z)',
     'playerCard.teleportBtn': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> Телепорт',
     'playerCard.unstuck': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="12" r="9"/></svg> Unstuck (выдернуть из текстур)',
+    'playerCard.groupGive': 'Выдача',
+    'playerCard.groupStatus': 'Статус и эффекты',
+    'playerCard.groupMove': 'Передвижение',
+    'playerCard.groupMessages': 'Сообщения',
+    'playerCard.groupDanger': 'Опасные действия',
     'vip.subtabTitle': 'VIP',
     'vip.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-1.5 8.5h-15L3 8Z"/><path d="M5 19.5h14"/></svg> VIP игроки',
     'vip.enabled': 'VIP включен',
@@ -1892,6 +1970,30 @@ const translations = {
     'vehicleteleport.players': 'Игроки с доступом (телепорт)',
     'vehicleteleport.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
     'vehicleteleport.help': 'Игрок вводит !привязать — получает список своих автомобилей с номерами, затем !привязать N привязывает выбранный (бесплатно, только свои). !машина — телепорт к машине (нужен доступ), !машины — список привязанных. Без доступа !машина покажет координаты машины.',
+    'vote.subtabTitle': 'Голосования',
+    'vote.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6V2h8v4M12 12v-4M8 18H5l3-4h4l3 4h-3Z"/></svg> Голосования',
+    'vote.enabled': 'Модуль включен',
+    'vote.weatherEnabled': 'Смена погоды (!погода)',
+    'vote.timeEnabled': 'Смена времени (!время)',
+    'vote.cooldown': 'Кулдаун (сек)',
+    'vote.vipCooldown': 'Кулдаун VIP (сек)',
+    'vote.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
+    'vote.help': 'Любой игрок может запустить голосование: !погода 0 (солнечно) или !погода 1 (дождь), !время 14 (час 0-23). Сервер сам создаёт голосование и считает голоса. Кулдаун 0 = без ограничений.',
+    'shop.subtabTitle': 'Магазин',
+    'shop.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 2h12l1 3H5l1-3Z"/><path d="M4 5h16l-1.5 5a3.5 3.5 0 0 1-6.5 1 3.5 3.5 0 0 1-6.5-1L4 5Z"/><path d="M9 18h6M12 13v9"/></svg> Магазин',
+    'shop.enabled': 'Магазин включен',
+    'shop.addItem': 'Добавить товар',
+    'shop.empty': 'Магазин пуст. Добавьте первый товар.',
+    'shop.type': 'Тип',
+    'shop.typeItem': 'Предмет',
+    'shop.typeVehicle': 'Транспорт',
+    'shop.name': 'Название',
+    'shop.qty': 'Кол-во',
+    'shop.gold': 'Золото',
+    'shop.fame': 'Слава',
+    'shop.on': 'Вкл.',
+    'shop.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
+    'shop.help': 'Игрок пишет !купить — видит каталог (по 10 позиций). !купить 2 — вторая страница. Покупка: !купить N количество (например !купить 1 3). Оплата списывается деньгами, золотом и/или славой автоматически.',
     'rewards.subtabTitle': 'Награды',
     'rewards.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="m12 3 2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5Z"/></svg> Награды за онлайн',
     'rewards.enabled': 'Включить модуль наград',
@@ -2254,9 +2356,19 @@ const translations = {
     'teleport.delete': 'Delete',
     'teleport.help': 'Players use !teleport to list locations and !teleport N to teleport. Cost deducted from player balance. Command: Teleport X Y Z SteamID',
     'playerCard.teleportTo': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> Teleport To',
+    'playerCard.teleportToVehicle': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 17l2-4a2 2 0 0 1 1.8-1.2h8.4A2 2 0 0 1 18 13l2 4v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2Z"/><path d="M4 15h16"/></svg> Teleport to vehicle',
+    'playerCard.selectVehicle': 'Select player vehicle',
+    'playerCard.vehicleNoCoords': 'Coordinates unknown',
+    'playerCard.vehicleNoVehicles': 'Player has no vehicles',
+    'playerCard.vehicleTeleported': 'Player teleported to vehicle',
     'playerCard.teleportCoords': 'Coordinates (X Y Z)',
     'playerCard.teleportBtn': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> Teleport',
     'playerCard.unstuck': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="12" r="9"/></svg> Unstuck (lift from terrain)',
+    'playerCard.groupGive': 'Give',
+    'playerCard.groupStatus': 'Status & effects',
+    'playerCard.groupMove': 'Moving',
+    'playerCard.groupMessages': 'Messages',
+    'playerCard.groupDanger': 'Dangerous',
     'vip.subtabTitle': 'VIP',
     'vip.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-1.5 8.5h-15L3 8Z"/><path d="M5 19.5h14"/></svg> VIP Players',
     'vip.enabled': 'VIP Enabled',
@@ -2311,6 +2423,30 @@ const translations = {
     'vehicleteleport.players': 'Players with access (teleport)',
     'vehicleteleport.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Save',
     'vehicleteleport.help': 'Player types !привязать to see a numbered list of their vehicles, then !привязать N binds the chosen one (free, own vehicles only). !машина teleports to the vehicle (needs access), !машины lists registered. Without access !машина shows vehicle coordinates.',
+    'vote.subtabTitle': 'Votes',
+    'vote.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6V2h8v4M12 12v-4M8 18H5l3-4h4l3 4h-3Z"/></svg> Votes',
+    'vote.enabled': 'Module enabled',
+    'vote.weatherEnabled': 'Change weather (!погода)',
+    'vote.timeEnabled': 'Change time (!время)',
+    'vote.cooldown': 'Cooldown (sec)',
+    'vote.vipCooldown': 'VIP cooldown (sec)',
+    'vote.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Save',
+    'vote.help': 'Any player can start a vote: !погода 0 (sunny) or !погода 1 (rain), !время 14 (hour 0-23). The server creates the vote and counts it automatically. Cooldown 0 = no limits.',
+    'shop.subtabTitle': 'Shop',
+    'shop.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 2h12l1 3H5l1-3Z"/><path d="M4 5h16l-1.5 5a3.5 3.5 0 0 1-6.5 1 3.5 3.5 0 0 1-6.5-1L4 5Z"/><path d="M9 18h6M12 13v9"/></svg> Shop',
+    'shop.enabled': 'Shop enabled',
+    'shop.addItem': 'Add item',
+    'shop.empty': 'Shop is empty. Add the first item.',
+    'shop.type': 'Type',
+    'shop.typeItem': 'Item',
+    'shop.typeVehicle': 'Vehicle',
+    'shop.name': 'Name',
+    'shop.qty': 'Qty',
+    'shop.gold': 'Gold',
+    'shop.fame': 'Fame',
+    'shop.on': 'On',
+    'shop.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Save',
+    'shop.help': 'Player types !купить to see the catalog (10 per page). !купить 2 opens page 2. Buy: !купить N quantity (e.g. !купить 1 3). Payment is charged in money, gold and/or fame automatically.',
     'airdrop.subtabTitle': 'Airdrop',
     'airdrop.enabled': 'Module enabled',
     'airdrop.auto': 'Auto-drop',
@@ -3151,6 +3287,150 @@ async function saveVehicleTeleportConfig() {
   } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
 }
 
+// Vote module
+let voteConfig = { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 };
+
+async function loadVoteConfig() {
+  try {
+    const res = await fetch('/api/plugins/vote', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) return;
+    voteConfig = await res.json();
+    document.getElementById('voteEnabled').checked = voteConfig.enabled;
+    document.getElementById('voteWeatherEnabled').checked = voteConfig.weatherEnabled;
+    document.getElementById('voteTimeEnabled').checked = voteConfig.timeEnabled;
+    document.getElementById('voteCooldown').value = voteConfig.cooldownSeconds;
+    document.getElementById('voteVipCooldown').value = voteConfig.vipCooldownSeconds;
+  } catch (e) { console.error('loadVoteConfig error:', e); }
+}
+
+function onVoteChanged() {
+  voteConfig.enabled = document.getElementById('voteEnabled').checked;
+  voteConfig.weatherEnabled = document.getElementById('voteWeatherEnabled').checked;
+  voteConfig.timeEnabled = document.getElementById('voteTimeEnabled').checked;
+  voteConfig.cooldownSeconds = parseInt(document.getElementById('voteCooldown').value) || 0;
+  voteConfig.vipCooldownSeconds = parseInt(document.getElementById('voteVipCooldown').value) || 0;
+}
+
+async function saveVoteConfig() {
+  onVoteChanged();
+  try {
+    const res = await fetch('/api/plugins/vote', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify(voteConfig),
+    });
+    if (!res.ok) { showNotification('saveVote HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) { showNotification('Vote config saved', 'success'); }
+    else { showNotification('Save failed: ' + (result.error || 'unknown'), 'error'); }
+  } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
+}
+
+let shopConfig = { enabled: true, items: [] };
+
+async function loadShopConfig() {
+  try {
+    const res = await fetch('/api/plugins/shop', {headers: {'Authorization': 'Bearer ' + authToken}});
+    if (!res.ok) { showNotification('loadShop HTTP ' + res.status, 'error'); return; }
+    shopConfig = await res.json();
+    if (!shopConfig.items) shopConfig.items = [];
+    document.getElementById('shopEnabled').checked = !!shopConfig.enabled;
+    renderShopItems();
+  } catch (e) { showNotification('loadShop error: ' + e.message, 'error'); }
+}
+
+function renderShopItems() {
+  const container = document.getElementById('shopItemsList');
+  if (!shopConfig.items || shopConfig.items.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:10px">' + t('shop.empty') + '</p>';
+    return;
+  }
+  container.innerHTML = '<table style="width:100%"><thead><tr>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('shop.type') + '</th>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('shop.name') + '</th>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('shop.qty') + '</th>'
+    + '<th style="text-align:left;padding:6px 8px">$</th>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('shop.gold') + '</th>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('shop.fame') + '</th>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('shop.on') + '</th>'
+    + '<th style="text-align:left;padding:6px 8px">' + t('packs.actions') + '</th></tr></thead><tbody>'
+    + shopConfig.items.map((it, i) => {
+      const isVehicle = it.type === 'vehicle';
+      const icon = getItemIconHtml(it.itemName) || '';
+      return '<tr>'
+        + '<td style="padding:6px 8px"><select onchange="shopItemTypeChanged(' + i + ', this.value)" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px">'
+        + '<option value="item"' + (!isVehicle ? ' selected' : '') + '>' + t('shop.typeItem') + '</option>'
+        + '<option value="vehicle"' + (isVehicle ? ' selected' : '') + '>' + t('shop.typeVehicle') + '</option></select></td>'
+        + '<td style="padding:6px 8px"><div class="form-group" style="position:relative">'
+        + '<div style="display:flex;align-items:center;gap:6px"><div id="shopItem_icon_' + i + '" style="flex-shrink:0;width:24px;height:24px;display:flex;align-items:center">' + icon + '</div>'
+        + '<input type="text" id="shopItem_name_' + i + '" value="' + escHtml(it.itemName || '') + '" placeholder="' + (isVehicle ? 'Offroader_01' : 'Apple') + '" oninput="showInlineSuggestions(this);updateShopItemIcon(' + i + ')"' + (isVehicle ? ' data-vehicles="1"' : '') + ' style="flex:1;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:Consolas,monospace;font-size:12px"></div>'
+        + '<div class="wargm-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid var(--border);border-radius:4px;max-height:180px;overflow-y:auto;z-index:1002;margin-top:2px"></div></div></td>'
+        + '<td style="padding:6px 8px"><input type="number" id="shopItem_amount_' + i + '" value="' + (it.amount || 1) + '" min="1" max="999"' + (isVehicle ? ' disabled' : '') + ' style="width:70px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td>'
+        + '<td style="padding:6px 8px"><input type="number" id="shopItem_price_' + i + '" value="' + (it.price || 0) + '" min="0" style="width:80px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td>'
+        + '<td style="padding:6px 8px"><input type="number" id="shopItem_gold_' + i + '" value="' + (it.goldPrice || 0) + '" min="0" style="width:80px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td>'
+        + '<td style="padding:6px 8px"><input type="number" id="shopItem_fame_' + i + '" value="' + (it.famePrice || 0) + '" min="0" style="width:80px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-size:12px"></td>'
+        + '<td style="padding:6px 8px"><input type="checkbox" id="shopItem_enabled_' + i + '"' + (it.enabled !== false ? ' checked' : '') + '></td>'
+        + '<td style="padding:6px 8px"><button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick="removeShopItem(' + i + ')">' + t('teleport.delete') + '</button></td>'
+        + '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function shopItemTypeChanged(i, type) {
+  collectShopRows();
+  shopConfig.items[i].type = type;
+  renderShopItems();
+}
+
+function collectShopRows() {
+  for (let i = 0; i < shopConfig.items.length; i++) {
+    const nameEl = document.getElementById('shopItem_name_' + i);
+    if (!nameEl) continue;
+    shopConfig.items[i].itemName = nameEl.value.trim();
+    shopConfig.items[i].amount = parseInt(document.getElementById('shopItem_amount_' + i).value) || 1;
+    shopConfig.items[i].price = parseInt(document.getElementById('shopItem_price_' + i).value) || 0;
+    shopConfig.items[i].goldPrice = parseInt(document.getElementById('shopItem_gold_' + i).value) || 0;
+    shopConfig.items[i].famePrice = parseInt(document.getElementById('shopItem_fame_' + i).value) || 0;
+    shopConfig.items[i].enabled = document.getElementById('shopItem_enabled_' + i).checked;
+  }
+}
+
+function updateShopItemIcon(i) {
+  const val = document.getElementById('shopItem_name_' + i).value;
+  const div = document.getElementById('shopItem_icon_' + i);
+  if (div) div.innerHTML = getItemIconHtml(val) || '';
+}
+
+function addShopItem() {
+  shopConfig.items.push({ type: 'item', itemName: '', amount: 1, price: 0, goldPrice: 0, famePrice: 0, enabled: true });
+  renderShopItems();
+}
+
+function removeShopItem(i) {
+  shopConfig.items.splice(i, 1);
+  renderShopItems();
+}
+
+function onShopChanged() {
+  shopConfig.enabled = document.getElementById('shopEnabled').checked;
+}
+
+async function saveShopConfig() {
+  onShopChanged();
+  collectShopRows();
+  shopConfig.items = shopConfig.items.filter(it => it.itemName);
+  try {
+    const res = await fetch('/api/plugins/shop', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify(shopConfig),
+    });
+    if (!res.ok) { showNotification('saveShop HTTP ' + res.status, 'error'); return; }
+    const result = await res.json();
+    if (result.success) { showNotification('Shop config saved', 'success'); }
+    else { showNotification('Save failed: ' + (result.error || 'unknown'), 'error'); }
+  } catch (e) { showNotification('Save error: ' + e.message, 'error'); }
+}
+
 async function loadCooldowns() {
   try {
     const res = await fetch('/api/packs/cooldowns', {headers: {'Authorization': 'Bearer ' + authToken}});
@@ -3314,6 +3594,7 @@ async function showPlayerCard(steamId, playerName) {
     const data = await dbRes.json();
     const whoisData = await whoisRes.json();
     const whois = whoisData?.success ? whoisData.whois : null;
+    playerCardVehicles = data.player?.vehicles || [];
     
     // Use cached ListPlayers data (fresh every 10s) for balances
     const cachedPlayer = (cachedPlayersList || []).find(p => p.steamId === steamId);
@@ -3408,7 +3689,9 @@ async function showPlayerCard(steamId, playerName) {
     
     // Build actions grid
     const actionsGrid = document.getElementById('playerActionsGrid');
-    actionsGrid.innerHTML = `
+
+    const actionsGive = `
+      <div class="action-group-grid">
       <button class="action-btn success" onclick="showAttrModal('${steamId}', '${escapeHtml(playerName)}')">
          ${t('playerCard.setAttributes')}
       </button>
@@ -3430,23 +3713,31 @@ async function showPlayerCard(steamId, playerName) {
       <button class="action-btn success" onclick="showSpawnVehicleModal('${steamId}', '${escapeHtml(playerName)}')">
          ${t('playerCard.spawnVehicle')}
       </button>
-      <button class="action-btn danger" onclick="playerAction('${steamId}', 'godMode', {enabled: true}); closePlayerCard()">
+      <button class="action-btn success" onclick="maxAllSkills('${steamId}')">
+         ${t('playerCard.maxSkills')}
+      </button>
+      <button class="action-btn success" onclick="showNotification(t('playerCard.givingStarterPack'), 'info'); givePack('starter', '${steamId}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="5" y="8" width="14" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2M5 14h14M9 11v2M15 11v2"/></svg> ${t('playerCard.giveStarterPack')}
+      </button>
+      </div>
+    `;
+
+    const actionsStatus = `
+      <div class="action-group-grid">
+      <button class="action-btn" onclick="playerAction('${steamId}', 'godMode', {enabled: true}); closePlayerCard()">
          ${t('playerCard.godModeOn')}
       </button>
-      <button class="action-btn success" onclick="playerAction('${steamId}', 'setImmortality', {enabled: true}); closePlayerCard()">
+      <button class="action-btn" onclick="playerAction('${steamId}', 'setImmortality', {enabled: true}); closePlayerCard()">
          ${t('playerCard.immortalOn')}
       </button>
       <button class="action-btn" onclick="playerAction('${steamId}', 'setImmortality', {enabled: false}); closePlayerCard()">
          ${t('playerCard.immortalOff')}
       </button>
-      <button class="action-btn success" onclick="playerAction('${steamId}', 'showNamePlates', {}); closePlayerCard()">
+      <button class="action-btn" onclick="playerAction('${steamId}', 'showNamePlates', {}); closePlayerCard()">
          ${t('playerCard.showNamePlates')}
       </button>
-      <button class="action-btn success" onclick="playerAction('${steamId}', 'showOtherPlayerInfo', {}); closePlayerCard()">
+      <button class="action-btn" onclick="playerAction('${steamId}', 'showOtherPlayerInfo', {}); closePlayerCard()">
          ${t('playerCard.showOtherPlayerInfo')}
-      </button>
-      <button class="action-btn danger" onclick="playerAction('${steamId}', 'suicide', {}); closePlayerCard()">
-        ${t('playerCard.killPlayer')}
       </button>
       <button class="action-btn" onclick="playerAction('${steamId}', 'unstuck', {}); closePlayerCard()">
         ${t('playerCard.unstuck')}
@@ -3457,6 +3748,32 @@ async function showPlayerCard(steamId, playerName) {
       <button class="action-btn" onclick="showKnockoutModal('${steamId}')">
         ${t('playerCard.knockout')}
       </button>
+      </div>
+    `;
+
+    const actionsMove = `
+      <div class="action-group-grid">
+      <button class="action-btn accent" onclick="showTeleportCoordModal('${steamId}', '${escapeHtml(playerName)}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> ${t('playerCard.teleportTo')}
+      </button>
+      ${playerCardVehicles.length > 0 ? `<button class="action-btn accent" onclick="showVehicleTeleportModal('${steamId}', '${escapeHtml(playerName)}')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 17l2-4a2 2 0 0 1 1.8-1.2h8.4A2 2 0 0 1 18 13l2 4v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2Z"/><path d="M4 15h16"/></svg> ${t('playerCard.teleportToVehicle')}
+      </button>` : `<button class="action-btn accent" disabled style="opacity:0.5" title="${t('playerCard.vehicleNoVehicles')}">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 17l2-4a2 2 0 0 1 1.8-1.2h8.4A2 2 0 0 1 18 13l2 4v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2Z"/><path d="M4 15h16"/></svg> ${t('playerCard.teleportToVehicle')}
+      </button>`}
+      <button class="action-btn accent" onclick="playerAirdropDrop('${steamId}', ${playerLoc ? playerLoc.x : 'null'}, ${playerLoc ? playerLoc.y : 'null'}, ${playerLoc ? playerLoc.z : 'null'})">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="4" y="8" width="16" height="13"/><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1h-2M12 7v14M12 7c-3-3-6-1-6 1s3 0 6-1Zm0 0c3-3 6-1 6 1s-3 0-6-1Z"/></svg> ${t('playerCard.airdropAt')}
+      </button>
+      ${playerLoc ? `<button class="action-btn accent" onclick="scheduleCargoDrop('${steamId}', ${playerLoc.x}, ${playerLoc.y}, ${playerLoc.z})">
+        ${t('playerCard.scheduleCargoDrop')}
+      </button>` : `<button class="action-btn accent" onclick="scheduleCargoDrop('${steamId}')" style="opacity:0.6" title="Координаты неизвестны">
+        ${t('playerCard.scheduleCargoDrop')}
+      </button>`}
+      </div>
+    `;
+
+    const actionsMessages = `
+      <div class="action-group-grid">
       <button class="action-btn" onclick="showAnnounceModal('${steamId}', '${escapeHtml(playerName)}')">
         ${t('playerCard.announce')}
       </button>
@@ -3466,23 +3783,38 @@ async function showPlayerCard(steamId, playerName) {
       <button class="action-btn" onclick="showChatModal('${steamId}', '${escapeHtml(playerName)}')">
         ${t('playerCard.chatMessage')}
       </button>
-      <button class="action-btn success" onclick="playerAirdropDrop('${steamId}', ${playerLoc ? playerLoc.x : 'null'}, ${playerLoc ? playerLoc.y : 'null'}, ${playerLoc ? playerLoc.z : 'null'})">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="4" y="8" width="16" height="13"/><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1h-2M12 7v14M12 7c-3-3-6-1-6 1s3 0 6-1Zm0 0c3-3 6-1 6 1s-3 0-6-1Z"/></svg> ${t('playerCard.airdropAt')}
+      </div>
+    `;
+
+    const actionsDanger = `
+      <div class="action-group-grid">
+      <button class="action-btn danger" onclick="playerAction('${steamId}', 'suicide', {}); closePlayerCard()">
+        ${t('playerCard.killPlayer')}
       </button>
-      ${playerLoc ? `<button class="action-btn success" onclick="scheduleCargoDrop('${steamId}', ${playerLoc.x}, ${playerLoc.y}, ${playerLoc.z})">
-        ${t('playerCard.scheduleCargoDrop')}
-      </button>` : `<button class="action-btn success" onclick="scheduleCargoDrop('${steamId}')" style="opacity:0.6" title="Координаты неизвестны">
-        ${t('playerCard.scheduleCargoDrop')}
-      </button>`}
-      <button class="action-btn success" onclick="maxAllSkills('${steamId}')">
-        ${t('playerCard.maxSkills')}
-      </button>
-      <button class="action-btn success" onclick="showNotification(t('playerCard.givingStarterPack'), 'info'); givePack('starter', '${steamId}')">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><rect x="5" y="8" width="14" height="13" rx="2"/><path d="M9 8V6a3 3 0 0 1 6 0v2M5 14h14M9 11v2M15 11v2"/></svg> ${t('playerCard.giveStarterPack')}
-      </button>
-      <button class="action-btn" onclick="showTeleportCoordModal('${steamId}', '${escapeHtml(playerName)}')">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> ${t('playerCard.teleportTo')}
-      </button>
+      </div>
+    `;
+
+    actionsGrid.innerHTML = `
+      <div class="action-group">
+        <div class="action-group-title">${t('playerCard.groupGive')}</div>
+        ${actionsGive}
+      </div>
+      <div class="action-group">
+        <div class="action-group-title">${t('playerCard.groupStatus')}</div>
+        ${actionsStatus}
+      </div>
+      <div class="action-group">
+        <div class="action-group-title">${t('playerCard.groupMove')}</div>
+        ${actionsMove}
+      </div>
+      <div class="action-group">
+        <div class="action-group-title">${t('playerCard.groupMessages')}</div>
+        ${actionsMessages}
+      </div>
+      <div class="action-group">
+        <div class="action-group-title" style="color:var(--red)">${t('playerCard.groupDanger')}</div>
+        ${actionsDanger}
+      </div>
     `;
 
     // Show modal
@@ -3810,6 +4142,7 @@ async function executeGiveItem() {
 
 // Teleport to coordinates
 let teleportTargetSteamId = '';
+let playerCardVehicles = [];
 
 function showTeleportCoordModal(steamId, playerName) {
   teleportTargetSteamId = steamId;
@@ -3845,6 +4178,65 @@ async function executeTeleportCoord() {
       closeTeleportCoordModal();
     } else {
       showNotification(data.error || 'Teleport failed', 'error');
+    }
+  } catch (e) {
+    showNotification('Error: ' + e.message, 'error');
+  }
+}
+
+function showVehicleTeleportModal(steamId, playerName) {
+  teleportTargetSteamId = steamId;
+  document.getElementById('vehicleTeleportPlayerName').innerHTML =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 17l2-4a2 2 0 0 1 1.8-1.2h8.4A2 2 0 0 1 18 13l2 4v2a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2Z"/><path d="M4 15h16"/></svg> ' +
+    t('playerCard.selectVehicle') + ' — ' + escapeHtml(playerName);
+
+  const listEl = document.getElementById('vehicleTeleportList');
+  const vehicles = playerCardVehicles.filter(v => v.x != null && v.y != null);
+  const unavailable = playerCardVehicles.filter(v => v.x == null || v.y == null);
+
+  let html = '';
+  if (vehicles.length === 0 && unavailable.length === 0) {
+    html = '<div style="color:var(--muted);text-align:center;padding:16px">' + t('playerCard.vehicleNoVehicles') + '</div>';
+  }
+  vehicles.forEach(v => {
+    const name = v.customName && v.customName !== '-' ? v.customName : (v.asset || 'ID ' + v.entityId);
+    const vz = v.z != null ? Math.round(v.z) : 0;
+    html += `<div class="action-btn accent" style="cursor:pointer" onclick="vehicleTeleportTo(${Math.round(v.x)}, ${Math.round(v.y)}, ${vz})">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 16l1.5-4A2 2 0 0 1 7.4 10.4h9.2a2 2 0 0 1 1.9 1.6L20 16v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4Zm3 0h10v-1.6H7v1.6Z"/><circle cx="7.5" cy="12" r=".5"/><circle cx="16.5" cy="12" r=".5"/></svg>
+      <span style="flex:1">${escapeHtml(name)}</span>
+      <span style="color:var(--muted);font-size:12px">X=${Math.round(v.x)} Y=${Math.round(v.y)} Z=${vz}</span>
+    </div>`;
+  });
+  unavailable.forEach(v => {
+    const name = v.customName && v.customName !== '-' ? v.customName : (v.asset || 'ID ' + v.entityId);
+    html += `<div class="action-btn" style="opacity:0.5" title="${t('playerCard.vehicleNoCoords')}">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 16l1.5-4A2 2 0 0 1 7.4 10.4h9.2a2 2 0 0 1 1.9 1.6L20 16v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4Zm3 0h10v-1.6H7v1.6Z"/><circle cx="7.5" cy="12" r=".5"/><circle cx="16.5" cy="12" r=".5"/></svg>
+      <span style="flex:1">${escapeHtml(name)}</span>
+      <span style="color:var(--muted);font-size:12px">${t('playerCard.vehicleNoCoords')}</span>
+    </div>`;
+  });
+  listEl.innerHTML = html;
+  document.getElementById('vehicleTeleportModal').style.display = 'flex';
+}
+
+function closeVehicleTeleportModal() {
+  document.getElementById('vehicleTeleportModal').style.display = 'none';
+}
+
+async function vehicleTeleportTo(x, y, z) {
+  const cmd = 'Teleport ' + x + ' ' + y + ' ' + z + ' ' + teleportTargetSteamId;
+  try {
+    const res = await fetch('/api/rcon/command', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({command: cmd}),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification(t('playerCard.vehicleTeleported'), 'success');
+      closeVehicleTeleportModal();
+    } else {
+      showNotification(data.error || t('notification.failed'), 'error');
     }
   } catch (e) {
     showNotification('Error: ' + e.message, 'error');

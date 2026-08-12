@@ -294,7 +294,12 @@ export class WebPanel {
     if (this.serverPath) {
       return path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', 'airdrop_calibration.json');
     }
-    return path.join(process.cwd(), 'data', 'airdrop_calibration.json');
+    try {
+      const { app } = require('electron');
+      return path.join(app.getPath('userData'), 'data', 'airdrop_calibration.json');
+    } catch {
+      return path.join(process.cwd(), 'data', 'airdrop_calibration.json');
+    }
   }
 
   private loadCalibrationData(): void {

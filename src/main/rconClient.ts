@@ -35,7 +35,12 @@ export class RconClient {
   private readonly RECONNECT_DELAY = 5000;
 
   constructor() {
-    this.logPath = path.join(process.cwd(), 'logs', 'rcon_commands.log');
+    try {
+      const { app } = require('electron');
+      this.logPath = path.join(app.getPath('userData'), 'logs', 'rcon_commands.log');
+    } catch {
+      this.logPath = path.join(process.cwd(), 'logs', 'rcon_commands.log');
+    }
     fs.ensureDirSync(path.dirname(this.logPath));
   }
 

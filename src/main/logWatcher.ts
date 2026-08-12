@@ -1,5 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { app } from 'electron';
 import { watch, FSWatcher } from 'chokidar';
 import { DiscordWebhook } from './discordWebhook';
 import { RconClient } from './rconClient';
@@ -107,7 +108,16 @@ export class LogWatcher {
   };
 
   private migrateOldFile(oldRel: string, filename: string): string {
-    if (!this.serverPath) return path.join(process.cwd(), path.dirname(oldRel), filename);
+    if (!this.serverPath) {
+      // No server configured — store in protected user data dir (survives reinstall)
+      const newPath = path.join(app.getPath('userData'), path.dirname(oldRel), filename);
+      const oldPath = path.join(process.cwd(), oldRel, filename);
+      fs.ensureDirSync(path.dirname(newPath));
+      if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+        try { fs.copyFileSync(oldPath, newPath); } catch {}
+      }
+      return newPath;
+    }
     const newPath = path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles', filename);
     const oldPath = path.join(process.cwd(), oldRel, filename);
     fs.ensureDirSync(path.join(this.serverPath, 'SCUM', 'Saved', 'SaveFiles'));

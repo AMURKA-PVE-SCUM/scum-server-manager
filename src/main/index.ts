@@ -18,12 +18,20 @@ import { autoUpdater } from 'electron-updater';
 import ElectronStore from 'electron-store';
 import type { AppConfig } from './types';
 
+function crashLogPath(): string {
+  try {
+    return path.join(app.getPath('userData'), 'logs', 'crash.log');
+  } catch {
+    return path.join(process.cwd(), 'crash.log');
+  }
+}
+
 process.on('uncaughtException', (err) => {
-  try { fs.writeFileSync(path.join(__dirname, '..', '..', 'crash.log'), `[${new Date().toISOString()}] UNCAUGHT: ${err.stack || err.message}\n`, { flag: 'a' }); } catch {}
+  try { fs.ensureDirSync(path.dirname(crashLogPath())); fs.writeFileSync(crashLogPath(), `[${new Date().toISOString()}] UNCAUGHT: ${err.stack || err.message}\n`, { flag: 'a' }); } catch {}
   console.error('[FATAL]', err);
 });
 process.on('unhandledRejection', (reason) => {
-  try { fs.writeFileSync(path.join(__dirname, '..', '..', 'crash.log'), `[${new Date().toISOString()}] UNHANDLED: ${reason}\n`, { flag: 'a' }); } catch {}
+  try { fs.ensureDirSync(path.dirname(crashLogPath())); fs.writeFileSync(crashLogPath(), `[${new Date().toISOString()}] UNHANDLED: ${reason}\n`, { flag: 'a' }); } catch {}
   console.error('[FATAL]', reason);
 });
 

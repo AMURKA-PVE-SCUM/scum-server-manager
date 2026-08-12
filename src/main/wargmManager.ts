@@ -37,8 +37,17 @@ export class WargmManager {
   private lastCommandTime = new Map<string, number>();
 
   constructor() {
-    this.dbPath = path.join(process.cwd(), 'data', 'wargm.db');
+    this.dbPath = this.defaultDbPath();
     fs.ensureDirSync(path.dirname(this.dbPath));
+  }
+
+  private defaultDbPath(): string {
+    try {
+      const { app } = require('electron');
+      return path.join(app.getPath('userData'), 'data', 'wargm.db');
+    } catch {
+      return path.join(process.cwd(), 'data', 'wargm.db');
+    }
   }
 
   setServerPath(serverPath: string): void {
@@ -47,11 +56,17 @@ export class WargmManager {
       // Save old db and close before switching
       if (this.db) this.save();
       this.db = null;
-      // Migrate old db if exists
-      if (fs.existsSync(this.dbPath) && !fs.existsSync(newPath)) {
-        fs.ensureDirSync(path.dirname(newPath));
-        fs.copyFileSync(this.dbPath, newPath);
-        console.log(`[Wargm] Migrated DB to ${newPath}`);
+      // Migrate old db if exists (from protected dir or legacy cwd location)
+      if (!fs.existsSync(newPath)) {
+        const candidates = [this.dbPath, path.join(process.cwd(), 'data', 'wargm.db')];
+        for (const cand of candidates) {
+          if (cand !== newPath && fs.existsSync(cand)) {
+            fs.ensureDirSync(path.dirname(newPath));
+            fs.copyFileSync(cand, newPath);
+            console.log(`[Wargm] Migrated DB from ${cand} to ${newPath}`);
+            break;
+          }
+        }
       }
       this.dbPath = newPath;
       fs.ensureDirSync(path.dirname(this.dbPath));
@@ -772,9 +787,18 @@ export class WargmManager {
   }
 
   // Logging
+  private get logsDir(): string {
+    try {
+      const { app } = require('electron');
+      return path.join(app.getPath('userData'), 'logs');
+    } catch {
+      return path.join(process.cwd(), 'logs');
+    }
+  }
+
   private logApiCall(endpoint: string, method: string, status: number, response: string): void {
     try {
-      const logPath = path.join(process.cwd(), 'logs', `wargm_api_${new Date().toISOString().slice(0, 10)}.log`);
+      const logPath = path.join(this.logsDir, `wargm_api_${new Date().toISOString().slice(0, 10)}.log`);
       fs.ensureDirSync(path.dirname(logPath));
       const line = `[${new Date().toISOString()}] [${method}] ${endpoint} → ${status}: ${response.slice(0, 500)}\n`;
       fs.appendFileSync(logPath, line);
@@ -783,7 +807,7 @@ export class WargmManager {
 
   private logDelivery(steamId: string, cardName: string, results: string[], errors: string[]): void {
     try {
-      const logPath = path.join(process.cwd(), 'logs', `wargm_deliveries_${new Date().toISOString().slice(0, 10)}.log`);
+      const logPath = path.join(this.logsDir, `wargm_deliveries_${new Date().toISOString().slice(0, 10)}.log`);
       fs.ensureDirSync(path.dirname(logPath));
       const ok = results.length > 0 ? `OK: ${results.join(', ')}` : '';
       const err = errors.length > 0 ? ` ERR: ${errors.join(', ')}` : '';

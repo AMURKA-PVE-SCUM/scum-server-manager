@@ -572,11 +572,19 @@ th{letter-spacing:.05em}
               <input type="checkbox" id="vehicleTeleportEnabled" onchange="onVehicleTeleportChanged()">
               <span data-i18n="vehicleteleport.enabled">Модуль включен</span>
             </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="checkbox" id="vehicleTeleportAllowAll" onchange="onVehicleTeleportChanged()">
+              <span data-i18n="vehicleteleport.allowAll">Телепорт доступен всем игрокам</span>
+            </label>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
             <div>
               <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.maxVehicles">Макс. машин (обычный)</label>
               <input type="number" id="vehicleTeleportMaxVehicles" value="1" min="1" max="20" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.allMaxVehicles">Макс. машин (без покупки, при доступе всем)</label>
+              <input type="number" id="vehicleTeleportAllMaxVehicles" value="1" min="1" max="20" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onVehicleTeleportChanged()">
             </div>
             <div>
               <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="vehicleteleport.vipMaxVehicles">Макс. машин (с доступом)</label>
@@ -1961,6 +1969,8 @@ const translations = {
     'vehicleteleport.subtabTitle': 'Транспорт',
     'vehicleteleport.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> Транспорт: телепорт к машине',
     'vehicleteleport.enabled': 'Модуль включен',
+    'vehicleteleport.allowAll': 'Телепорт доступен всем игрокам',
+    'vehicleteleport.allMaxVehicles': 'Макс. машин (без покупки, при доступе всем)',
     'vehicleteleport.maxVehicles': 'Макс. машин (обычный)',
     'vehicleteleport.vipMaxVehicles': 'Макс. машин (с доступом)',
     'vehicleteleport.cooldown': 'Кулдаун (сек)',
@@ -1969,7 +1979,7 @@ const translations = {
     'vehicleteleport.teleportFamePrice': 'Цена телепорта (слава)',
     'vehicleteleport.players': 'Игроки с доступом (телепорт)',
     'vehicleteleport.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить',
-    'vehicleteleport.help': 'Игрок вводит !привязать — получает список своих автомобилей с номерами, затем !привязать N привязывает выбранный (бесплатно, только свои). !машина — телепорт к машине (нужен доступ), !машины — список привязанных. Без доступа !машина покажет координаты машины.',
+    'vehicleteleport.help': 'Игрок вводит !привязать — получает список своих автомобилей с номерами, затем !привязать N привязывает выбранный (бесплатно, только свои). !машина — телепорт к машине, !машины — список привязанных. Доступ: покупка через WARGM/список или галочка «Телепорт доступен всем» (лимит машин настраивается отдельно для купивших и для всех).',
     'vote.subtabTitle': 'Голосования',
     'vote.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6V2h8v4M12 12v-4M8 18H5l3-4h4l3 4h-3Z"/></svg> Голосования',
     'vote.enabled': 'Модуль включен',
@@ -2414,6 +2424,8 @@ const translations = {
     'vehicleteleport.subtabTitle': 'Transport',
     'vehicleteleport.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M19 17h-2l-2-5H9l-2 5H5"/><path d="M5 17v2M19 17v2M7 12h10M6 10l2-4h8l2 4"/></svg> Vehicle teleport',
     'vehicleteleport.enabled': 'Module enabled',
+    'vehicleteleport.allowAll': 'Teleport available to all players',
+    'vehicleteleport.allMaxVehicles': 'Max vehicles (no purchase, when available to all)',
     'vehicleteleport.maxVehicles': 'Max vehicles (normal)',
     'vehicleteleport.vipMaxVehicles': 'Max vehicles (with access)',
     'vehicleteleport.cooldown': 'Cooldown (sec)',
@@ -2422,7 +2434,7 @@ const translations = {
     'vehicleteleport.teleportFamePrice': 'Teleport price (fame)',
     'vehicleteleport.players': 'Players with access (teleport)',
     'vehicleteleport.save': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Save',
-    'vehicleteleport.help': 'Player types !привязать to see a numbered list of their vehicles, then !привязать N binds the chosen one (free, own vehicles only). !машина teleports to the vehicle (needs access), !машины lists registered. Without access !машина shows vehicle coordinates.',
+    'vehicleteleport.help': 'Player types !привязать to see a numbered list of their vehicles, then !привязать N binds the chosen one (free, own vehicles only). !машина teleports to the vehicle, !машины lists registered. Access via WARGM purchase/player list or the "Teleport available to all" toggle (vehicle slot limits are configured separately for buyers and for everyone).',
     'vote.subtabTitle': 'Votes',
     'vote.title': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 6V2h8v4M12 12v-4M8 18H5l3-4h4l3 4h-3Z"/></svg> Votes',
     'vote.enabled': 'Module enabled',
@@ -3221,7 +3233,7 @@ async function saveSaveHomeConfig() {
 }
 
 // Vehicle Teleport module
-let vehicleTeleportConfig = { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] };
+let vehicleTeleportConfig = { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] };
 
 async function loadVehicleTeleportConfig() {
   try {
@@ -3229,7 +3241,9 @@ async function loadVehicleTeleportConfig() {
     if (!res.ok) return;
     vehicleTeleportConfig = await res.json();
     document.getElementById('vehicleTeleportEnabled').checked = vehicleTeleportConfig.enabled;
+    document.getElementById('vehicleTeleportAllowAll').checked = vehicleTeleportConfig.allowAll || false;
     document.getElementById('vehicleTeleportMaxVehicles').value = vehicleTeleportConfig.maxVehicles;
+    document.getElementById('vehicleTeleportAllMaxVehicles').value = vehicleTeleportConfig.allMaxVehicles || 1;
     document.getElementById('vehicleTeleportVipMaxVehicles').value = vehicleTeleportConfig.vipMaxVehicles;
     document.getElementById('vehicleTeleportCooldown').value = vehicleTeleportConfig.cooldownSeconds;
     document.getElementById('vehicleTeleportTeleportPrice').value = vehicleTeleportConfig.teleportPrice;
@@ -3242,6 +3256,8 @@ async function loadVehicleTeleportConfig() {
 function onVehicleTeleportChanged() {
   vehicleTeleportConfig.enabled = document.getElementById('vehicleTeleportEnabled').checked;
   vehicleTeleportConfig.maxVehicles = parseInt(document.getElementById('vehicleTeleportMaxVehicles').value) || 1;
+  vehicleTeleportConfig.allMaxVehicles = parseInt(document.getElementById('vehicleTeleportAllMaxVehicles').value) || 1;
+  vehicleTeleportConfig.allowAll = document.getElementById('vehicleTeleportAllowAll').checked;
   vehicleTeleportConfig.vipMaxVehicles = parseInt(document.getElementById('vehicleTeleportVipMaxVehicles').value) || 3;
   vehicleTeleportConfig.cooldownSeconds = parseInt(document.getElementById('vehicleTeleportCooldown').value) || 0;
   vehicleTeleportConfig.teleportPrice = parseInt(document.getElementById('vehicleTeleportTeleportPrice').value) || 0;

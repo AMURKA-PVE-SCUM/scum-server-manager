@@ -127,6 +127,8 @@ export interface VehicleTeleportConfig {
   teleportGoldPrice?: number;
   teleportFamePrice?: number;
   cooldownSeconds: number;
+  allowAll?: boolean;
+  allMaxVehicles?: number;
   players: VipPlayer[];
 }
 

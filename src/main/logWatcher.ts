@@ -47,7 +47,8 @@ export class LogWatcher {
   private homeDataPath = '';
   private vehicleTeleportConfig: VehicleTeleportConfig = {
     enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300,
-    teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [],
+    teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60,
+    allowAll: false, allMaxVehicles: 1, players: [],
   };
   private vehicleRegistrations: Record<string, { entityId: number; name: string; asset: string; registeredAt: number }[]> = {};
   private vehicleRegPath = '';
@@ -188,16 +189,24 @@ export class LogWatcher {
     return this.vehicleRegistrations[steamId] || [];
   }
 
-  private isVehicleTeleport(steamId: string): boolean {
-    if (!this.vehicleTeleportConfig.enabled) return false;
+  private hasPurchasedAccess(steamId: string): boolean {
     const p = this.vehicleTeleportConfig.players.find(x => x.steamId === steamId);
     if (!p) return false;
     if (p.expiresAt > 0 && Date.now() > p.expiresAt) return false;
     return true;
   }
 
+  private isVehicleTeleport(steamId: string): boolean {
+    if (!this.vehicleTeleportConfig.enabled) return false;
+    if (this.vehicleTeleportConfig.allowAll) return true;
+    return this.hasPurchasedAccess(steamId);
+  }
+
   private maxVehicleSlots(steamId: string): number {
-    return this.isVehicleTeleport(steamId) ? this.vehicleTeleportConfig.vipMaxVehicles : this.vehicleTeleportConfig.maxVehicles;
+    const cfg = this.vehicleTeleportConfig;
+    if (this.hasPurchasedAccess(steamId)) return cfg.vipMaxVehicles;
+    if (cfg.allowAll) return cfg.allMaxVehicles ?? cfg.maxVehicles;
+    return cfg.maxVehicles;
   }
 
   private voteCooldownSeconds(steamId: string): number {

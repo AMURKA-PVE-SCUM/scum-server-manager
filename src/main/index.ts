@@ -101,7 +101,7 @@ const store = new ElectronStore<AppConfig>({
         starterBonus: { items: [{ itemId: 'Apple', amount: 10 }], money: 1000, gold: 100, fame: 500 },
         dailyBonus: { items: [{ itemId: 'Apple', amount: 5 }], money: 500, gold: 50, fame: 200 },
       },
-      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
+      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
       vote: { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 },
       shop: { enabled: true, items: [] },
@@ -215,7 +215,7 @@ function initServices(): void {
   logWatcher.setPacksConfig(config.packs);
   scumDatabase = new ScumDatabaseReader(config.server.serverPath);
   logWatcher.setScumDb(scumDatabase);
-  logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+  logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] });
   logWatcher.setVoteConfig(config.plugins.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
   logWatcher.setShopConfig(config.plugins.shop || { enabled: true, items: [] });
   webPanel.setServices(serverManager, steamCmd, config.server.serverPath);
@@ -247,7 +247,7 @@ function initServices(): void {
         starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
         dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
       },
-      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
+      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
       vote: { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 },
       shop: { enabled: true, items: [] },
@@ -356,7 +356,7 @@ function initServices(): void {
     };
     logWatcher.setVipConfig(vip);
     logWatcher.setSaveHomeConfig(plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 });
-    logWatcher.setVehicleTeleportConfig(plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+    logWatcher.setVehicleTeleportConfig(plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] });
     logWatcher.setVoteConfig(plugins.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
     logWatcher.setShopConfig(plugins.shop || { enabled: true, items: [] });
   });
@@ -367,10 +367,10 @@ function initServices(): void {
   };
   logWatcher.setVipConfig(vipCfg);
   logWatcher.setSaveHomeConfig(config.plugins.saveHome || { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0 });
-  logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+  logWatcher.setVehicleTeleportConfig(config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] });
   logWatcher.setVoteConfig(config.plugins.vote || { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 });
   logWatcher.setShopConfig(config.plugins.shop || { enabled: true, items: [] });
-  const vtCfg = config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] };
+  const vtCfg = config.plugins.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] };
   wargmManager.setVipAddCallback((steamId: string, days: number) => {
     const cur = store.store;
     const p = cur.plugins || { teleport: { enabled: true, locations: [] }, vip: vipCfg };

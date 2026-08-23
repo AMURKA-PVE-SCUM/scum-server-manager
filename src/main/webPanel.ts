@@ -54,7 +54,7 @@ export class WebPanel {
         starterBonus: { items: [], money: 0, gold: 0, fame: 0 },
         dailyBonus: { items: [], money: 0, gold: 0, fame: 0 },
       },
-      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] },
+      vehicleTeleport: { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] },
       saveHome: { enabled: true, maxLocations: 1, vipMaxLocations: 3, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0 },
       vote: { enabled: true, weatherEnabled: true, timeEnabled: true, cooldownSeconds: 600, vipCooldownSeconds: 300 },
       shop: { enabled: true, items: [] },
@@ -535,7 +535,7 @@ export class WebPanel {
         } else if (url === '/api/plugins/savehome' && method === 'POST') {
           this.handleSetSaveHome(req, res);
         } else if (url === '/api/plugins/vehicleTeleport' && method === 'GET') {
-          this.sendJson(res, this.pluginsConfig.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, players: [] });
+          this.sendJson(res, this.pluginsConfig.vehicleTeleport || { enabled: true, maxVehicles: 1, vipMaxVehicles: 3, registerRadius: 300, teleportPrice: 0, teleportGoldPrice: 0, teleportFamePrice: 0, cooldownSeconds: 60, allowAll: false, allMaxVehicles: 1, players: [] });
         } else if (url === '/api/plugins/vehicleTeleport' && method === 'POST') {
           this.handleSetVehicleTeleport(req, res);
         } else if (url === '/api/plugins/vote' && method === 'GET') {

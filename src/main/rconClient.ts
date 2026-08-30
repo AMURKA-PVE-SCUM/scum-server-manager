@@ -30,6 +30,7 @@ export class RconClient {
   private packetId: number = 1;
   private responseQueue: Map<number, { resolve: (value: string) => void; reject: (error: Error) => void; buffers?: string[] }> = new Map();
   private responseDebounceTimers: Map<number, NodeJS.Timeout> = new Map();
+  private tcpBuffer: Buffer = Buffer.alloc(0);
   private autoReconnect: boolean = false;
   private reconnectInterval: NodeJS.Timeout | null = null;
   private readonly RECONNECT_DELAY = 5000;
@@ -175,6 +176,7 @@ export class RconClient {
     this.socket = null;
     this.connected = false;
     this.config = null;
+    this.tcpBuffer = Buffer.alloc(0);
     this.responseQueue.clear();
     for (const t of this.responseDebounceTimers.values()) clearTimeout(t);
     this.responseDebounceTimers.clear();
@@ -254,15 +256,21 @@ export class RconClient {
 
   private handleResponse(data: Buffer) {
     try {
+      // Accumulate across TCP segments: a large RCON packet (e.g. ListPlayers with
+      // many players) may arrive split across multiple 'data' events, so keep any
+      // trailing incomplete bytes for the next event instead of dropping them.
+      this.tcpBuffer = Buffer.concat([this.tcpBuffer, data]);
       let offset = 0;
-      while (offset < data.length) {
-        const size = data.readInt32LE(offset);
-        if (size < 10 || offset + 4 + size > data.length) break;
-        
-        const id = data.readInt32LE(offset + 4);
-        const type = data.readInt32LE(offset + 8);
-        const body = data.toString('utf8', offset + 12, offset + 4 + size - 2);
-        
+      while (offset < this.tcpBuffer.length) {
+        // Need at least 4 bytes (size) before parsing a header
+        if (offset + 4 > this.tcpBuffer.length) break;
+        const size = this.tcpBuffer.readInt32LE(offset);
+        if (size < 10 || offset + 4 + size > this.tcpBuffer.length) break;
+
+        const id = this.tcpBuffer.readInt32LE(offset + 4);
+        const type = this.tcpBuffer.readInt32LE(offset + 8);
+        const body = this.tcpBuffer.toString('utf8', offset + 12, offset + 4 + size - 2);
+
         if (type === SERVERDATA_AUTH_RESPONSE) {
           const handler = this.responseQueue.get(id);
           if (handler) {
@@ -285,7 +293,10 @@ export class RconClient {
             } else {
               if (!handler.buffers) handler.buffers = [];
               handler.buffers.push(body);
-              // Debounce: resolve after 100ms of no further packets
+              // Debounce: resolve after quiet period once the whole stream is delivered.
+              // Some servers (SCUM ListPlayers with many players) send a burst of packets
+              // that can take >100ms to arrive, so we use a longer quiet window and reset
+              // it on every packet to avoid resolving a partial list.
               const dt = this.responseDebounceTimers.get(id);
               if (dt) clearTimeout(dt);
               this.responseDebounceTimers.set(id, setTimeout(() => {
@@ -294,15 +305,20 @@ export class RconClient {
                   this.responseQueue.delete(id);
                   handler.resolve(handler.buffers!.join(''));
                 }
-              }, 100));
+              }, 400));
             }
           }
         }
-        
+
         offset += 4 + size;
+      }
+      // Keep any trailing incomplete bytes for the next 'data' event
+      if (offset > 0) {
+        this.tcpBuffer = this.tcpBuffer.slice(offset);
       }
     } catch (err) {
       console.error('[RCON] Error parsing response:', err);
+      this.tcpBuffer = Buffer.alloc(0);
     }
   }
 

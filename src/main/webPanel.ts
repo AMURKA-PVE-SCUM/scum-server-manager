@@ -1038,29 +1038,42 @@ export class WebPanel {
   }
 
   // Players handlers
+  private playersFromMap(): any[] {
+    return Array.from(this.onlinePlayers.values()).map(p => ({
+      steamId: p.steamId,
+      name: p.name,
+      connectedAt: p.connectedAt.toISOString(),
+      duration: Math.floor((Date.now() - p.connectedAt.getTime()) / 1000),
+      location: p.location || null,
+      fame: p.fame ?? null,
+      balance: p.balance ?? null,
+      gold: p.gold ?? null,
+    }));
+  }
+
   private async handleOnlinePlayers(res: http.ServerResponse): Promise<void> {
     try {
       if (!this.rconClient || !this.rconClient.isConnected()) {
         // Fallback: use players tracked from server logs (no RCON required)
-        const players = Array.from(this.onlinePlayers.values()).map(p => ({
-          steamId: p.steamId,
-          name: p.name,
-          connectedAt: p.connectedAt.toISOString(),
-          duration: Math.floor((Date.now() - p.connectedAt.getTime()) / 1000),
-          location: p.location || null,
-          fame: p.fame ?? null,
-          balance: p.balance ?? null,
-          gold: p.gold ?? null,
-        }));
-        this.sendJson(res, { players });
+        this.sendJson(res, { players: this.playersFromMap() });
         return;
       }
       const result = await this.rconClient.sendCommand('ListPlayers');
       if (!result.success || !result.response) {
-        this.sendJson(res, { players: [] });
+        // ListPlayers returned empty/failed (SCUM RCON truncates large outputs,
+        // e.g. >~24 players). Fall back to players tracked from server logs so the
+        // list never empties out.
+        console.warn(`[WebPanel] ListPlayers empty (success=${result.success}, err=${result.error}); falling back to ${this.onlinePlayers.size} players from logs`);
+        this.sendJson(res, { players: this.playersFromMap() });
         return;
       }
       const parsed = this.parseListPlayersOutput(result.response);
+      if (parsed.length === 0) {
+        // Parsed nothing — also fall back rather than showing an empty list.
+        console.warn(`[WebPanel] ListPlayers parsed 0 players; falling back to ${this.onlinePlayers.size} players from logs`);
+        this.sendJson(res, { players: this.playersFromMap() });
+        return;
+      }
       const players = parsed.map(p => ({
         steamId: p.steamId,
         name: p.name,
@@ -1075,7 +1088,8 @@ export class WebPanel {
       this.cachedPlayers = parsed;
       this.sendJson(res, { players });
     } catch (e: any) {
-      this.sendJson(res, { error: e.message }, 500);
+      console.warn(`[WebPanel] handleOnlinePlayers error: ${e.message}; falling back to ${this.onlinePlayers.size} players from logs`);
+      this.sendJson(res, { players: this.playersFromMap() });
     }
   }
 
@@ -2551,6 +2565,14 @@ export class WebPanel {
         }
       } else {
         console.log('[WebPanel] pollPlayers: ListPlayers returned no response');
+        // Diagnostics: dump raw response/error once so we can tell whether the
+        // server truncated it or our client failed to assemble it.
+        try {
+          const { app } = require('electron');
+          const diagPath = path.join(app.getPath('userData'), 'logs', 'listplayers_diag.log');
+          fs.ensureDirSync(path.dirname(diagPath));
+          fs.appendFileSync(diagPath, `[${new Date().toISOString()}] success=${result.success} err=${result.error || ''} len=${(result.response || '').length}\nRESPONSE_START\n${result.response || ''}\nRESPONSE_END\n---\n`, 'utf-8');
+        } catch {}
       }
     } catch (e) {
       console.error('[WebPanel] Poll players error:', e);

@@ -30,8 +30,8 @@ export class LogWatcher {
   private rconClient: RconClient | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
   private packsConfig: PackConfig = {
-    starter: { enabled: true, items: [], cooldownHours: 0 },
-    daily: { enabled: true, items: [], cooldownHours: 24 },
+    starter: { enabled: true, items: [], cooldownHours: 0, money: 0, gold: 0, fame: 0, vehicles: [] },
+    daily: { enabled: true, items: [], cooldownHours: 24, money: 0, gold: 0, fame: 0, vehicles: [] },
   };
   private cooldowns: Record<string, number> = {};
   private teleportLocations: TeleportLocation[] = [];
@@ -307,8 +307,13 @@ export class LogWatcher {
     if (cmdKey === '!startpack' || cmdKey === '!dailypack') {
       const isDaily = cmdKey === '!dailypack';
       const pack = isDaily ? this.packsConfig.daily : this.packsConfig.starter;
-      if (!pack.enabled || !pack.items.length) {
+      if (!pack.enabled) {
         await this.rconClient.sendCommand(`SendChat 4 "${isDaily ? 'Ежедневный' : 'Стартовый'} набор недоступен" ${steamId}`);
+        return;
+      }
+      const hasContent = (pack.items && pack.items.length > 0) || (pack.money && pack.money > 0) || (pack.gold && pack.gold > 0) || (pack.fame && pack.fame > 0) || (pack.vehicles && pack.vehicles.length > 0);
+      if (!hasContent) {
+        await this.rconClient.sendCommand(`SendChat 4 "${isDaily ? 'Ежедневный' : 'Стартовый'} набор пуст" ${steamId}`);
         return;
       }
       if (pack.cooldownHours > 0) {
@@ -334,6 +339,33 @@ export class LogWatcher {
         const r = await this.rconClient.sendCommand(`SpawnItem ${item.itemId} ${item.amount} Location ${steamId}`);
         if (r.success) succeeded.push(`${item.itemId}x${item.amount}`);
         else failed.push(`${item.itemId}x${item.amount}`);
+      }
+      // Money
+      if (pack.money && pack.money > 0) {
+        const r = await this.rconClient.sendCommand(`ChangeCurrencyBalance Normal +${pack.money} ${steamId}`);
+        if (r.success) succeeded.push(`Деньги +${pack.money}`);
+        else failed.push(`Деньги +${pack.money}`);
+      }
+      // Gold
+      if (pack.gold && pack.gold > 0) {
+        const r = await this.rconClient.sendCommand(`ChangeCurrencyBalance Gold +${pack.gold} ${steamId}`);
+        if (r.success) succeeded.push(`Золото +${pack.gold}`);
+        else failed.push(`Золото +${pack.gold}`);
+      }
+      // Fame
+      if (pack.fame && pack.fame > 0) {
+        const r = await this.rconClient.sendCommand(`ChangeFamePoints +${pack.fame} ${steamId}`);
+        if (r.success) succeeded.push(`Слава +${pack.fame}`);
+        else failed.push(`Слава +${pack.fame}`);
+      }
+      // Vehicles
+      if (pack.vehicles && pack.vehicles.length > 0) {
+        for (const v of pack.vehicles) {
+          if (!v.vehicleName) continue;
+          const r = await this.rconClient.sendCommand(`SpawnVehicle ${v.vehicleName} 1 Location ${steamId}`);
+          if (r.success) succeeded.push(`ТС ${v.vehicleName}`);
+          else failed.push(`ТС ${v.vehicleName}`);
+        }
       }
       // VIP bonuses
       if (this.isVip(steamId)) {

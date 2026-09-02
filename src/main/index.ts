@@ -90,8 +90,8 @@ const store = new ElectronStore<AppConfig>({
     webPanel: { enabled: false, port: 8080, username: 'admin', password: 'scum' },
     rcon: { enabled: false, host: 'localhost', port: 28015, password: '' },
     packs: {
-      starter: { enabled: true, items: [], cooldownHours: 0 },
-      daily: { enabled: true, items: [], cooldownHours: 24 },
+      starter: { enabled: true, items: [], cooldownHours: 0, money: 0, gold: 0, fame: 0, vehicles: [] },
+      daily: { enabled: true, items: [], cooldownHours: 24, money: 0, gold: 0, fame: 0, vehicles: [] },
     },
     plugins: {
       teleport: { enabled: true, locations: [] },

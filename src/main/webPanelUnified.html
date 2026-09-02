@@ -430,12 +430,24 @@ th{letter-spacing:.05em}
               </label>
             </div>
             <div style="margin-bottom:12px">
-              <label style="display:block;margin-bottom:4px;font-size:13px" data-i18n="packs.cooldown">Кулдаун (часы)</label>
+              <label style="block;margin-bottom:4px;font-size:13px" data-i18n="packs.cooldown">Кулдаун (часы)</label>
               <input type="number" id="starterCooldown" value="0" min="0" max="8760" style="width:80px" onchange="onPackChanged()">
               <span style="font-size:11px;color:var(--muted);margin-left:6px" data-i18n="packs.cooldownHint">0 = один раз</span>
             </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="packs.money">Деньги</label><input type="number" id="starterMoney" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="packs.gold">Золото</label><input type="number" id="starterGold" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="packs.fame">Слава</label><input type="number" id="starterFame" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()"></div>
+            </div>
             <div id="starterItems"></div>
             <button class="btn" onclick="addPackItem('starter')" style="margin-top:8px;width:100%">+ <span data-i18n="packs.addItem">Добавить предмет</span></button>
+            <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <label style="font-size:12px;color:var(--muted)" data-i18n="packs.vehicles">Транспорт</label>
+                <button class="btn" onclick="addPackVehicle('starter')" style="padding:2px 8px;font-size:11px">+ <span data-i18n="packs.addVehicle">Добавить ТС</span></button>
+              </div>
+              <div id="starterVehicles"></div>
+            </div>
           </div>
           <div class="card" style="flex:1;min-width:350px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -449,8 +461,20 @@ th{letter-spacing:.05em}
               <label style="display:block;margin-bottom:4px;font-size:13px" data-i18n="packs.cooldown">Кулдаун (часы)</label>
               <input type="number" id="dailyCooldown" value="24" min="1" max="168" style="width:80px" onchange="onPackChanged()">
             </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="packs.money">Деньги</label><input type="number" id="dailyMoney" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="packs.gold">Золото</label><input type="number" id="dailyGold" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()"></div>
+              <div><label style="font-size:12px;color:var(--muted)" data-i18n="packs.fame">Слава</label><input type="number" id="dailyFame" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="onPackChanged()"></div>
+            </div>
             <div id="dailyItems"></div>
             <button class="btn" onclick="addPackItem('daily')" style="margin-top:8px;width:100%">+ <span data-i18n="packs.addItem">Добавить предмет</span></button>
+            <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <label style="font-size:12px;color:var(--muted)" data-i18n="packs.vehicles">Транспорт</label>
+                <button class="btn" onclick="addPackVehicle('daily')" style="padding:2px 8px;font-size:11px">+ <span data-i18n="packs.addVehicle">Добавить ТС</span></button>
+              </div>
+              <div id="dailyVehicles"></div>
+            </div>
           </div>
         </div>
         <div style="margin-top:16px;display:flex;gap:12px">
@@ -1823,6 +1847,11 @@ const translations = {
     'packs.cooldown': 'Кулдаун (часы)',
     'packs.cooldownHint': '0 = один раз',
     'packs.addItem': 'Добавить предмет',
+    'packs.money': 'Деньги',
+    'packs.gold': 'Золото',
+    'packs.fame': 'Слава',
+    'packs.vehicles': 'Транспорт',
+    'packs.addVehicle': 'Добавить ТС',
     'packs.cooldownsTitle': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Кулдауны наборов',
     'packs.noCooldowns': 'Нет активных кулдаунов',
     'packs.reset': 'Сбросить',
@@ -2265,6 +2294,11 @@ const translations = {
     'packs.cooldown': 'Cooldown (hours)',
     'packs.cooldownHint': '0 = one-time',
     'packs.addItem': 'Add Item',
+    'packs.money': 'Money',
+    'packs.gold': 'Gold',
+    'packs.fame': 'Fame',
+    'packs.vehicles': 'Vehicles',
+    'packs.addVehicle': 'Add Vehicle',
     'packs.cooldownsTitle': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Pack Cooldowns',
     'packs.noCooldowns': 'No active cooldowns',
     'packs.reset': 'Reset',
@@ -2878,16 +2912,30 @@ function collectPackData() {
       amount: parseInt(row.querySelector('.pack-item-amt').value) || 1,
     })).filter(i => i.itemId);
   };
+  const readVehicles = (containerId) => {
+    const rows = document.getElementById(containerId).querySelectorAll('.pack-vehicle-row');
+    return Array.from(rows).map(row => ({
+      vehicleName: row.querySelector('.pack-vehicle-name').value.trim(),
+    })).filter(v => v.vehicleName);
+  };
   return {
     starter: {
       enabled: document.getElementById('starterEnabled').checked,
       items: readItems('starterItems'),
       cooldownHours: parseInt(document.getElementById('starterCooldown').value) || 0,
+      money: parseInt(document.getElementById('starterMoney').value) || 0,
+      gold: parseInt(document.getElementById('starterGold').value) || 0,
+      fame: parseInt(document.getElementById('starterFame').value) || 0,
+      vehicles: readVehicles('starterVehicles'),
     },
     daily: {
       enabled: document.getElementById('dailyEnabled').checked,
       items: readItems('dailyItems'),
       cooldownHours: parseInt(document.getElementById('dailyCooldown').value) || 24,
+      money: parseInt(document.getElementById('dailyMoney').value) || 0,
+      gold: parseInt(document.getElementById('dailyGold').value) || 0,
+      fame: parseInt(document.getElementById('dailyFame').value) || 0,
+      vehicles: readVehicles('dailyVehicles'),
     },
   };
 }
@@ -2914,6 +2962,43 @@ function addPackItem(pack) {
   if (inp) { inp.focus(); }
 }
 
+function renderPackVehicles(containerId, vehicles) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  if (!vehicles || vehicles.length === 0) return;
+  vehicles.forEach((v, i) => {
+    const row = document.createElement('div');
+    row.className = 'pack-vehicle-row';
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
+    row.innerHTML = `
+      <div style="flex:1;position:relative;display:flex;align-items:center;gap:4px">
+        <input type="text" class="pack-vehicle-name" value="${escapeHtml(v.vehicleName)}" placeholder="Vehicle:Offroader_01" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="onPackChanged()">
+        <div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+      </div>
+      <button class="btn" style="padding:4px 10px;font-size:14px" onclick="this.parentElement.remove();onPackChanged()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function addPackVehicle(pack) {
+  const containerId = pack === 'starter' ? 'starterVehicles' : 'dailyVehicles';
+  const container = document.getElementById(containerId);
+  const row = document.createElement('div');
+  row.className = 'pack-vehicle-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
+  row.innerHTML = `
+    <div style="flex:1;position:relative;display:flex;align-items:center;gap:4px">
+      <input type="text" class="pack-vehicle-name" value="" placeholder="Vehicle:Offroader_01" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" oninput="showInlineSuggestions(this)" onchange="onPackChanged()">
+      <div class="pack-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:200px;overflow-y:auto;z-index:1002;margin-top:2px"></div>
+    </div>
+    <button class="btn" style="padding:4px 10px;font-size:14px" onclick="this.parentElement.remove();onPackChanged()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+  `;
+  container.appendChild(row);
+  const inp = row.querySelector('.pack-vehicle-name');
+  if (inp) { inp.focus(); }
+}
+
 function updatePackItemIcon(input) {
   const wrapper = input.parentElement.querySelector('.pack-item-icon-wrapper');
   if (!wrapper) return;
@@ -2928,10 +3013,18 @@ async function loadPacks() {
     packsData = await res.json();
     document.getElementById('starterEnabled').checked = packsData.starter.enabled;
     document.getElementById('starterCooldown').value = packsData.starter.cooldownHours || 0;
+    document.getElementById('starterMoney').value = packsData.starter.money || 0;
+    document.getElementById('starterGold').value = packsData.starter.gold || 0;
+    document.getElementById('starterFame').value = packsData.starter.fame || 0;
     document.getElementById('dailyEnabled').checked = packsData.daily.enabled;
     document.getElementById('dailyCooldown').value = packsData.daily.cooldownHours || 24;
+    document.getElementById('dailyMoney').value = packsData.daily.money || 0;
+    document.getElementById('dailyGold').value = packsData.daily.gold || 0;
+    document.getElementById('dailyFame').value = packsData.daily.fame || 0;
     renderPackItems('starterItems', packsData.starter.items);
     renderPackItems('dailyItems', packsData.daily.items);
+    renderPackVehicles('starterVehicles', packsData.starter.vehicles || []);
+    renderPackVehicles('dailyVehicles', packsData.daily.vehicles || []);
   } catch (e) {
     showNotification('Failed to load packs: ' + e.message, 'error');
   }

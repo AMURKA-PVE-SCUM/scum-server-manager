@@ -36,8 +36,8 @@ export class WebPanel {
   private rconCredentials: { host: string; port: number; password: string } | null = null;
   private readonly PLAYERS_POLL_INTERVAL = 3000;
   private packsConfig: PackConfig = {
-    starter: { enabled: true, items: [], cooldownHours: 0 },
-    daily: { enabled: true, items: [], cooldownHours: 24 },
+    starter: { enabled: true, items: [], cooldownHours: 0, money: 0, gold: 0, fame: 0, vehicles: [] },
+    daily: { enabled: true, items: [], cooldownHours: 24, money: 0, gold: 0, fame: 0, vehicles: [] },
   };
   private packsSaveCallback: ((cfg: PackConfig) => void) | null = null;
   private cooldownProvider: {
@@ -1456,15 +1456,37 @@ export class WebPanel {
       const body = await this.readBody(req);
       const { steamId, packType } = JSON.parse(body);
       const pack = packType === 'daily' ? this.packsConfig.daily : this.packsConfig.starter;
-      if (!pack || !pack.enabled || !pack.items.length) {
-        this.sendJson(res, { error: 'Pack disabled or empty' }, 400);
+      if (!pack || !pack.enabled) {
+        this.sendJson(res, { error: 'Pack disabled' }, 400);
         return;
       }
       const results: string[] = [];
-      for (const item of pack.items) {
+      // Items
+      for (const item of (pack.items || [])) {
         const cmd = `SpawnItem ${item.itemId} ${item.amount} Location ${steamId}`;
         const r = await this.rconClient.sendCommand(cmd);
         results.push(`${item.itemId}x${item.amount}: ${r.success ? 'OK' : 'FAIL'}`);
+      }
+      // Money
+      if (pack.money && pack.money > 0) {
+        const r = await this.rconClient.sendCommand(`ChangeCurrencyBalance Normal +${pack.money} ${steamId}`);
+        results.push(`Деньги +${pack.money}: ${r.success ? 'OK' : 'FAIL'}`);
+      }
+      // Gold
+      if (pack.gold && pack.gold > 0) {
+        const r = await this.rconClient.sendCommand(`ChangeCurrencyBalance Gold +${pack.gold} ${steamId}`);
+        results.push(`Золото +${pack.gold}: ${r.success ? 'OK' : 'FAIL'}`);
+      }
+      // Fame
+      if (pack.fame && pack.fame > 0) {
+        const r = await this.rconClient.sendCommand(`ChangeFamePoints +${pack.fame} ${steamId}`);
+        results.push(`Слава +${pack.fame}: ${r.success ? 'OK' : 'FAIL'}`);
+      }
+      // Vehicles
+      for (const v of (pack.vehicles || [])) {
+        if (!v.vehicleName) continue;
+        const r = await this.rconClient.sendCommand(`SpawnVehicle ${v.vehicleName} 1 Location ${steamId}`);
+        results.push(`ТС ${v.vehicleName}: ${r.success ? 'OK' : 'FAIL'}`);
       }
       this.sendJson(res, { success: true, results });
     } catch (e: any) {

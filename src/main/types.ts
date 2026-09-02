@@ -75,16 +75,28 @@ export interface PackItem {
   amount: number;
 }
 
+export interface PackVehicle {
+  vehicleName: string;
+}
+
 export interface PackConfig {
   starter: {
     enabled: boolean;
     items: PackItem[];
     cooldownHours: number;
+    money?: number;
+    gold?: number;
+    fame?: number;
+    vehicles?: PackVehicle[];
   };
   daily: {
     enabled: boolean;
     items: PackItem[];
     cooldownHours: number;
+    money?: number;
+    gold?: number;
+    fame?: number;
+    vehicles?: PackVehicle[];
   };
 }
 

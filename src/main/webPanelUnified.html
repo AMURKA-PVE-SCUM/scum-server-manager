@@ -251,7 +251,7 @@ th{letter-spacing:.05em}
       <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8L3 20V5a1 1 0 0 1 1-1Z"/></svg></span>
       <span data-i18n="nav.chat">Чат</span>
     </div>
-    <div class="nav-item" data-tab="rating" onclick="switchTab('rating');loadRating()">
+    <div class="nav-item" data-tab="rating" onclick="switchTab('rating');loadRating();loadBlacklist()">
       <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h12v4a6 6 0 0 1-12 0V3Z"/><path d="M6 5H4v2a4 4 0 0 0 4 4M18 5h2v2a4 4 0 0 1-4 4M12 13v4M8 20h8"/></svg></span>
       <span data-i18n="nav.rating">Рейтинг</span>
     </div>
@@ -1103,6 +1103,9 @@ th{letter-spacing:.05em}
         </div>
         <div style="margin-top:12px;font-size:12px;color:var(--muted)">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M12 3a6 6 0 0 1 3.5 11c-.9.6-1.5 1.4-1.5 2.5h-4c0-1.1-.6-1.9-1.5-2.5A6 6 0 0 1 12 3Z"/><path d="M9.5 20h5M10 16h4"/></svg> В чате игры напишите <code>!рейтинг</code> или <code>!rating</code> чтобы узнать своё место
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button class="btn btn-danger" onclick="resetRating()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Сбросить рейтинг</button>
         </div>
       </div>
       <div class="card" style="margin-top:16px">
@@ -5647,6 +5650,23 @@ async function loadRating() {
       renderRatingTable();
     }
   } catch {}
+}
+
+async function resetRating() {
+  if (!confirm('Сбросить рейтинг? Все накопленные часы онлайн будут обнулены.')) return;
+  try {
+    const res = await fetch('/api/rating/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    });
+    const data = await res.json();
+    if (data.success) {
+      showNotification('Рейтинг сброшен', 'success');
+      loadRating();
+    } else {
+      showNotification('Ошибка: ' + (data.error || 'Unknown'), 'error');
+    }
+  } catch { showNotification('Ошибка сети', 'error'); }
 }
 
 function renderRatingTable() {

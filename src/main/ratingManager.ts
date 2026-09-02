@@ -141,4 +141,13 @@ export class RatingManager {
     for (const e of this.data.values()) total += e.playTimeSeconds;
     return total;
   }
+
+  resetLeaderboard(): void {
+    for (const e of this.data.values()) {
+      e.playTimeSeconds = 0;
+      e.lastUpdated = new Date().toISOString();
+    }
+    this.dirty = true;
+    this.save();
+  }
 }

@@ -622,6 +622,8 @@ export class WebPanel {
           this.handleSetBlacklist(req, res);
         } else if (url === '/api/rating/leaderboard' && method === 'GET') {
           this.handleRatingLeaderboard(res);
+        } else if (url === '/api/rating/reset' && method === 'POST') {
+          this.handleRatingReset(res);
         } else if (url.match(/^\/api\/rating\/player\/(\d+)$/) && method === 'GET') {
           const steamId = url.match(/^\/api\/rating\/player\/(\d+)$/)![1];
           this.handleRatingPlayer(steamId, res);
@@ -700,6 +702,12 @@ export class WebPanel {
     const { rank, entry } = this.ratingManager.getPlayerRank(steamId);
     if (!entry) { this.sendJson(res, { error: 'Player not found in rating' }, 404); return; }
     this.sendJson(res, { rank, player: entry });
+  }
+
+  private handleRatingReset(res: http.ServerResponse): void {
+    if (!this.ratingManager) { this.sendJson(res, { error: 'Rating not initialized' }, 500); return; }
+    this.ratingManager.resetLeaderboard();
+    this.sendJson(res, { success: true, message: 'Rating reset' });
   }
 
   stop(): void {
@@ -1852,6 +1860,7 @@ export class WebPanel {
           }
           this.lastTopRewardTime = now;
           this.saveRewardsData();
+          this.ratingManager?.resetLeaderboard();
         }
       }
     }

@@ -1368,6 +1368,14 @@ export class WebPanel {
       case 'unstuck':
         command = `Unstuck ${steamId}`;
         break;
+      case 'setAllSkills':
+        return this.executeSetAllSkills(steamId);
+      case 'scheduleCargoDrop': {
+        const { x, y, z } = params;
+        if (x == null || y == null) return { error: 'Coordinates not provided' };
+        command = `ScheduleWorldEvent BP_CargoDropEvent ${x} ${y} ${z || 0}`;
+        break;
+      }
       default:
         return { error: 'Unknown action' };
     }
@@ -1378,10 +1386,9 @@ export class WebPanel {
     return result;
   }
 
-  private async executeSetAllSkills(steamId: string, res: http.ServerResponse): Promise<void> {
+  private async executeSetAllSkills(steamId: string): Promise<{ success: boolean; response: string }> {
     if (!this.rconClient) {
-      this.sendJson(res, { error: 'RCON not connected' }, 500);
-      return;
+      return { success: false, response: 'RCON not connected' };
     }
     const skillNames = [
       'Archery', 'Aviation', 'Awareness', 'Brawling',
@@ -1396,7 +1403,7 @@ export class WebPanel {
       const command = `SetSkillLevel ${name} 4 ${steamId}`;
       await this.rconClient.sendCommand(command);
     }
-    this.sendJson(res, { success: true, response: 'All skills set to max' });
+    return { success: true, response: 'All skills set to max' };
   }
 
   private async handleGiveCurrency(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

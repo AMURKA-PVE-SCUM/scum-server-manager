@@ -108,6 +108,7 @@
 - **Аирдроп**: ручной и авто-дроп (`SpawnInventoryFullOf`), система калибровки высоты (125 точек), авто-дроп по таймеру и мин. игрокам
 - **Рейтинг**: учёт времени онлайн, денег, золота, Fame, таблица лидеров, чёрный список, `!рейтинг` в чате
 - **Награды**: почасовые (за час онлайн) и топ-игроков (за период с множителем), `#AddGold`/`#AddMoney`/`#AddFame`
+- **API и сайт**: публичный API для сайтов/ботов (статус, онлайн, рейтинг) + встроенная документация
 - **Chat Sender**: настройка ника отправителя в чате
 
 #### WARGM — магазин + автовыдача
@@ -180,6 +181,50 @@
 - При старте проверяет GitHub Releases (`tolyan28rus/scum-server-manager`)
 - Нативный диалог Windows: «Доступно обновление — скачать?»
 - Скачивание + автоматическая установка через NSIS
+
+### Публичный API (сайт-сообщества, Discord/Telegram боты)
+
+Публичный API позволяет другим сайтам и ботам получать данные сервера **без авторизации** (онлайн, статус, рейтинг). API отдаёт данные из кэша, не нагружая RCON.
+
+**Включение**: Плагины → API и сайт → Включить публичный API.
+
+#### Эндпоинты
+
+| Endpoint | Описание |
+|----------|----------|
+| `GET /api/health` | Пинг: `{ ok: true, version }` |
+| `GET /api/public/status` | `{ serverName, online, maxPlayers, running, uptime, lastUpdated }` |
+| `GET /api/public/players` | `{ online, players: [{name, duration}] }` (только если showPlayers) |
+| `GET /api/public/leaderboard` | `{ players: [{rank, name, playTimeSeconds}] }` топ-20 (только если showLeaderboard) |
+| `GET /api/public/config` | `{ serverName, enabled, showPlayers, showLeaderboard, apiVersion }` |
+| `GET /api/docs` | Встроенная HTML-документация с примерами кода |
+
+**Важно**: координаты, баланс, золото, слава и IP-адреса **никогда** не отдаются публично.
+
+#### Пример запроса (JavaScript)
+```javascript
+const status = await fetch('http://YOUR_IP:8080/api/public/status').then(r => r.json());
+console.log(status.online, '/', status.maxPlayers, 'игроков');
+
+const { players } = await fetch('http://YOUR_IP:8080/api/public/players').then(r => r.json());
+players.forEach(p => console.log(p.name, Math.floor(p.duration/60), 'мин'));
+```
+
+#### HTTPS (для сайтов с `https://`)
+Браузеры блокируют `https://`→`http://` запросы (mixed content). Решение — HTTPS-прокси перед API. Рекомендуется **Caddy** (бесплатный автоматический сертификат Let's Encrypt):
+
+1. Создайте A-запись `api.yourdomain.com` → IP вашего сервера
+2. Пробросьте порты 80 и 443 на ПК
+3. Установите Caddy: `https://caddyserver.com/download`
+4. Создайте файл `Caddyfile`:
+```
+api.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+```
+5. Запустите: `caddy run`
+
+> Для Discord-бота / Telegram-бота / любого серверного приложения HTTP-запросы работают без ограничений — HTTPS не обязателен.
 
 ---
 

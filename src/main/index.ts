@@ -135,6 +135,7 @@ const store = new ElectronStore<AppConfig>({
       ratingBlacklist: [],
     },
     lolkaBot: { enabled: false, token: '', guildId: '', channelId: '', activityText: 'AMURKA PVE' },
+    publicSite: { enabled: true, showPlayers: true, showLeaderboard: true },
   },
   deserialize: (data: string): AppConfig => { if (data.charCodeAt(0) === 0xfeff) data = data.slice(1); return JSON.parse(data); },
 });
@@ -340,6 +341,21 @@ function initServices(): void {
     pluginsCfg.ratingBlacklist = [];
     store.set('plugins', pluginsCfg);
   }
+  if (!config.publicSite) {
+    const cur = store.store;
+    cur.publicSite = { enabled: true, showPlayers: true, showLeaderboard: true };
+    store.store = cur;
+  }
+  webPanel.setPublicSiteConfig(store.store.publicSite);
+  webPanel.setPublicSiteSaveCallback((cfg) => {
+    try {
+      const cur = store.store;
+      cur.publicSite = cfg;
+      store.store = cur;
+    } catch (e: any) {
+      console.error('[PublicSite] Store save error:', e.message);
+    }
+  });
   webPanel.setPluginsConfig(pluginsCfg);
   webPanel.setPluginsSaveCallback((plugins) => {
     console.log('[Plugins] Saving plugins config to store');

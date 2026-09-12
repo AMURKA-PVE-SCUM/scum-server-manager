@@ -6,7 +6,7 @@ import { watch, FSWatcher } from 'chokidar';
 import { RconClient } from './rconClient';
 import { WargmManager } from './wargmManager';
 import { RatingManager } from './ratingManager';
-import type { PackConfig, PluginsConfig, TeleportLocation, VipConfig, WargmCard, WargmSettings, WebPanelConfig, OnlinePlayer, AirdropCalibrationPoint, LolkaBotConfig, AutoMessagesConfig, OnlineChatConfig, JoinLeaveChatConfig } from './types';
+import type { PackConfig, PluginsConfig, PublicSiteConfig, TeleportLocation, VipConfig, WargmCard, WargmSettings, WebPanelConfig, OnlinePlayer, AirdropCalibrationPoint, LolkaBotConfig, AutoMessagesConfig, OnlineChatConfig, JoinLeaveChatConfig } from './types';
 import { LolkaBot } from './lolkaBot';
 import { ScumDatabaseReader, initSqlJs } from './scumDatabase';
 
@@ -88,6 +88,9 @@ export class WebPanel {
     ratingBlacklist: [],
   };
   private pluginsSaveCallback: ((cfg: PluginsConfig) => void) | null = null;
+  private publicSiteConfig: PublicSiteConfig = { enabled: true, showPlayers: true, showLeaderboard: true };
+  private publicSiteSaveCallback: ((cfg: PublicSiteConfig) => void) | null = null;
+  private publicStatusCache: { serverName: string; online: number; maxPlayers: number; running: boolean; uptime: number; lastUpdated: string } | null = null;
   private itemsCache: string[] | null = null;
   private itemImagesMap: Record<string, string> = {};
   private chatOffsets = new Map<string, number>();
@@ -395,6 +398,18 @@ export class WebPanel {
     this.pluginsSaveCallback = cb;
   }
 
+  setPublicSiteConfig(cfg: PublicSiteConfig): void {
+    this.publicSiteConfig = cfg || { enabled: true, showPlayers: true, showLeaderboard: true };
+  }
+
+  setPublicSiteSaveCallback(cb: (cfg: PublicSiteConfig) => void): void {
+    this.publicSiteSaveCallback = cb;
+  }
+
+  getPublicSiteConfig(): PublicSiteConfig {
+    return this.publicSiteConfig;
+  }
+
   setWargmManager(mgr: WargmManager): void {
     this.wargmManager = mgr;
   }
@@ -467,6 +482,22 @@ export class WebPanel {
           this.handleMapZones(res);
         } else if (url === '/api/vehicles' && method === 'GET') {
           this.handleVehicles(res);
+        } else if (url === '/api/health' && method === 'GET') {
+          this.handlePublicHealth(res);
+        } else if (url === '/api/docs' && method === 'GET') {
+          this.handlePublicDocs(res);
+        } else if (this.publicSiteConfig.enabled && url === '/api/public/config' && method === 'GET') {
+          this.handlePublicConfig(res);
+        } else if (this.publicSiteConfig.enabled && url === '/api/public/status' && method === 'GET') {
+          this.handlePublicStatus(res);
+        } else if (this.publicSiteConfig.enabled && url === '/api/public/players' && method === 'GET') {
+          this.handlePublicPlayers(res);
+        } else if (this.publicSiteConfig.enabled && url === '/api/public/leaderboard' && method === 'GET') {
+          this.handlePublicLeaderboard(res);
+        } else if (url === '/api/public/site-config' && method === 'GET') {
+          this.sendJson(res, this.publicSiteConfig);
+        } else if (url === '/api/public/site-config' && method === 'POST') {
+          this.handleSetPublicSiteConfig(req, res);
         } else if (!this.authenticated(req)) {
           this.sendJson(res, { error: 'Unauthorized' }, 401);
         } else if (url === '/api/status' && method === 'GET') {
@@ -820,6 +851,236 @@ export class WebPanel {
         players: 0, maxPlayers: 50, memoryUsage: 0,
       };
       this.sendJson(res, s);
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handlePublicHealth(res: http.ServerResponse): void {
+    let version = 'unknown';
+    try { version = require('electron').app.getVersion(); } catch {}
+    this.sendJson(res, { ok: true, name: 'scum-server-manager', version });
+  }
+
+  private handlePublicConfig(res: http.ServerResponse): void {
+    const serverCfg = this.serverConfigProvider?.get()?.server || {};
+    this.sendJson(res, {
+      serverName: serverCfg.serverName || 'SCUM Server',
+      enabled: this.publicSiteConfig.enabled,
+      showPlayers: this.publicSiteConfig.showPlayers,
+      showLeaderboard: this.publicSiteConfig.showLeaderboard,
+      apiVersion: '1',
+    });
+  }
+
+  private handlePublicStatus(res: http.ServerResponse): void {
+    try {
+      const s = this.serverManager?.getStatus() || {
+        running: false, uptime: 0, players: 0, maxPlayers: 50,
+      };
+      const serverCfg = this.serverConfigProvider?.get()?.server || {};
+      const online = Array.from(this.onlinePlayers.values()).length;
+      this.sendJson(res, {
+        serverName: serverCfg.serverName || 'SCUM Server',
+        running: s.running,
+        online: online,
+        maxPlayers: serverCfg.maxPlayers || s.maxPlayers || 50,
+        uptime: s.uptime,
+        lastUpdated: new Date().toISOString(),
+      });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handlePublicPlayers(res: http.ServerResponse): void {
+    try {
+      const players = Array.from(this.onlinePlayers.values()).map(p => ({
+        name: p.name,
+        duration: Math.floor((Date.now() - new Date(p.connectedAt).getTime()) / 1000),
+      }));
+      this.sendJson(res, { online: players.length, players });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handlePublicLeaderboard(res: http.ServerResponse): void {
+    try {
+      if (!this.ratingManager) {
+        this.sendJson(res, { players: [] });
+        return;
+      }
+      const blacklist = this.pluginsConfig.ratingBlacklist || [];
+      const top = this.ratingManager.getLeaderboard()
+        .filter(e => !blacklist.includes(e.steamId))
+        .slice(0, 20)
+        .map((e, i) => ({
+          rank: i + 1,
+          name: e.playerName,
+          playTimeSeconds: e.playTimeSeconds,
+        }));
+      this.sendJson(res, { players: top });
+    } catch (e: any) {
+      this.sendJson(res, { error: e.message }, 500);
+    }
+  }
+
+  private handlePublicDocs(res: http.ServerResponse): void {
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SCUM Server Manager — Public API Docs</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#0d1117;color:#e6edf3;font-family:'Consolas',monospace;line-height:1.6;padding:24px 32px;max-width:960px;margin:0 auto}
+    h1{color:#58a6ff;margin-bottom:24px;border-bottom:1px solid #30363d;padding-bottom:12px;font-size:20px}
+    h2{color:#58a6ff;margin-top:28px;margin-bottom:8px;font-size:16px}
+    .endpoint{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px 16px;margin-bottom:12px}
+    .method{background:#238636;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;margin-right:8px}
+    .method-get{background:#1f6feb}
+    code{background:#161b22;padding:2px 6px;border-radius:4px;font-size:13px}
+    pre{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:14px;margin:10px 0 18px;overflow-x:auto;font-size:13px;line-height:1.4;white-space:pre-wrap}
+    p,.desc{color:#8b949e;font-size:13px;margin:6px 0}
+    .field{color:#d2a8ff}
+    .type{color:#7ee787}
+    .optional{color:#f0883e;font-size:11px}
+  </style>
+</head>
+<body>
+  <h1>SCUM Server Manager — Public API</h1>
+  <p>Публичные эндпоинты для интеграции: websites, Discord-боты, Telegram-боты, виджеты, мини-сайты и др.</p>
+  <p>Не требуют авторизации. Все данные берутся из кэша (без прямых RCON-запросов).</p>
+  <p>Чтобы включить: <strong>Плагины → API и сайт → Включить публичный API</strong> в веб-панели менеджера.</p>
+
+  <h2>GET /api/health</h2>
+  <div class="endpoint">
+    <p class="desc">Пинг API. Вернёт <code>{ ok: true }</code> + версию менеджера.</p>
+    <p>Пример ответа:</p>
+    <pre>{ "ok": true, "name": "scum-server-manager", "version": "2.6.17" }</pre>
+  </div>
+
+  <h2>GET /api/public/status</h2>
+  <div class="endpoint">
+    <p class="desc">Статус сервера.</p>
+    <p>Поля:</p>
+    <pre>{
+  <span class="field">"serverName"</span>:  <span class="type">string</span>   — имя сервера (из конфига),
+  <span class="field">"running"</span>:      <span class="type">boolean</span>  — запущен ли сервер,
+  <span class="field">"online"</span>:       <span class="type">number</span>   — игроков онлайн,
+  <span class="field">"maxPlayers"</span>:   <span class="type">number</span>   — макс. слотов,
+  <span class="field">"uptime"</span>:       <span class="type">number</span>   — секунды с момента запуска,
+  <span class="field">"lastUpdated"</span>:  <span class="type">string</span>   — ISO-время обновления
+}</pre>
+  </div>
+
+  <h2>GET /api/public/players</h2>
+  <div class="endpoint">
+    <p class="desc">Список онлайн-игроков. Координаты, баланс, слава — <strong>не отдаются</strong>.</p>
+    <p class="optional">Отдаётся только если showPlayers = true в конфиге.</p>
+    <p>Поля:</p>
+    <pre>{
+  <span class="field">"online"</span>: <span class="type">number</span> — количество онлайн,
+  <span class="field">"players"</span>: [
+    { <span class="field">"name"</span>: <span class="type">string</span>, <span class="field">"duration"</span>: <span class="type">number</span> <span class="optional">(секунды сессии)</span> }
+  ]
+}</pre>
+  </div>
+
+  <h2>GET /api/public/leaderboard</h2>
+  <div class="endpoint">
+    <p class="desc">Топ-20 рейтинга по онлайну (без бэклиста).</p>
+    <p class="optional">Отдаётся только если showLeaderboard = true.</p>
+    <p>Поля:</p>
+    <pre>{
+  <span class="field">"players"</span>: [
+    { <span class="field">"rank"</span>: <span class="type">number</span>, <span class="field">"name"</span>: <span class="type">string</span>, <span class="field">"playTimeSeconds"</span>: <span class="type">number</span> }
+  ]
+}</pre>
+  </div>
+
+  <h2>GET /api/public/config</h2>
+  <div class="endpoint">
+    <p class="desc">Публичный конфиг сервера (бренд + настройки).</p>
+    <pre>{
+  <span class="field">"serverName"</span>:      <span class="type">string</span>,
+  <span class="field">"enabled"</span>:         <span class="type">boolean</span>,
+  <span class="field">"showPlayers"</span>:     <span class="type">boolean</span>,
+  <span class="field">"showLeaderboard"</span>: <span class="type">boolean</span>,
+  <span class="field">"apiVersion"</span>:      <span class="type">string</span>  <span class="optional">("1")</span>
+}</pre>
+  </div>
+
+  <h2>Пример запроса (JavaScript)</h2>
+  <pre>// Получить онлайн
+const status = await fetch('http://YOUR_SERVER_IP:8080/api/public/status').then(r => r.json());
+console.log(status.online, '/', status.maxPlayers, 'игроков');
+
+// Получить список игроков
+const { players } = await fetch('http://YOUR_SERVER_IP:8080/api/public/players').then(r => r.json());
+players.forEach(p => console.log(p.name, formatTime(p.duration)));</pre>
+
+  <h2>Пример виджета (HTML + fetch)</h2>
+  <pre>&lt;div id="server-status"&gt;&lt;/div&gt;
+&lt;script&gt;
+const API = 'http://YOUR_SERVER_IP:8080';
+async function update() {
+  const [status, data] = await Promise.all([
+    fetch(API + '/api/public/status').then(r => r.json()),
+    fetch(API + '/api/public/players').then(r => r.json()),
+  ]);
+  document.getElementById('server-status').innerHTML =
+    '&lt;h2&gt;' + status.serverName + '&lt;/h2&gt;' +
+    '&lt;p&gt;Онлайн: ' + status.online + '/' + status.maxPlayers + '&lt;/p&gt;' +
+    '&lt;ul&gt;' + data.players.map(p =>
+      '&lt;li&gt;' + p.name + ' (' + Math.floor(p.duration/60) + ' мин)&lt;/li&gt;'
+    ).join('') + '&lt;/ul&gt;';
+}
+update(); setInterval(update, 60000);
+&lt;/script&gt;</pre>
+
+  <h2>HTTPS и домен</h2>
+  <p>Если ваш сайт работает по <code>https://</code>, браузер<strong> заблокирует</strong> запросы к <code>http://</code>-API (mixed content). Решение — поднять HTTPS-прокси перед API:</p>
+  <pre># Caddy (рекомендуется, бесплатный автоматический сертификат)
+# Установить: https://caddyserver.com/download
+
+# A-запись: api.yourdomain.com → IP вашего сервера
+# Проброс портов: 80/443 → ваш ПК
+
+# Caddyfile:
+api.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+
+# Запустить: caddy run
+
+# После запуска https://api.yourdomain.com/api/public/status будет доступен с любого https-сайта.</pre>
+  <p>Для Discord-бота / Telegram-бота / любого серверного приложения HTTP-запросы работают без ограничений, HTTPS не обязателен.</p>
+
+  <h2>Ограничения</h2>
+  <p>• Данные обновляются раз в ~3 сек (как при опросе ListPlayers). Нет нагрузки на RCON.</p>
+  <p>• Координаты, баланс, слава, IP адреса — <strong>не отдаются</strong> публично по соображениям безопасности.</p>
+  <p>• Топ рейтинга — до 20 мест, бэклист-игроки исключены.</p>
+  <p>• API отключён по умолчанию — включите через веб-панель.</p>
+  <p style="color:#58a6ff;margin-top:24px">SCUM Server Manager &mdash; <a href="https://github.com/AMURKA-PVE-SCUM/scum-server-manager" style="color:#58a6ff">github.com</a></p>
+</body>
+</html>`;
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  }
+
+  private async handleSetPublicSiteConfig(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      const body = await this.readBody(req);
+      const cfg = JSON.parse(body);
+      this.publicSiteConfig = {
+        enabled: !!cfg.enabled,
+        showPlayers: !!cfg.showPlayers,
+        showLeaderboard: !!cfg.showLeaderboard,
+      };
+      if (this.publicSiteSaveCallback) this.publicSiteSaveCallback(this.publicSiteConfig);
+      this.sendJson(res, { ok: true });
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);
     }

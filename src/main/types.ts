@@ -259,6 +259,12 @@ export interface LolkaBotConfig {
   activityText: string;
 }
 
+export interface PublicSiteConfig {
+  enabled: boolean;
+  showPlayers: boolean;
+  showLeaderboard: boolean;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   discord: DiscordConfig;
@@ -269,6 +275,7 @@ export interface AppConfig {
   packs: PackConfig;
   plugins: PluginsConfig;
   lolkaBot: LolkaBotConfig;
+  publicSite: PublicSiteConfig;
   theme: 'dark' | 'light';
   language: string;
 }

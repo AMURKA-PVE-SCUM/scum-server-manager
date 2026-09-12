@@ -271,6 +271,10 @@ th{letter-spacing:.05em}
       <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
       <span data-i18n="nav.settings">Настройки</span>
     </div>
+    <div class="nav-item" data-tab="publicsite" onclick="switchTab('publicsite');loadPublicSiteConfig()">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5"/></svg></span>
+      <span data-i18n="nav.publicsite">API и сайт</span>
+    </div>
   </div>
 
   <div class="main-content">
@@ -1381,6 +1385,46 @@ th{letter-spacing:.05em}
         <div id="settingsStatus" style="margin-top:8px;font-size:13px"></div>
       </div>
     </div>
+
+    <!-- Public API / Site Tab -->
+    <div class="tab-content" id="tab-publicsite">
+      <h3 data-i18n="publicsite.title"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5"/></svg> Публичный API и сайт</h3>
+
+      <div class="card" style="max-width:760px">
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-warning" onclick="savePublicSiteConfig()" data-i18n="publicsite.save"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M6 3h2v5h8V3h1a1 1 0 0 1 .7.3L20.7 6a1 1 0 0 1 .3.7V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M8 3v5h8V3M8 13h8v8H8Z"/></svg> Сохранить</button>
+          <button class="btn" onclick="publicTestApi()" data-i18n="publicsite.test"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><circle cx="9" cy="12" r="5"/><path d="m13 9 7-4v14l-7-4"/></svg> Проверить API</button>
+        </div>
+        <div id="publicsiteStatus" style="margin-bottom:12px;font-size:13px"></div>
+
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="publicSiteEnabled" onchange="renderPublicUrl()"> <span data-i18n="publicsite.enabled">Включить публичный API</span></label>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" data-i18n="publicsite.enabledHint">Отдаёт статус сервера, онлайн и рейтинг без авторизации для любых сайтов и ботов.</div>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="publicShowPlayers"> <span data-i18n="publicsite.showPlayers">Показывать список игроков</span></label>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" data-i18n="publicsite.showPlayersHint">Имена + время сессии. Координаты, баланс и слава публично не отдаются никогда.</div>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="publicShowLeaderboard"> <span data-i18n="publicsite.showLeaderboard">Показывать рейтинг (топ-20)</span></label>
+        </div>
+
+        <div class="form-group">
+          <label data-i18n="publicsite.baseUrl">Базовый URL API</label>
+          <input type="text" id="publicApiUrl" readonly style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'Consolas',monospace;font-size:12px">
+          <button class="btn" onclick="copyPublicUrl()" style="margin-top:6px;padding:4px 10px;font-size:11px" data-i18n="publicsite.copy">⧉ Копировать</button>
+        </div>
+
+        <h4 style="margin-bottom:8px" data-i18n="publicsite.docs">Документация API</h4>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px" data-i18n="publicsite.docsHint">Встроенная справка по всем эндпоинтам: статус, игроки, рейтинг, конфиг + примеры вставки на сайт и заготовка для Discord-бота.</p>
+        <button class="btn btn-primary" onclick="openPublicDocs()" data-i18n="publicsite.openDocs"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block;flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg> Открыть документацию</button>
+
+        <h4 style="margin-bottom:8px" data-i18n="publicsite.caddy">HTTPS для API</h4>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px" data-i18n="publicsite.caddyHint">Чтобы сайт на https мог обращаться к API, нужен HTTPS-прокси. Готовый конфиг Caddy:</p>
+        <pre id="caddyConfig" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;font-family:'Consolas',monospace;color:var(--text);overflow-x:auto;white-space:pre-wrap;margin-bottom:8px"></pre>
+        <button class="btn" onclick="copyCaddy()" style="padding:4px 10px;font-size:11px" data-i18n="publicsite.copyCaddy">⧉ Копировать Caddyfile</button>
+      </div>
+    </div>
   </div>
 </div>
 <!-- Modal for player actions -->
@@ -1872,6 +1916,23 @@ const translations = {
     'nav.scumdb': 'База данных',
     'nav.map': 'Карта',
     'nav.settings': 'Настройки',
+    'nav.publicsite': 'API и сайт',
+    'publicsite.title': 'Публичный API и сайт',
+    'publicsite.save': 'Сохранить',
+    'publicsite.test': 'Проверить API',
+    'publicsite.enabled': 'Включить публичный API',
+    'publicsite.enabledHint': 'Отдаёт статус сервера, онлайн и рейтинг без авторизации для любых сайтов и ботов.',
+    'publicsite.showPlayers': 'Показывать список игроков',
+    'publicsite.showPlayersHint': 'Имена + время сессии. Координаты, баланс и слава публично не отдаются никогда.',
+    'publicsite.showLeaderboard': 'Показывать рейтинг (топ-20)',
+    'publicsite.baseUrl': 'Базовый URL API',
+    'publicsite.copy': '⧉ Копировать',
+    'publicsite.docs': 'Документация API',
+    'publicsite.docsHint': 'Встроенная справка по всем эндпоинтам: статус, игроки, рейтинг, конфиг + примеры вставки на сайт и заготовка для Discord-бота.',
+    'publicsite.openDocs': 'Открыть документацию',
+    'publicsite.caddy': 'HTTPS для API',
+    'publicsite.caddyHint': 'Чтобы сайт на https мог обращаться к API, нужен HTTPS-прокси. Готовый конфиг Caddy:',
+    'publicsite.copyCaddy': '⧉ Копировать Caddyfile',
     'map.autoRefresh': 'Авто',
     'map.color': 'Цветная',
     'map.grey': 'Серая',
@@ -2319,6 +2380,23 @@ const translations = {
     'nav.scumdb': 'Database',
     'nav.map': 'Map',
     'nav.settings': 'Settings',
+    'nav.publicsite': 'API & Site',
+    'publicsite.title': 'Public API & Site',
+    'publicsite.save': 'Save',
+    'publicsite.test': 'Test API',
+    'publicsite.enabled': 'Enable public API',
+    'publicsite.enabledHint': 'Exposes server status, online and rating without auth for any sites and bots.',
+    'publicsite.showPlayers': 'Show player list',
+    'publicsite.showPlayersHint': 'Names + session time. Coordinates, balance and fame are never exposed publicly.',
+    'publicsite.showLeaderboard': 'Show rating (top-20)',
+    'publicsite.baseUrl': 'API base URL',
+    'publicsite.copy': '⧉ Copy',
+    'publicsite.docs': 'API Documentation',
+    'publicsite.docsHint': 'Built-in how-to for all endpoints: status, players, rating, config + examples for sites and Discord bots.',
+    'publicsite.openDocs': 'Open documentation',
+    'publicsite.caddy': 'HTTPS for API',
+    'publicsite.caddyHint': 'For an https site to reach the API you need an HTTPS proxy. Ready-made Caddy config:',
+    'publicsite.copyCaddy': '⧉ Copy Caddyfile',
     'map.autoRefresh': 'Auto',
     'map.color': 'Color',
     'map.grey': 'Grey',
@@ -6723,6 +6801,113 @@ async function saveSettings() {
     document.getElementById('settingsStatus').textContent = 'Error: ' + e.message;
     document.getElementById('settingsStatus').style.color = 'var(--red)';
   }
+}
+
+/* ====== Public API / Site ====== */
+async function loadPublicSiteConfig() {
+  try {
+    const res = await authFetch('/api/public/site-config');
+    const cfg = await res.json();
+    document.getElementById('publicSiteEnabled').checked = !!cfg.enabled;
+    document.getElementById('publicShowPlayers').checked = !!cfg.showPlayers;
+    document.getElementById('publicShowLeaderboard').checked = !!cfg.showLeaderboard;
+    renderPublicUrl();
+    renderCaddyConfig();
+  } catch {}
+}
+
+async function savePublicSiteConfig() {
+  const cfg = {
+    enabled: document.getElementById('publicSiteEnabled').checked,
+    showPlayers: document.getElementById('publicShowPlayers').checked,
+    showLeaderboard: document.getElementById('publicShowLeaderboard').checked,
+  };
+  try {
+    const res = await authFetch('/api/public/site-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    const data = await res.json();
+    const status = document.getElementById('publicsiteStatus');
+    if (data.ok) {
+      status.innerHTML = '<span style="color:var(--green)">✓ Сохранено</span>';
+      renderPublicUrl();
+      renderCaddyConfig();
+    } else {
+      status.innerHTML = '<span style="color:var(--red)">' + (data.error || 'Ошибка') + '</span>';
+    }
+  } catch (e) {
+    document.getElementById('publicsiteStatus').innerHTML = '<span style="color:var(--red)">Error: ' + e.message + '</span>';
+  }
+}
+
+function getPublicBaseUrl() {
+  return window.location.origin;
+}
+
+function renderPublicUrl() {
+  const base = getPublicBaseUrl();
+  const enabled = document.getElementById('publicSiteEnabled').checked;
+  document.getElementById('publicApiUrl').value = enabled
+    ? base + '/api/public/status'
+    : base + '/api/public/status  (API выключен)';
+}
+
+function renderCaddyConfig() {
+  try {
+    const host = window.location.hostname || 'api.yourdomain.com';
+    document.getElementById('caddyConfig').textContent = host + ' {\n    reverse_proxy localhost:' + window.location.port + '\n}';
+  } catch {
+    document.getElementById('caddyConfig').textContent = 'api.yourdomain.com {\n    reverse_proxy localhost:8080\n}';
+  }
+}
+
+async function publicTestApi() {
+  const status = document.getElementById('publicsiteStatus');
+  status.innerHTML = '<span style="color:var(--muted)">Проверка...</span>';
+  try {
+    const res = await fetch('/api/public/status');
+    if (!res.ok) {
+      status.innerHTML = '<span style="color:var(--red)">API вернул HTTP ' + res.status + '</span>';
+      return;
+    }
+    const data = await res.json();
+    status.innerHTML = '<span style="color:var(--green)">✓ API работает: '
+      + (data.online || 0) + ' онлайн / ' + (data.maxPlayers || 0) + ' слотов / uptime '
+      + Math.floor((data.uptime || 0) / 3600) + ' ч</span>';
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--red)">Error: ' + e.message + '</span>';
+  }
+}
+
+function openPublicDocs() {
+  const base = getPublicBaseUrl();
+  window.open(base + '/api/docs', '_blank');
+}
+
+async function copyPublicUrl() {
+  const val = document.getElementById('publicApiUrl').value;
+  try {
+    await navigator.clipboard.writeText(val);
+    showNotification('Скопировано', 'success');
+  } catch {
+    showNotification('Не удалось скопировать', 'error');
+  }
+}
+
+async function copyCaddy() {
+  const val = document.getElementById('caddyConfig').textContent;
+  try {
+    await navigator.clipboard.writeText(val);
+    showNotification('Caddyfile скопирован', 'success');
+  } catch {
+    showNotification('Не удалось скопировать', 'error');
+  }
+}
+
+if (authToken) {
+  setTimeout(loadPublicSiteConfig, 500);
 }
 
 // Override switchTab to load settings when settings tab is opened

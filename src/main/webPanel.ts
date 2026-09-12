@@ -873,13 +873,24 @@ export class WebPanel {
     });
   }
 
+  /**
+   * Source for the public online list: prefer the fresh ListPlayers cache
+   * (polled every 3s, has real online players), fall back to the log-triggered
+   * onlinePlayers map when ListPlayers is empty (e.g. RCON not connected).
+   */
+  private getPublicOnlineList(): OnlinePlayer[] {
+    return this.cachedPlayers.length
+      ? this.cachedPlayers
+      : Array.from(this.onlinePlayers.values());
+  }
+
   private handlePublicStatus(res: http.ServerResponse): void {
     try {
       const s = this.serverManager?.getStatus() || {
         running: false, uptime: 0, players: 0, maxPlayers: 50,
       };
       const serverCfg = this.serverConfigProvider?.get()?.server || {};
-      const online = Array.from(this.onlinePlayers.values()).length;
+      const online = this.getPublicOnlineList().length;
       this.sendJson(res, {
         serverName: serverCfg.serverName || 'SCUM Server',
         running: s.running,
@@ -906,9 +917,7 @@ export class WebPanel {
 
       // Prefer cachedPlayers (ListPlayers cache: money/gold). Fall back to
       // onlinePlayers map (from login log events) when ListPlayers is missing.
-      const sources: OnlinePlayer[] = this.cachedPlayers.length
-        ? this.cachedPlayers
-        : Array.from(this.onlinePlayers.values());
+      const sources: OnlinePlayer[] = this.getPublicOnlineList();
 
       const merged = new Map<string, { steamId: string; name: string; balance?: number; gold?: number; fame?: number }>();
       for (const p of sources) {
@@ -961,7 +970,7 @@ export class WebPanel {
       }
       const blacklist = this.pluginsConfig.ratingBlacklist || [];
       const onlineIds = new Set(
-        Array.from(this.onlinePlayers.values()).map(p => p.steamId).filter(Boolean),
+        this.getPublicOnlineList().map(p => p.steamId).filter(Boolean),
       );
       const top = this.ratingManager.getLeaderboard()
         .filter(e => !blacklist.includes(e.steamId))

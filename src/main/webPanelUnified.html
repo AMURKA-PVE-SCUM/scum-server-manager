@@ -1403,7 +1403,7 @@ th{letter-spacing:.05em}
         </div>
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="publicShowPlayers"> <span data-i18n="publicsite.showPlayers">Показывать список игроков</span></label>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px" data-i18n="publicsite.showPlayersHint">Имена + время сессии. Координаты, баланс и слава публично не отдаются никогда.</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" data-i18n="publicsite.showPlayersHint">Имена + время сессии, время онлайн за всё время, деньги, золото, слава и место в рейтинге. Координаты не отдаются никогда.</div>
         </div>
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="publicShowLeaderboard"> <span data-i18n="publicsite.showLeaderboard">Показывать рейтинг (топ-20)</span></label>
@@ -1923,7 +1923,7 @@ const translations = {
     'publicsite.enabled': 'Включить публичный API',
     'publicsite.enabledHint': 'Отдаёт статус сервера, онлайн и рейтинг без авторизации для любых сайтов и ботов.',
     'publicsite.showPlayers': 'Показывать список игроков',
-    'publicsite.showPlayersHint': 'Имена + время сессии. Координаты, баланс и слава публично не отдаются никогда.',
+    'publicsite.showPlayersHint': 'Имена + время сессии, время онлайн за всё время, деньги, золото, слава и место в рейтинге. Координаты не отдаются никогда.',
     'publicsite.showLeaderboard': 'Показывать рейтинг (топ-20)',
     'publicsite.baseUrl': 'Базовый URL API',
     'publicsite.copy': '⧉ Копировать',
@@ -2387,7 +2387,7 @@ const translations = {
     'publicsite.enabled': 'Enable public API',
     'publicsite.enabledHint': 'Exposes server status, online and rating without auth for any sites and bots.',
     'publicsite.showPlayers': 'Show player list',
-    'publicsite.showPlayersHint': 'Names + session time. Coordinates, balance and fame are never exposed publicly.',
+    'publicsite.showPlayersHint': 'Names + session time, total online time, money, gold, fame and rating position. Coordinates are never exposed.',
     'publicsite.showLeaderboard': 'Show rating (top-20)',
     'publicsite.baseUrl': 'API base URL',
     'publicsite.copy': '⧉ Copy',
@@ -6874,8 +6874,8 @@ async function publicTestApi() {
     }
     const data = await res.json();
     status.innerHTML = '<span style="color:var(--green)">✓ API работает: '
-      + (data.online || 0) + ' онлайн / ' + (data.maxPlayers || 0) + ' слотов / uptime '
-      + Math.floor((data.uptime || 0) / 3600) + ' ч</span>';
+      + (data.online || 0) + ' онлайн / ' + (data.maxPlayers || 0) + ' слотов, FPS ' + (data.fps || 0)
+      + ', uptime ' + Math.floor((data.uptime || 0) / 3600) + ' ч, RAM ' + (data.memoryMB || 0) + ' MB</span>';
   } catch (e) {
     status.innerHTML = '<span style="color:var(--red)">Error: ' + e.message + '</span>';
   }

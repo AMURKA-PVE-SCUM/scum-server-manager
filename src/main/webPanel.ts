@@ -886,6 +886,9 @@ export class WebPanel {
         online: online,
         maxPlayers: serverCfg.maxPlayers || s.maxPlayers || 50,
         uptime: s.uptime,
+        fps: Math.round(s.fps || 0),
+        memoryMB: Math.round(s.memoryUsage || 0),
+        currentTime: Date.now(),
         lastUpdated: new Date().toISOString(),
       });
     } catch (e: any) {
@@ -895,10 +898,51 @@ export class WebPanel {
 
   private handlePublicPlayers(res: http.ServerResponse): void {
     try {
-      const players = Array.from(this.onlinePlayers.values()).map(p => ({
-        name: p.name,
-        duration: Math.floor((Date.now() - new Date(p.connectedAt).getTime()) / 1000),
-      }));
+      if (!this.publicSiteConfig.showPlayers) {
+        this.sendJson(res, { error: 'Not found' }, 404);
+        return;
+      }
+      const now = Date.now();
+
+      // Prefer cachedPlayers (ListPlayers cache: money/gold). Fall back to
+      // onlinePlayers map (from login log events) when ListPlayers is missing.
+      const sources: OnlinePlayer[] = this.cachedPlayers.length
+        ? this.cachedPlayers
+        : Array.from(this.onlinePlayers.values());
+
+      const merged = new Map<string, { steamId: string; name: string; balance?: number; gold?: number; fame?: number }>();
+      for (const p of sources) {
+        if (!p.steamId) continue;
+        const cur = merged.get(p.steamId);
+        if (!cur) {
+          merged.set(p.steamId, { steamId: p.steamId, name: p.name, balance: p.balance, gold: p.gold, fame: p.fame });
+        } else {
+          if (p.balance !== undefined && p.balance !== 0) cur.balance = p.balance;
+          if (p.gold !== undefined && p.gold !== 0) cur.gold = p.gold;
+          if (p.fame !== undefined) cur.fame = p.fame;
+        }
+      }
+
+      const players: any[] = [];
+      for (const p of merged.values()) {
+        const sid = p.steamId;
+        const sessionStart =
+          this.onlinePlayers.get(sid)?.connectedAt?.getTime?.()
+          ?? this.ratingManager?.getSessionStart(sid) ?? null;
+        const entry = this.ratingManager ? this.ratingManager.getPlayerRank(sid) : null;
+        const rankInfo = entry || { rank: -1, entry: null };
+        players.push({
+          steamId: sid,
+          name: p.name,
+          sessionSeconds: sessionStart ? Math.floor((now - sessionStart) / 1000) : null,
+          playTimeSeconds: rankInfo.entry?.playTimeSeconds ?? 0,
+          money: p.balance !== undefined ? p.balance : (rankInfo.entry?.money ?? 0),
+          gold: p.gold !== undefined ? p.gold : (rankInfo.entry?.gold ?? 0),
+          fame: p.fame !== undefined ? p.fame : (rankInfo.entry?.fame ?? 0),
+          rank: rankInfo.rank > 0 ? rankInfo.rank : null,
+        });
+      }
+      players.sort((a, b) => (b.sessionSeconds ?? 0) - (a.sessionSeconds ?? 0));
       this.sendJson(res, { online: players.length, players });
     } catch (e: any) {
       this.sendJson(res, { error: e.message }, 500);
@@ -907,18 +951,30 @@ export class WebPanel {
 
   private handlePublicLeaderboard(res: http.ServerResponse): void {
     try {
+      if (!this.publicSiteConfig.showLeaderboard) {
+        this.sendJson(res, { error: 'Not found' }, 404);
+        return;
+      }
       if (!this.ratingManager) {
         this.sendJson(res, { players: [] });
         return;
       }
       const blacklist = this.pluginsConfig.ratingBlacklist || [];
+      const onlineIds = new Set(
+        Array.from(this.onlinePlayers.values()).map(p => p.steamId).filter(Boolean),
+      );
       const top = this.ratingManager.getLeaderboard()
         .filter(e => !blacklist.includes(e.steamId))
         .slice(0, 20)
         .map((e, i) => ({
           rank: i + 1,
+          steamId: e.steamId,
           name: e.playerName,
           playTimeSeconds: e.playTimeSeconds,
+          money: e.money,
+          gold: e.gold,
+          fame: e.fame,
+          isOnline: onlineIds.has(e.steamId),
         }));
       this.sendJson(res, { players: top });
     } catch (e: any) {
@@ -971,19 +1027,31 @@ export class WebPanel {
   <span class="field">"online"</span>:       <span class="type">number</span>   — игроков онлайн,
   <span class="field">"maxPlayers"</span>:   <span class="type">number</span>   — макс. слотов,
   <span class="field">"uptime"</span>:       <span class="type">number</span>   — секунды с момента запуска,
+  <span class="field">"fps"</span>:          <span class="type">number</span>   — FPS сервера (0 если сервер выключен),
+  <span class="field">"memoryMB"</span>:     <span class="type">number</span>   — RAM процесса сервера в MB,
+  <span class="field">"currentTime"</span>:  <span class="type">number</span>   — серверное время (epoch ms),
   <span class="field">"lastUpdated"</span>:  <span class="type">string</span>   — ISO-время обновления
 }</pre>
   </div>
 
   <h2>GET /api/public/players</h2>
   <div class="endpoint">
-    <p class="desc">Список онлайн-игроков. Координаты, баланс, слава — <strong>не отдаются</strong>.</p>
+    <p class="desc">Список онлайн-игроков со всей доступной статистикой из кэша (без RCON-опросов).</p>
     <p class="optional">Отдаётся только если showPlayers = true в конфиге.</p>
     <p>Поля:</p>
     <pre>{
   <span class="field">"online"</span>: <span class="type">number</span> — количество онлайн,
   <span class="field">"players"</span>: [
-    { <span class="field">"name"</span>: <span class="type">string</span>, <span class="field">"duration"</span>: <span class="type">number</span> <span class="optional">(секунды сессии)</span> }
+    {
+      <span class="field">"steamId"</span>:          <span class="type">string</span>  — SteamID64,
+      <span class="field">"name"</span>:             <span class="type">string</span>  — ник игрока,
+      <span class="field">"sessionSeconds"</span>:   <span class="type">number</span>  — время текущей сессии (сек),
+      <span class="field">"playTimeSeconds"</span>:  <span class="type">number</span>  — общее время онлайн за всё время (сек),
+      <span class="field">"money"</span>:            <span class="type">number</span>  — обычный баланс,
+      <span class="field">"gold"</span>:             <span class="type">number</span>  — золотой баланс,
+      <span class="field">"fame"</span>:             <span class="type">number</span>  — очки славы (Fame),
+      <span class="field">"rank"</span>:             <span class="type">number</span>  — место в рейтинге (null если нет в рейтинге)
+    }
   ]
 }</pre>
   </div>
@@ -995,7 +1063,16 @@ export class WebPanel {
     <p>Поля:</p>
     <pre>{
   <span class="field">"players"</span>: [
-    { <span class="field">"rank"</span>: <span class="type">number</span>, <span class="field">"name"</span>: <span class="type">string</span>, <span class="field">"playTimeSeconds"</span>: <span class="type">number</span> }
+    {
+      <span class="field">"rank"</span>:            <span class="type">number</span>  — место в топе,
+      <span class="field">"steamId"</span>:         <span class="type">string</span>  — SteamID64,
+      <span class="field">"name"</span>:            <span class="type">string</span>  — ник игрока,
+      <span class="field">"playTimeSeconds"</span>: <span class="type">number</span>  — общее время онлайн,
+      <span class="field">"money"</span>:           <span class="type">number</span>  — обычный баланс,
+      <span class="field">"gold"</span>:            <span class="type">number</span>  — золотой баланс,
+      <span class="field">"fame"</span>:            <span class="type">number</span>  — очки славы (Fame),
+      <span class="field">"isOnline"</span>:        <span class="type">boolean</span> — онлайн ли сейчас
+    }
   ]
 }</pre>
   </div>
@@ -1019,7 +1096,8 @@ console.log(status.online, '/', status.maxPlayers, 'игроков');
 
 // Получить список игроков
 const { players } = await fetch('http://YOUR_SERVER_IP:8080/api/public/players').then(r => r.json());
-players.forEach(p => console.log(p.name, formatTime(p.duration)));</pre>
+players.forEach(p => console.log(p.name, Math.floor(p.sessionSeconds/60), 'мин',
+  'деньги: ' + p.money, 'золото: ' + p.gold, 'fame: ' + p.fame, 'рейтинг: ' + p.rank));</pre>
 
   <h2>Пример виджета (HTML + fetch)</h2>
   <pre>&lt;div id="server-status"&gt;&lt;/div&gt;
@@ -1034,7 +1112,7 @@ async function update() {
     '&lt;h2&gt;' + status.serverName + '&lt;/h2&gt;' +
     '&lt;p&gt;Онлайн: ' + status.online + '/' + status.maxPlayers + '&lt;/p&gt;' +
     '&lt;ul&gt;' + data.players.map(p =>
-      '&lt;li&gt;' + p.name + ' (' + Math.floor(p.duration/60) + ' мин)&lt;/li&gt;'
+      '&lt;li&gt;' + p.name + ' (деньги: ' + p.money + ', золото: ' + p.gold + ')' + '&lt;/li&gt;'
     ).join('') + '&lt;/ul&gt;';
 }
 update(); setInterval(update, 60000);
@@ -1060,7 +1138,7 @@ api.yourdomain.com {
 
   <h2>Ограничения</h2>
   <p>• Данные обновляются раз в ~3 сек (как при опросе ListPlayers). Нет нагрузки на RCON.</p>
-  <p>• Координаты, баланс, слава, IP адреса — <strong>не отдаются</strong> публично по соображениям безопасности.</p>
+  <p>• Координаты игроков и IP-адреса — <strong>не отдаются</strong> публично по соображениям безопасности.</p>
   <p>• Топ рейтинга — до 20 мест, бэклист-игроки исключены.</p>
   <p>• API отключён по умолчанию — включите через веб-панель.</p>
   <p style="color:#58a6ff;margin-top:24px">SCUM Server Manager &mdash; <a href="https://github.com/AMURKA-PVE-SCUM/scum-server-manager" style="color:#58a6ff">github.com</a></p>

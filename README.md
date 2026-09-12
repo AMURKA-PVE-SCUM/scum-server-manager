@@ -193,21 +193,31 @@
 | Endpoint | Описание |
 |----------|----------|
 | `GET /api/health` | Пинг: `{ ok: true, version }` |
-| `GET /api/public/status` | `{ serverName, online, maxPlayers, running, uptime, lastUpdated }` |
-| `GET /api/public/players` | `{ online, players: [{name, duration}] }` (только если showPlayers) |
-| `GET /api/public/leaderboard` | `{ players: [{rank, name, playTimeSeconds}] }` топ-20 (только если showLeaderboard) |
+| `GET /api/public/status` | `{ serverName, online, maxPlayers, running, uptime, fps, memoryMB, currentTime, lastUpdated }` |
+| `GET /api/public/players` | `{ online, players: [{ steamId, name, sessionSeconds, playTimeSeconds, money, gold, fame, rank }] }` (только если showPlayers) |
+| `GET /api/public/leaderboard` | `{ players: [{ rank, steamId, name, playTimeSeconds, money, gold, fame, isOnline }] }` топ-20 (только если showLeaderboard) |
 | `GET /api/public/config` | `{ serverName, enabled, showPlayers, showLeaderboard, apiVersion }` |
 | `GET /api/docs` | Встроенная HTML-документация с примерами кода |
 
-**Важно**: координаты, баланс, золото, слава и IP-адреса **никогда** не отдаются публично.
+Данные берутся из кэша менеджера (обновляется каждые ~3 сек опросом `ListPlayers`) — **без дополнительной нагрузки на RCON**. Поля: время текущей сессии, общее время онлайн, баланс (деньги/золото), слава Fame, место в рейтинге.
+
+**Важно**: координаты игроков и IP-адреса **никогда** не отдаются публично.
 
 #### Пример запроса (JavaScript)
 ```javascript
 const status = await fetch('http://YOUR_IP:8080/api/public/status').then(r => r.json());
-console.log(status.online, '/', status.maxPlayers, 'игроков');
+console.log(status.online, '/', status.maxPlayers, 'игроков, FPS', status.fps);
 
 const { players } = await fetch('http://YOUR_IP:8080/api/public/players').then(r => r.json());
-players.forEach(p => console.log(p.name, Math.floor(p.duration/60), 'мин'));
+players.forEach(p => {
+  console.log(p.name,
+    Math.floor(p.sessionSeconds/60), 'мин сессия',
+    'всего:', Math.floor(p.playTimeSeconds/3600), 'ч',
+    'деньги:', p.money, 'золото:', p.gold, 'fame:', p.fame, 'рейтинг:', p.rank);
+});
+
+const { players: top } = await fetch('http://YOUR_IP:8080/api/public/leaderboard').then(r => r.json());
+top.forEach(p => console.log(`#${p.rank} ${p.name} — ${Math.floor(p.playTimeSeconds/3600)}ч`));
 ```
 
 #### HTTPS (для сайтов с `https://`)
